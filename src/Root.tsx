@@ -28,8 +28,8 @@ export const RemotionRoot: React.FC = () => {
           // visualizer settings
           visualizer: {
             type: "oscilloscope",
-            color: "#F4B941",
-            numberOfSamples: "64",
+            color: "#6B6B6B",
+            numberOfSamples: "32",
             windowInSeconds: 0.1,
             posterization: 3,
             amplitude: 4,

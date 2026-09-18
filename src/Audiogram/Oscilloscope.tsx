@@ -4,7 +4,7 @@ import {
   visualizeAudioWaveform,
 } from "@remotion/media-utils";
 import React from "react";
-import { useCurrentFrame, useVideoConfig } from "remotion";
+import { interpolate, useCurrentFrame, useVideoConfig } from "remotion";
 
 const height = 120;
 const container: React.CSSProperties = {
@@ -49,7 +49,7 @@ export const Oscilloscope: React.FC<{
   audioSrc,
   waveColor,
 }) => {
-  const { width, fps } = useVideoConfig();
+  const { width, fps, durationInFrames } = useVideoConfig();
   const frame = useCurrentFrame();
 
   const posterized = Math.round(frame / posterization) * posterization;
@@ -90,6 +90,32 @@ export const Oscilloscope: React.FC<{
         strokeLinecap="round"
         fill="none"
         stroke={waveColor}
+        strokeWidth={10}
+        d={p}
+      />
+      <defs>
+        <clipPath id="waveform-progress">
+          <rect
+            x={0}
+            y={0}
+            width={interpolate(
+              frame,
+              [0, durationInFrames - 1],
+              [0, width],
+              {
+                extrapolateLeft: "clamp",
+                extrapolateRight: "clamp",
+              },
+            )}
+            height={height}
+          />
+        </clipPath>
+      </defs>
+      <path
+        clipPath="url(#waveform-progress)"
+        strokeLinecap="round"
+        fill="none"
+        stroke="#FFFFFF"
         strokeWidth={10}
         d={p}
       />
