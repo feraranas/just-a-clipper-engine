@@ -586,4 +586,4 @@ git commit -m "feat: run the clip package pipeline end to end"
 - [ ] Inspect `git status --short` and confirm no generated assets are staged.
 - [ ] Request one independent final code review against the merged spec.
 - [ ] Resolve every valid review finding and rerun affected checks.
-- [ ] Push the branch and open PR #2 with exact verification results.
+- [x] Push the branch and open PR #3 with exact verification results (`#2` is a GitHub issue).

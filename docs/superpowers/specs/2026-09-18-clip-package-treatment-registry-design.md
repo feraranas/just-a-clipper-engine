@@ -2,7 +2,7 @@
 
 Date: 2026-09-18
 
-Status: Implemented and live-verified in PR #2
+Status: Implemented and live-verified in PR #3 (`#2` is a GitHub issue)
 
 ## Purpose
 
