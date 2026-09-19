@@ -1,6 +1,6 @@
 # Audiogram Inbox: Project Status and Handoff
 
-Last updated: 2026-09-18
+Last updated: 2026-09-19
 
 This is the shared handoff for humans and coding agents. Update it whenever a
 durable pipeline stage or its operational behavior changes.
@@ -51,12 +51,15 @@ The implementation plan is
   terminal package failure when neither is available. Local Whisper is not used
   in V1.
 - Caption trimming, clamping, and rebasing to package-local timestamps.
+- SRT cue normalization into individually timed words so captions wrap
+  predictably and progress from waveform gray to white as they are spoken.
 - Thumbnail acquisition and conversion to JPEG.
 - Audio-duration validation with a three-second tolerance.
 - Explicit treatment registry with duplicate and unknown-treatment rejection.
 - Generic renderer driven only by treatment registry metadata.
 - Dynamic `AudiogramBasic` composition using package title, cover, audio, and
   captions.
+- Compact, contained title and caption typography with four-line pagination.
 - Temporary render output, non-empty validation, and atomic publication.
 - Per-package and per-treatment failure isolation.
 - Duplicate-safe reruns across analysis, acquisition, and rendering.
@@ -112,7 +115,7 @@ state | Arthur Brooks`):
 - Treatment run: `audiogram-basic@1`; state: `rendered`.
 - Artifact:
   `out/treatments/audiogram-basic/1/KHd-luu3M8s/clip-1.mp4`.
-- Verified artifact size: `2,584,665` bytes.
+- Verified corrected artifact size: `2,449,011` bytes.
 - Verified artifact duration: `22.314667` seconds.
 
 For `MWvH7BRgwL8` (`DHH Omarchy Quattro Announcement | TheStandup`):
@@ -168,16 +171,16 @@ npm run dev
 
 ## Configuration
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `AUDIOGRAM_GOOGLE_CLIENT_PATH` | Application Support OAuth client | Google desktop OAuth client |
-| `AUDIOGRAM_GOOGLE_TOKEN_PATH` | Application Support OAuth token | Persisted refresh/access token |
-| `AUDIOGRAM_DB_PATH` | Application Support SQLite file | Ledger location |
-| `AUDIOGRAM_YOUTUBE_PLAYLIST` | `Audiogram Inbox` | Playlist title |
-| `AUDIOGRAM_PACKAGE_VERSION` | `v1` | Package-selection/acquisition identity |
-| `AUDIOGRAM_TREATMENT_VERSION` | none | Legacy fallback for package version |
-| `AUDIOGRAM_MAX_CLIPS` | `1` | Maximum independent peaks per video |
-| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20` | Separation between selected peaks |
+| Variable                                    | Default                          | Purpose                                |
+| ------------------------------------------- | -------------------------------- | -------------------------------------- |
+| `AUDIOGRAM_GOOGLE_CLIENT_PATH`              | Application Support OAuth client | Google desktop OAuth client            |
+| `AUDIOGRAM_GOOGLE_TOKEN_PATH`               | Application Support OAuth token  | Persisted refresh/access token         |
+| `AUDIOGRAM_DB_PATH`                         | Application Support SQLite file  | Ledger location                        |
+| `AUDIOGRAM_YOUTUBE_PLAYLIST`                | `Audiogram Inbox`                | Playlist title                         |
+| `AUDIOGRAM_PACKAGE_VERSION`                 | `v1`                             | Package-selection/acquisition identity |
+| `AUDIOGRAM_TREATMENT_VERSION`               | none                             | Legacy fallback for package version    |
+| `AUDIOGRAM_MAX_CLIPS`                       | `1`                              | Maximum independent peaks per video    |
+| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20`                             | Separation between selected peaks      |
 
 Increment `AUDIOGRAM_PACKAGE_VERSION` only when package selection or generation
 semantics intentionally change. Treatment versioning belongs to the registry

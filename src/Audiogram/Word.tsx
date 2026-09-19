@@ -1,6 +1,6 @@
 import { Caption } from "@remotion/captions";
-import React, { useMemo } from "react";
-import { Easing, interpolate } from "remotion";
+import React from "react";
+import { Easing, interpolate, interpolateColors } from "remotion";
 import { msToFrame } from "../helpers/ms-to-frame";
 
 export const Word: React.FC<{
@@ -8,20 +8,10 @@ export const Word: React.FC<{
   readonly frame: number;
   readonly transcriptionColor: string;
 }> = ({ item, frame, transcriptionColor }) => {
-  const opacity = interpolate(
-    frame,
-    [msToFrame(item.startMs), msToFrame(item.startMs) + 15],
-    [0, 1],
-    {
-      extrapolateLeft: "clamp",
-      extrapolateRight: "clamp",
-    },
-  );
-
   const translateY = interpolate(
     frame,
-    [msToFrame(item.startMs), msToFrame(item.startMs) + 10],
-    [0.25, 0],
+    [msToFrame(item.startMs), msToFrame(item.startMs) + 6],
+    [0.08, 0],
     {
       easing: Easing.out(Easing.quad),
       extrapolateLeft: "clamp",
@@ -29,15 +19,20 @@ export const Word: React.FC<{
     },
   );
 
-  const style: React.CSSProperties = useMemo(() => {
-    return {
-      display: "inline-block",
-      whiteSpace: "pre",
-      opacity,
-      translate: `0 ${translateY}em`,
-      color: transcriptionColor,
-    };
-  }, [opacity, transcriptionColor, translateY]);
-
-  return <span style={style}>{item.text}</span>;
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        whiteSpace: "pre",
+        translate: `0 ${translateY}em`,
+        color: interpolateColors(
+          frame,
+          [msToFrame(item.startMs), msToFrame(item.startMs) + 6],
+          ["#6B6B6B", transcriptionColor],
+        ),
+      }}
+    >
+      {item.text}
+    </span>
+  );
 };

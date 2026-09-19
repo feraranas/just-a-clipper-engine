@@ -1,20 +1,14 @@
-import {parseSrt} from "@remotion/captions";
-import {execFile} from "node:child_process";
-import {
-  mkdir,
-  readFile,
-  readdir,
-  stat,
-  writeFile,
-} from "node:fs/promises";
-import {join, relative, sep} from "node:path";
-import {promisify} from "node:util";
+import { parseSrt } from "@remotion/captions";
+import { execFile } from "node:child_process";
+import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
+import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const durationToleranceSeconds = 3;
 
 const defaultRunCommand = async (command, args) =>
-  execFileAsync(command, args, {maxBuffer: 10 * 1024 * 1024});
+  execFileAsync(command, args, { maxBuffer: 10 * 1024 * 1024 });
 
 const safePathPart = (value, label) => {
   if (!/^[A-Za-z0-9._-]+$/.test(String(value))) {
@@ -40,7 +34,7 @@ export const buildPartialAudioArgs = ({
   sourceUrl,
 ];
 
-const buildCaptionArgs = ({sourceUrl, outputTemplate, automatic}) => [
+const buildCaptionArgs = ({ sourceUrl, outputTemplate, automatic }) => [
   "--no-playlist",
   "--skip-download",
   automatic ? "--write-auto-subs" : "--write-subs",
@@ -55,7 +49,7 @@ const buildCaptionArgs = ({sourceUrl, outputTemplate, automatic}) => [
   sourceUrl,
 ];
 
-const buildThumbnailArgs = ({sourceUrl, outputTemplate}) => [
+const buildThumbnailArgs = ({ sourceUrl, outputTemplate }) => [
   "--no-playlist",
   "--skip-download",
   "--write-thumbnail",
@@ -66,9 +60,38 @@ const buildThumbnailArgs = ({sourceUrl, outputTemplate}) => [
   sourceUrl,
 ];
 
+export const splitCaptionsIntoTimedWords = (captions) =>
+  captions.flatMap((caption) => {
+    const words = caption.text
+      .replace(/\s+/g, " ")
+      .trim()
+      .split(" ")
+      .filter(Boolean);
+    if (words.length === 0) return [];
+    const wordDuration = (caption.endMs - caption.startMs) / words.length;
+
+    return words.map((word, index) => {
+      const isLastWord = index === words.length - 1;
+      const startMs = caption.startMs + wordDuration * index;
+      const endMs = isLastWord
+        ? caption.endMs
+        : caption.startMs + wordDuration * (index + 1);
+      return {
+        text: isLastWord && caption.pageBreakAfter ? word : `${word} `,
+        startMs,
+        endMs,
+        timestampMs: startMs + (endMs - startMs) / 2,
+        confidence: caption.confidence,
+        ...(isLastWord && caption.pageBreakAfter
+          ? { pageBreakAfter: true }
+          : {}),
+      };
+    });
+  });
+
 export const trimAndRebaseCaptions = (
   captions,
-  {startSeconds, endSeconds},
+  { startSeconds, endSeconds },
 ) => {
   const selectionStartMs = startSeconds * 1_000;
   const selectionEndMs = endSeconds * 1_000;
@@ -112,7 +135,7 @@ const toProjectRelative = (projectRoot, path) =>
 
 export const acquireClipPackageAssets = async (
   clipPackage,
-  {projectRoot = process.cwd(), runCommand = defaultRunCommand} = {},
+  { projectRoot = process.cwd(), runCommand = defaultRunCommand } = {},
 ) => {
   const videoId = safePathPart(clipPackage.videoId, "video ID");
   const packageVersion = safePathPart(
@@ -139,16 +162,16 @@ export const acquireClipPackageAssets = async (
     packageVersion,
     `clip-${clipPackage.rank}`,
   );
-  await mkdir(directory, {recursive: true});
+  await mkdir(directory, { recursive: true });
 
   const audioTemplate = join(directory, "audio.%(ext)s");
   await runCommand(
     "yt-dlp",
-    buildPartialAudioArgs({...clipPackage, outputTemplate: audioTemplate}),
+    buildPartialAudioArgs({ ...clipPackage, outputTemplate: audioTemplate }),
   );
   const audioPath = join(directory, "audio.wav");
   await assertNonemptyFile(audioPath, "audio");
-  const {stdout: durationOutput} = await runCommand("ffprobe", [
+  const { stdout: durationOutput } = await runCommand("ffprobe", [
     "-v",
     "error",
     "-show_entries",
@@ -195,8 +218,11 @@ export const acquireClipPackageAssets = async (
     throw new Error("YouTube captions are unavailable for the selected video");
   }
   await assertNonemptyFile(srtPath, "captions");
-  const {captions} = parseSrt({input: await readFile(srtPath, "utf8")});
-  const localCaptions = trimAndRebaseCaptions(captions, clipPackage);
+  const { captions } = parseSrt({ input: await readFile(srtPath, "utf8") });
+  const localCaptions = trimAndRebaseCaptions(
+    splitCaptionsIntoTimedWords(captions),
+    clipPackage,
+  );
   if (localCaptions.length === 0) {
     throw new Error("YouTube captions do not overlap the selected clip");
   }
@@ -253,13 +279,17 @@ export const acquireClipPackageAssets = async (
           score: clipPackage.score,
         },
         assets: [
-          {role: "audio", fileName: "audio.wav", provenance: "yt_dlp"},
+          { role: "audio", fileName: "audio.wav", provenance: "yt_dlp" },
           {
             role: "captions",
             fileName: "captions.json",
             provenance: captionsProvenance,
           },
-          {role: "thumbnail", fileName: "thumbnail.jpg", provenance: "yt_dlp"},
+          {
+            role: "thumbnail",
+            fileName: "thumbnail.jpg",
+            provenance: "yt_dlp",
+          },
         ],
       },
       null,

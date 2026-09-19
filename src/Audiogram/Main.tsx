@@ -76,10 +76,12 @@ export const AudiogramBasic: React.FC<AudiogramCompositionSchemaType> = ({
           <Interactive.Div
             style={{
               marginLeft: "48px",
-              lineHeight: "1.25",
-              fontWeight: 800,
+              minWidth: 0,
+              lineHeight: "1.18",
+              fontWeight: 700,
               color: titleColor,
-              fontSize: "48px",
+              fontSize: "34px",
+              overflowWrap: "anywhere",
             }}
             name={"Episode Title"}
           >
