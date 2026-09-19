@@ -31,6 +31,7 @@ export const audiogramSchema = z.object({
   // visualizer settings
   visualizer: visualizerSchema,
   // podcast data
+  title: z.string().min(1),
   titleColor: zColor(),
   // captions settings
   captionsFileName: z
@@ -40,10 +41,10 @@ export const audiogramSchema = z.object({
     }),
   captionsTextColor: zColor(),
   onlyDisplayCurrentSentence: z.boolean(),
+  captions: z.custom<Caption[]>().nullable(),
   // audio settings
-  audioFileUrl: z.string(),
+  audioFileName: z.string().min(1),
+  coverImageFileName: z.string().min(1),
 });
 
-export type AudiogramCompositionSchemaType = z.infer<typeof audiogramSchema> & {
-  readonly captions: Caption[] | null;
-};
+export type AudiogramCompositionSchemaType = z.infer<typeof audiogramSchema>;

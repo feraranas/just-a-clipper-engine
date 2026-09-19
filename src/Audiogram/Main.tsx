@@ -21,15 +21,18 @@ import {
 import { FONT_FAMILY } from "./font";
 import type { AudiogramCompositionSchemaType } from "./schema";
 
-export const Audiogram: React.FC<AudiogramCompositionSchemaType> = ({
+export const AudiogramBasic: React.FC<AudiogramCompositionSchemaType> = ({
   visualizer,
-  audioFileUrl,
+  audioFileName,
+  coverImageFileName,
+  title,
   titleColor,
   captionsTextColor,
   onlyDisplayCurrentSentence,
   captions,
 }) => {
   const { durationInFrames, width } = useVideoConfig();
+  const audioFileUrl = staticFile(audioFileName);
 
   if (!captions) {
     throw new Error(
@@ -68,7 +71,7 @@ export const Audiogram: React.FC<AudiogramCompositionSchemaType> = ({
               borderRadius: "6px",
               maxHeight: "250px",
             }}
-            src={staticFile("podcast-cover.jpeg")}
+            src={staticFile(coverImageFileName)}
           />
           <Interactive.Div
             style={{
@@ -80,7 +83,7 @@ export const Audiogram: React.FC<AudiogramCompositionSchemaType> = ({
             }}
             name={"Episode Title"}
           >
-            Ep 550 - Supper Club × Remotion React
+            {title}
           </Interactive.Div>
         </div>
         <div>
