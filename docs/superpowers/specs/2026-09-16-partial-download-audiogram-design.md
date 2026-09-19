@@ -2,7 +2,9 @@
 
 Date: 2026-09-16
 
-Status: Approved in chat; awaiting written-spec review
+Status: Superseded as the architectural source of truth by
+`2026-09-18-clip-package-treatment-registry-design.md`. Its partial-download,
+caption, and no-full-video requirements are retained by the newer design.
 
 ## Purpose
 

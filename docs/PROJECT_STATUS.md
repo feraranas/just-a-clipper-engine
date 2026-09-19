@@ -1,6 +1,6 @@
 # Audiogram Inbox: Project Status and Handoff
 
-Last updated: 2026-09-16
+Last updated: 2026-09-18
 
 This is the shared project handoff for humans and coding agents. It records what
 has been implemented, what has been verified, the important design decisions,
@@ -10,7 +10,14 @@ stage or its operational behavior changes.
 ## Goal
 
 Turn videos added to a private YouTube playlist named `Audiogram Inbox` into
-short Remotion audiograms based on YouTube's Most Replayed heatmap.
+reusable clip packages based on YouTube's Most Replayed heatmap, then apply
+explicitly registered Remotion treatments. V1 has one treatment:
+`audiogram-basic@1`.
+
+The current architecture specification is
+`docs/superpowers/specs/2026-09-18-clip-package-treatment-registry-design.md`.
+The older partial-audiogram implementation plan is superseded and must not be
+executed.
 
 The intended pipeline is:
 
@@ -21,16 +28,19 @@ Private YouTube playlist
 OAuth playlist importer
         |
         v
-SQLite processing ledger  <---- prevents duplicate work
+SQLite package ledger     <---- prevents duplicate acquisition
         |
         v
 yt-dlp metadata only       <---- no media download at this stage
         |
         v
-Ranked heatmap clips
+Reusable ClipPackages
         |
         v
 Selected-range download    <---- next stage; not implemented yet
+        |
+        v
+Treatment registry         <---- audiogram-basic@1 in V1
         |
         v
 Remotion render            <---- next stage; not implemented yet

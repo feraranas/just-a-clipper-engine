@@ -1,6 +1,10 @@
 # Partial Download and Audiogram Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **Superseded:** Do not execute this plan. The generic package and treatment
+> architecture in
+> `docs/superpowers/specs/2026-09-18-clip-package-treatment-registry-design.md`
+> replaces its Audiogram-specific structure. A new implementation plan will be
+> written after that specification receives written review approval.
 
 **Goal:** Turn each selected YouTube heatmap clip into one duplicate-safe Remotion MP4 using only partial audio, YouTube captions, and a thumbnail.
 
