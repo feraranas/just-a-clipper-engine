@@ -288,4 +288,12 @@ test("package and treatment failures are isolated and retain their errors", asyn
   assert.equal(ledger.getClipPackage(failedPackage.id).lastError, "download failed");
   assert.equal(ledger.getClipPackage(readyPackage.id).status, "ready");
   assert.equal(ledger.listTreatmentRuns(readyPackage.id)[0].lastError, "render failed");
+
+  const unsafeError = new Error(
+    `--api-key secret-value ${"diagnostic".repeat(500)}`,
+  );
+  ledger.markPackageFailed(failedPackage.id, unsafeError);
+  const persistedError = ledger.getClipPackage(failedPackage.id).lastError;
+  assert.ok(persistedError.length <= 2_000);
+  assert.doesNotMatch(persistedError, /secret-value/);
 });

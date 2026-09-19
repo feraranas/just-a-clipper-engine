@@ -1,15 +1,50 @@
 const treatmentKey = (id, version) => `${id}@${version}`;
 
-const requireAssets = (clipPackage, roles) => {
+const assetPathsByRole = (clipPackage) =>
+  new Map(
+    (clipPackage.assets ?? []).map((asset) => [asset.role, asset.relativePath]),
+  );
+
+export const assertRequiredAssets = (treatment, clipPackage) => {
   const assets = new Map(
     (clipPackage.assets ?? []).map((asset) => [asset.role, asset.relativePath]),
   );
-  for (const role of roles) {
-    if (!assets.has(role)) {
+  for (const role of treatment.requiredAssetRoles) {
+    if (!assets.get(role)) {
       throw new Error(`Missing required asset: ${role}`);
     }
   }
-  return assets;
+};
+
+const assertNonemptyString = (value, label) => {
+  if (typeof value !== "string" || value.trim() === "") {
+    throw new Error(`${label} must be a non-empty string`);
+  }
+};
+
+const validateTreatmentDefinition = (treatment) => {
+  assertNonemptyString(treatment.id, "id");
+  assertNonemptyString(treatment.version, "version");
+  assertNonemptyString(treatment.compositionId, "compositionId");
+  if (!Array.isArray(treatment.requiredAssetRoles)) {
+    throw new Error("requiredAssetRoles must be an array");
+  }
+  const roles = new Set();
+  for (const role of treatment.requiredAssetRoles) {
+    assertNonemptyString(role, "required asset role");
+    if (roles.has(role)) {
+      throw new Error(`Duplicate required asset role: ${role}`);
+    }
+    roles.add(role);
+  }
+  if (typeof treatment.buildProps !== "function") {
+    throw new Error("buildProps must be a function");
+  }
+  if (!treatment.output || typeof treatment.output !== "object") {
+    throw new Error("output must be an object");
+  }
+  assertNonemptyString(treatment.output.extension, "output.extension");
+  assertNonemptyString(treatment.output.codec, "output.codec");
 };
 
 const toPublicFileName = (relativePath) => {
@@ -27,7 +62,8 @@ export const audiogramBasicTreatment = Object.freeze({
   requiredAssetRoles: Object.freeze(["audio", "captions", "thumbnail"]),
   output: Object.freeze({extension: "mp4", codec: "h264"}),
   buildProps: (clipPackage) => {
-    const assets = requireAssets(clipPackage, ["audio", "captions", "thumbnail"]);
+    assertRequiredAssets(audiogramBasicTreatment, clipPackage);
+    const assets = assetPathsByRole(clipPackage);
     return {
       title: clipPackage.title,
       audioFileName: toPublicFileName(assets.get("audio")),
@@ -40,6 +76,7 @@ export const audiogramBasicTreatment = Object.freeze({
 export const createTreatmentRegistry = (treatments) => {
   const entries = new Map();
   for (const treatment of treatments) {
+    validateTreatmentDefinition(treatment);
     const key = treatmentKey(treatment.id, treatment.version);
     if (entries.has(key)) {
       throw new Error(`Duplicate treatment: ${key}`);

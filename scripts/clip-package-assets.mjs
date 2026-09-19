@@ -217,7 +217,7 @@ export const acquireClipPackageAssets = async (
   }
   await assertNonemptyFile(thumbnailPath, "thumbnail");
 
-  return [
+  const assets = [
     {
       role: "audio",
       relativePath: toProjectRelative(projectRoot, audioPath),
@@ -234,4 +234,39 @@ export const acquireClipPackageAssets = async (
       provenance: "yt_dlp",
     },
   ];
+  const manifestPath = join(directory, "package.json");
+  await writeFile(
+    manifestPath,
+    `${JSON.stringify(
+      {
+        schemaVersion: 1,
+        packageVersion,
+        source: {
+          videoId,
+          title: clipPackage.title,
+          sourceUrl: clipPackage.sourceUrl,
+        },
+        interval: {
+          rank: clipPackage.rank,
+          startSeconds: clipPackage.startSeconds,
+          endSeconds: clipPackage.endSeconds,
+          score: clipPackage.score,
+        },
+        assets: [
+          {role: "audio", fileName: "audio.wav", provenance: "yt_dlp"},
+          {
+            role: "captions",
+            fileName: "captions.json",
+            provenance: captionsProvenance,
+          },
+          {role: "thumbnail", fileName: "thumbnail.jpg", provenance: "yt_dlp"},
+        ],
+      },
+      null,
+      2,
+    )}\n`,
+  );
+  await assertNonemptyFile(manifestPath, "package manifest");
+
+  return assets;
 };

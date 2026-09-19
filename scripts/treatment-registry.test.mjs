@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  assertRequiredAssets,
   audiogramBasicTreatment,
   createTreatmentRegistry,
 } from "./treatment-registry.mjs";
@@ -44,11 +45,31 @@ test("rejects unknown and duplicate treatment keys", () => {
 test("rejects packages that omit a required asset", () => {
   const registry = createTreatmentRegistry([audiogramBasicTreatment]);
   assert.throws(
-    () =>
-      registry.get("audiogram-basic", "1").buildProps({
+    () => {
+      const treatment = registry.get("audiogram-basic", "1");
+      assertRequiredAssets(treatment, {
         ...clipPackage,
         assets: clipPackage.assets.filter(({role}) => role !== "captions"),
-      }),
+      });
+    },
     /Missing required asset: captions/,
+  );
+});
+
+test("rejects malformed treatment definitions at registration", () => {
+  assert.throws(
+    () =>
+      createTreatmentRegistry([
+        {...audiogramBasicTreatment, requiredAssetRoles: ["audio", "audio"]},
+      ]),
+    /Duplicate required asset role: audio/,
+  );
+  assert.throws(
+    () => createTreatmentRegistry([{...audiogramBasicTreatment, buildProps: null}]),
+    /buildProps must be a function/,
+  );
+  assert.throws(
+    () => createTreatmentRegistry([{...audiogramBasicTreatment, compositionId: ""}]),
+    /compositionId must be a non-empty string/,
   );
 });

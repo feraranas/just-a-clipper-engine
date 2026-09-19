@@ -18,7 +18,7 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markPackageFailed(
         clipPackage.id,
-        error instanceof Error ? error.message : String(error),
+        sanitizeErrorDiagnostic(error),
       );
       result.packages.failed += 1;
     }
@@ -48,7 +48,7 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markTreatmentRunFailed(
         run.id,
-        error instanceof Error ? error.message : String(error),
+        sanitizeErrorDiagnostic(error),
       );
       result.treatments.failed += 1;
     }
@@ -56,3 +56,4 @@ export const processClipPackages = async ({
 
   return result;
 };
+import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";

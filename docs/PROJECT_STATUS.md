@@ -86,7 +86,8 @@ Generated package assets are runtime files ignored by Git:
 public/generated/<video-id>/<package-version>/clip-<rank>/
 ├── audio.wav
 ├── captions.json
-└── thumbnail.jpg
+├── thumbnail.jpg
+└── package.json
 ```
 
 Treatment output is also ignored by Git:

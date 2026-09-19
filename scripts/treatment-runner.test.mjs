@@ -19,6 +19,7 @@ test("renders any registry treatment to its deterministic artifact path", async 
     version: "2",
     compositionId: "FutureComposition",
     output: {extension: "mp4", codec: "h264"},
+    requiredAssetRoles: [],
     buildProps: (clipPackage) => ({title: clipPackage.title}),
   };
 
@@ -81,6 +82,7 @@ test("does not publish an empty partial render", async (t) => {
     version: "1",
     compositionId: "AudiogramBasic",
     output: {extension: "mp4", codec: "h264"},
+    requiredAssetRoles: [],
     buildProps: () => ({}),
   };
 
@@ -94,4 +96,33 @@ test("does not publish an empty partial render", async (t) => {
     ),
     /Rendered artifact is empty/,
   );
+});
+
+test("missing required assets stop rendering before the process starts", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "treatment-runner-"));
+  t.after(() => rm(projectRoot, {recursive: true, force: true}));
+  let processCalls = 0;
+  await assert.rejects(
+    renderTreatmentRun(
+      {
+        clipPackage: {videoId: "video-1", rank: 1, assets: []},
+        treatment: {
+          id: "requires-audio",
+          version: "1",
+          compositionId: "RequiresAudio",
+          output: {extension: "mp4", codec: "h264"},
+          requiredAssetRoles: ["audio"],
+          buildProps: () => ({}),
+        },
+      },
+      {
+        projectRoot,
+        runCommand: async () => {
+          processCalls += 1;
+        },
+      },
+    ),
+    /Missing required asset: audio/,
+  );
+  assert.equal(processCalls, 0);
 });

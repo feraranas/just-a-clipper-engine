@@ -587,4 +587,3 @@ git commit -m "feat: run the clip package pipeline end to end"
 - [ ] Request one independent final code review against the merged spec.
 - [ ] Resolve every valid review finding and rerun affected checks.
 - [ ] Push the branch and open PR #2 with exact verification results.
-

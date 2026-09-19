@@ -3,6 +3,7 @@ import {
   fetchYtDlpMetadata,
   selectTopHeatmapClips,
 } from "./youtube-heatmap-core.mjs";
+import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
 
 export const syncAndAnalyzeInbox = async ({
   ledger,
@@ -47,13 +48,13 @@ export const syncAndAnalyzeInbox = async ({
     } catch (error) {
       ledger.markPackageJobFailed(
         job.id,
-        error instanceof Error ? error.message : error,
+        sanitizeErrorDiagnostic(error),
       );
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: sanitizeErrorDiagnostic(error),
       });
     }
   }

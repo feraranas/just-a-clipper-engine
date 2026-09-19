@@ -1,5 +1,7 @@
 import {DatabaseSync} from "node:sqlite";
 
+import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
+
 const mapVideo = (row) =>
   row
     ? {
@@ -447,13 +449,13 @@ export const openAudiogramLedger = (
       database.prepare(`
         UPDATE clip_packages
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(String(error), now(), packageId);
+      `).run(sanitizeErrorDiagnostic(error), now(), packageId);
     },
     markPackageJobFailed: (jobId, error) => {
       database.prepare(`
         UPDATE package_jobs
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(String(error), now(), jobId);
+      `).run(sanitizeErrorDiagnostic(error), now(), jobId);
     },
     markPackageReady: ({packageId, assets}) => {
       const timestamp = now();
@@ -495,7 +497,7 @@ export const openAudiogramLedger = (
       database.prepare(`
         UPDATE treatment_runs
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(String(error), now(), runId);
+      `).run(sanitizeErrorDiagnostic(error), now(), runId);
     },
     markTreatmentRunRendered: (runId, artifactRelativePath) => {
       database.prepare(`

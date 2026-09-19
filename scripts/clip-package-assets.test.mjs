@@ -69,11 +69,13 @@ test("acquires audio, manual captions, and thumbnail into a deterministic packag
   const assets = await acquireClipPackageAssets(
     {
       videoId: "video-1",
+      title: "A useful video",
       packageVersion: "v1",
       rank: 2,
       sourceUrl: "https://youtu.be/video-1",
       startSeconds: 10,
       endSeconds: 30,
+      score: 0.9,
     },
     {projectRoot, runCommand},
   );
@@ -103,5 +105,79 @@ test("acquires audio, manual captions, and thumbnail into a deterministic packag
       ),
     ),
     [{text: "Hello world", startMs: 0, endMs: 5_000, timestampMs: 2_500, confidence: 1}],
+  );
+  assert.deepEqual(
+    JSON.parse(
+      await readFile(
+        join(projectRoot, "public/generated/video-1/v1/clip-2/package.json"),
+        "utf8",
+      ),
+    ),
+    {
+      schemaVersion: 1,
+      packageVersion: "v1",
+      source: {
+        videoId: "video-1",
+        title: "A useful video",
+        sourceUrl: "https://youtu.be/video-1",
+      },
+      interval: {
+        rank: 2,
+        startSeconds: 10,
+        endSeconds: 30,
+        score: 0.9,
+      },
+      assets: [
+        {role: "audio", fileName: "audio.wav", provenance: "yt_dlp"},
+        {role: "captions", fileName: "captions.json", provenance: "youtube_creator"},
+        {role: "thumbnail", fileName: "thumbnail.jpg", provenance: "yt_dlp"},
+      ],
+    },
+  );
+});
+
+test("falls back to automatic captions when creator captions are unavailable", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-assets-"));
+  t.after(() => rm(projectRoot, {recursive: true, force: true}));
+  const calls = [];
+  const runCommand = async (command, args) => {
+    calls.push({command, args});
+    const outputTemplate = args[args.indexOf("--output") + 1];
+    if (command === "ffprobe") return {stdout: "20\n"};
+    if (args.includes("--extract-audio")) {
+      await writeFile(outputTemplate.replace("%(ext)s", "wav"), "audio");
+    } else if (args.includes("--write-auto-subs")) {
+      await writeFile(
+        outputTemplate.replace("%(ext)s", "en.srt"),
+        "1\n00:00:10,000 --> 00:00:15,000\nAutomatic caption\n",
+      );
+    } else if (args.includes("--write-thumbnail")) {
+      await writeFile(outputTemplate.replace("%(ext)s", "jpg"), "image");
+    }
+    return {stdout: ""};
+  };
+
+  const assets = await acquireClipPackageAssets(
+    {
+      videoId: "video-2",
+      title: "Automatic captions",
+      packageVersion: "v1",
+      rank: 1,
+      sourceUrl: "https://youtu.be/video-2",
+      startSeconds: 10,
+      endSeconds: 30,
+      score: 1,
+    },
+    {projectRoot, runCommand},
+  );
+
+  assert.equal(calls.filter(({args}) => args.includes("--write-subs")).length, 1);
+  assert.equal(
+    calls.filter(({args}) => args.includes("--write-auto-subs")).length,
+    1,
+  );
+  assert.equal(
+    assets.find(({role}) => role === "captions").provenance,
+    "youtube_auto",
   );
 });
