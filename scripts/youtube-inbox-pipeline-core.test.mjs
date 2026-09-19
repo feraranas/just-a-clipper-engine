@@ -34,14 +34,14 @@ test("a completed video is not analyzed again on the next playlist sync", async 
     fetchMetadata,
     ledger,
     playlist,
-    treatmentVersion: "v1",
+    packageVersion: "v1",
     videos,
   });
   const second = await syncAndAnalyzeInbox({
     fetchMetadata,
     ledger,
     playlist,
-    treatmentVersion: "v1",
+    packageVersion: "v1",
     videos,
   });
 
@@ -63,7 +63,7 @@ test("a video without a heatmap receives a terminal status", async (t) => {
     fetchMetadata: async () => ({}),
     ledger,
     playlist: {id: "playlist-1", title: "Audiogram Inbox"},
-    treatmentVersion: "v1",
+    packageVersion: "v1",
     videos: [
       {
         videoId: "video-1",
@@ -74,7 +74,6 @@ test("a video without a heatmap receives a terminal status", async (t) => {
   });
 
   assert.equal(result.analyzed[0].status, "no_heatmap");
-  assert.equal(ledger.getProcessingJob("video-1", "v1").status, "no_heatmap");
-  assert.deepEqual(ledger.listPendingJobs(), []);
+  assert.equal(ledger.getPackageJob("video-1", "v1").status, "no_heatmap");
+  assert.deepEqual(ledger.listPendingPackageJobs(), []);
 });
-
