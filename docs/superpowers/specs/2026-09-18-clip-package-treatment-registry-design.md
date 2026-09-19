@@ -2,7 +2,7 @@
 
 Date: 2026-09-18
 
-Status: Approved in chat; awaiting written-spec review
+Status: Implemented and live-verified in PR #2
 
 ## Purpose
 

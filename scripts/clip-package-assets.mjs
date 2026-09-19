@@ -178,6 +178,7 @@ export const acquireClipPackageAssets = async (
     }),
   );
   let srtPath = await findGeneratedFile(directory, ".srt");
+  let captionsProvenance = "youtube_creator";
   if (!srtPath) {
     await runCommand(
       "yt-dlp",
@@ -188,6 +189,7 @@ export const acquireClipPackageAssets = async (
       }),
     );
     srtPath = await findGeneratedFile(directory, ".srt");
+    captionsProvenance = "youtube_auto";
   }
   if (!srtPath) {
     throw new Error("YouTube captions are unavailable for the selected video");
@@ -216,14 +218,20 @@ export const acquireClipPackageAssets = async (
   await assertNonemptyFile(thumbnailPath, "thumbnail");
 
   return [
-    {role: "audio", relativePath: toProjectRelative(projectRoot, audioPath)},
+    {
+      role: "audio",
+      relativePath: toProjectRelative(projectRoot, audioPath),
+      provenance: "yt_dlp",
+    },
     {
       role: "captions",
       relativePath: toProjectRelative(projectRoot, captionsPath),
+      provenance: captionsProvenance,
     },
     {
       role: "thumbnail",
       relativePath: toProjectRelative(projectRoot, thumbnailPath),
+      provenance: "yt_dlp",
     },
   ];
 };

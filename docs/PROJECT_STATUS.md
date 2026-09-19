@@ -2,115 +2,161 @@
 
 Last updated: 2026-09-18
 
-This is the shared project handoff for humans and coding agents. It records what
-has been implemented, what has been verified, the important design decisions,
-and the next safe increment. Update it whenever the pipeline gains a durable
-stage or its operational behavior changes.
+This is the shared handoff for humans and coding agents. Update it whenever a
+durable pipeline stage or its operational behavior changes.
 
-## Goal
+## Outcome
 
-Turn videos added to a private YouTube playlist named `Audiogram Inbox` into
-reusable clip packages based on YouTube's Most Replayed heatmap, then apply
-explicitly registered Remotion treatments. V1 has one treatment:
-`audiogram-basic@1`.
+The V1 MVP is implemented and verified end to end. Videos added to the private
+YouTube playlist `Audiogram Inbox` are imported, analyzed for YouTube Most
+Replayed peaks, packaged without a full-video download, and rendered through an
+explicit Remotion treatment.
 
-The current architecture specification is
-`docs/superpowers/specs/2026-09-18-clip-package-treatment-registry-design.md`.
-The older partial-audiogram implementation plan is superseded and must not be
-executed.
-
-The intended pipeline is:
+V1 exposes one treatment: `audiogram-basic@1`.
 
 ```text
-Private YouTube playlist
-        |
-        v
-OAuth playlist importer
-        |
-        v
-SQLite package ledger     <---- prevents duplicate acquisition
-        |
-        v
-yt-dlp metadata only       <---- no media download at this stage
-        |
-        v
-Reusable ClipPackages
-        |
-        v
-Selected-range download    <---- next stage; not implemented yet
-        |
-        v
-Treatment registry         <---- audiogram-basic@1 in V1
-        |
-        v
-Remotion render            <---- next stage; not implemented yet
-        |
-        v
-Artifact path saved in SQLite
+YouTube playlist
+      |
+      v
+OAuth importer -> SQLite package job -> yt-dlp heatmap metadata
+                                           |
+                                           v
+                                  ranked ClipPackage
+                                  /       |        \
+                             audio    captions   thumbnail
+                                  \       |        /
+                                           v
+                              treatment registry
+                                           |
+                                           v
+                              audiogram-basic@1 MP4
 ```
 
-## Current status
+The approved architecture is documented in
+`docs/superpowers/specs/2026-09-18-clip-package-treatment-registry-design.md`.
+The implementation plan is
+`docs/superpowers/plans/2026-09-18-clip-package-treatment-registry.md`.
 
-The pipeline currently ends after heatmap selection. It can:
+## Implemented behavior
 
-- Authenticate to YouTube with Google OAuth using read-only access.
-- Find the private `Audiogram Inbox` playlist.
-- Import every video in that playlist with pagination.
-- Upsert imported videos into a persistent SQLite ledger.
-- Create one processing job per `(YouTube video, treatment version)`.
-- Call yt-dlp in metadata-only mode and read the YouTube heatmap without
-  downloading video or audio.
-- Select the strongest independent heatmap peak.
-- Persist the complete normalized heatmap and selected clip timestamps.
-- Skip videos whose current treatment job has already been analyzed.
-- Store multiple ranked clips per processing job when that behavior is enabled.
+- Google OAuth with read-only YouTube access.
+- Paginated import of the private `Audiogram Inbox` playlist.
+- Metadata-only yt-dlp heatmap extraction and independent-peak selection.
+- Transactional migration from the legacy treatment-scoped ledger.
+- Reusable packages independent of any Remotion composition.
+- Multiple ranked packages in the schema and orchestration.
+- Partial audio acquisition with `--download-sections`; there is no full-video
+  fallback.
+- YouTube creator captions first, YouTube automatic captions second, and a
+  terminal package failure when neither is available. Local Whisper is not used
+  in V1.
+- Caption trimming, clamping, and rebasing to package-local timestamps.
+- Thumbnail acquisition and conversion to JPEG.
+- Audio-duration validation with a three-second tolerance.
+- Explicit treatment registry with duplicate and unknown-treatment rejection.
+- Generic renderer driven only by treatment registry metadata.
+- Dynamic `AudiogramBasic` composition using package title, cover, audio, and
+  captions.
+- Temporary render output, non-empty validation, and atomic publication.
+- Per-package and per-treatment failure isolation.
+- Duplicate-safe reruns across analysis, acquisition, and rendering.
 
-The Remotion presentation has also been adjusted:
+## Persistent data model
 
-- The waveform uses fewer samples, so it displays fewer visual waves.
-- The waveform has a gray base with a white progress layer advancing over it.
+The SQLite ledger contains:
 
-## Verified example
+- `videos`: canonical YouTube identity and current source metadata.
+- `package_jobs`: one heatmap/package-generation job per
+  `(video_id, package_version)`.
+- `clip_packages`: one ranked interval per `(package_job_id, rank)`.
+- `clip_assets`: open asset roles and project-relative paths, with optional
+  provenance and metadata.
+- `treatment_runs`: one run per
+  `(clip_package_id, treatment_id, treatment_version)`.
 
-The live playlist currently contains:
+Package states are `selected`, `ready`, and `failed`. Treatment-run states are
+`pending`, `rendered`, and `failed`. A failed treatment never invalidates its
+reusable package.
 
-- Title: `Your phone addiction is keeping you from achieving flow state | Arthur Brooks`
-- YouTube video ID: `KHd-luu3M8s`
-- Processing status: `heatmap_ready`
-- Selected clip: `882.2` to `902.25` seconds, or approximately
-  `14:42.2` to `15:02.25`
-- Heatmap score: `1.0`
-- Artifact path: not set because partial download and rendering are not built yet
+## Deterministic paths
 
-The first run discovered and analyzed this video. A subsequent live run returned
-`discovered: 0`, `existing: 1`, and an empty `analyzed` array. This verifies that
-the persisted ledger prevents the same treatment job from being analyzed again.
+Generated package assets are runtime files ignored by Git:
+
+```text
+public/generated/<video-id>/<package-version>/clip-<rank>/
+├── audio.wav
+├── captions.json
+└── thumbnail.jpg
+```
+
+Treatment output is also ignored by Git:
+
+```text
+out/treatments/<treatment-id>/<treatment-version>/<video-id>/
+├── clip-<rank>.props.json
+└── clip-<rank>.mp4
+```
+
+## Live verification
+
+The first end-to-end run on 2026-09-18 found two playlist videos.
+
+For `KHd-luu3M8s` (`Your phone addiction is keeping you from achieving flow
+state | Arthur Brooks`):
+
+- Migrated package job: `heatmap_ready`.
+- Selected interval: `882.2` to `902.25` seconds.
+- Package rank: `1`; state: `ready`.
+- Assets persisted: `audio`, `captions`, and `thumbnail`.
+- Treatment run: `audiogram-basic@1`; state: `rendered`.
+- Artifact:
+  `out/treatments/audiogram-basic/1/KHd-luu3M8s/clip-1.mp4`.
+- Verified artifact size: `2,584,665` bytes.
+- Verified artifact duration: `22.314667` seconds.
+
+For `MWvH7BRgwL8` (`DHH Omarchy Quattro Announcement | TheStandup`):
+
+- The video exposed no usable YouTube Most Replayed heatmap.
+- Package-job state: `no_heatmap`.
+- No media was acquired and no treatment run was created.
+
+The immediate second live run reported:
+
+```text
+discovered: 0
+analyzed: 0
+packages ready/failed: 0/0
+treatments rendered/failed: 0/0
+```
+
+This verifies idempotency through the final artifact stage.
+
+Before the first schema migration, the legacy database was copied to:
+
+```text
+~/Library/Application Support/Audiogram Inbox/
+  audiograms.pre-generic-2026-09-18.sqlite
+```
 
 ## Commands
 
-Run the complete pipeline through its currently implemented heatmap stage:
+Run the complete pipeline:
 
 ```console
 npm run youtube:inbox
 ```
 
-Run only the original playlist discovery command, without the ledger or heatmap
-processing:
-
-```console
-npm run youtube:discover
-```
-
-Run the importer and ledger tests:
+Run automated tests and static checks:
 
 ```console
 npm run test:youtube
+npm run lint
 ```
 
-Run lint and TypeScript validation:
+List validated Remotion compositions:
 
 ```console
-npm run lint
+npx remotion compositions
 ```
 
 Open Remotion Studio:
@@ -119,10 +165,26 @@ Open Remotion Studio:
 npm run dev
 ```
 
-## Persistent local state
+## Configuration
 
-OAuth credentials and the SQLite database intentionally live outside the Git
-repository:
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `AUDIOGRAM_GOOGLE_CLIENT_PATH` | Application Support OAuth client | Google desktop OAuth client |
+| `AUDIOGRAM_GOOGLE_TOKEN_PATH` | Application Support OAuth token | Persisted refresh/access token |
+| `AUDIOGRAM_DB_PATH` | Application Support SQLite file | Ledger location |
+| `AUDIOGRAM_YOUTUBE_PLAYLIST` | `Audiogram Inbox` | Playlist title |
+| `AUDIOGRAM_PACKAGE_VERSION` | `v1` | Package-selection/acquisition identity |
+| `AUDIOGRAM_TREATMENT_VERSION` | none | Legacy fallback for package version |
+| `AUDIOGRAM_MAX_CLIPS` | `1` | Maximum independent peaks per video |
+| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20` | Separation between selected peaks |
+
+Increment `AUDIOGRAM_PACKAGE_VERSION` only when package selection or generation
+semantics intentionally change. Treatment versioning belongs to the registry
+and is independent.
+
+## Local state and prerequisites
+
+OAuth material and SQLite remain outside Git:
 
 ```text
 ~/Library/Application Support/Audiogram Inbox/
@@ -131,158 +193,37 @@ repository:
 └── audiograms.sqlite
 ```
 
-The OAuth token and client configuration must not be committed. The database is
-also local runtime state, not source code. A future remote runner must provide
-secure replacements for credential storage and durable database storage.
-
-## SQLite data model
-
-The ledger uses three tables.
-
-### `videos`
-
-One row per YouTube video ID. It stores the current title, canonical source URL,
-playlist ID, and first/last-seen timestamps. Re-importing a playlist item updates
-its metadata instead of creating another row.
-
-### `processing_jobs`
-
-One row per `(video_id, treatment_version)`. The unique constraint is the main
-processing footprint: the same video and treatment version cannot create a
-duplicate job, while a later treatment version can intentionally process the
-source again.
-
-Current statuses are:
-
-- `discovered`: waiting for heatmap extraction.
-- `heatmap_ready`: heatmap stored and at least one clip selected.
-- `no_heatmap`: yt-dlp returned no usable heatmap; treated as terminal for the
-  automatic daily run.
-- `failed`: processing failed and the error is stored.
-- `rendered`: reserved for the completed rendering stage.
-
-### `clips`
-
-One or more ranked selections belonging to a processing job. Each row stores:
-
-- Rank.
-- Start and end timestamps in seconds.
-- Heatmap score.
-- Clip status.
-- Project-relative Remotion artifact path.
-
-V1 requests one selected clip, but this table already supports multiple clips
-without changing the video or job identity model.
-
-## Idempotency rules
-
-1. `videos.video_id` is unique.
-2. `(processing_jobs.video_id, processing_jobs.treatment_version)` is unique.
-3. `(clips.processing_job_id, clips.rank)` is unique.
-4. Normal playlist sync updates titles and last-seen timestamps but preserves
-   completed job status and clip rows.
-5. The automatic heatmap stage only processes jobs in `discovered` status.
-6. `no_heatmap`, `failed`, and completed jobs are not retried automatically.
-7. To intentionally reprocess videos after changing the treatment, use a new
-   `AUDIOGRAM_TREATMENT_VERSION` rather than deleting history.
-
-## Configuration
-
-The pipeline recognizes these environment variables:
-
-| Variable                                    | Default                               | Purpose                                                            |
-| ------------------------------------------- | ------------------------------------- | ------------------------------------------------------------------ |
-| `AUDIOGRAM_GOOGLE_CLIENT_PATH`              | Application Support OAuth client file | Google desktop OAuth client configuration                          |
-| `AUDIOGRAM_GOOGLE_TOKEN_PATH`               | Application Support OAuth token file  | Persisted Google refresh/access token                              |
-| `AUDIOGRAM_DB_PATH`                         | Application Support SQLite file       | Override the ledger location, especially for CI or a remote runner |
-| `AUDIOGRAM_YOUTUBE_PLAYLIST`                | `Audiogram Inbox`                     | Playlist title to import                                           |
-| `AUDIOGRAM_TREATMENT_VERSION`               | `v1`                                  | Versioned identity for intentional reprocessing                    |
-| `AUDIOGRAM_MAX_CLIPS`                       | `1`                                   | Maximum independent peaks selected per video                       |
-| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20`                                  | Minimum time separating selected peaks                             |
+The executable pipeline requires Node.js 22, yt-dlp, FFmpeg/ffprobe, and the
+project's locked npm dependencies. Node currently prints an experimental warning
+for `node:sqlite`; the tests and live pipeline pass with Node `v22.23.2`.
 
 ## Source map
 
-- `scripts/youtube-pipeline.mjs`: executable OAuth, playlist, ledger, and heatmap
-  pipeline.
-- `scripts/youtube-inbox.mjs`: original discovery-only importer.
-- `scripts/youtube-auth-core.mjs`: OAuth configuration and playlist lookup
-  helpers.
-- `scripts/youtube-playlist-core.mjs`: paginated playlist-item collection.
-- `scripts/audiogram-ledger.mjs`: schema, migrations-by-creation, idempotent
-  upserts, job state, and clip persistence.
-- `scripts/youtube-heatmap-core.mjs`: metadata-only yt-dlp invocation,
-  normalization, and independent-peak selection.
-- `scripts/youtube-inbox-pipeline-core.mjs`: orchestration between importer,
-  ledger, and heatmap selection.
-- `scripts/*.test.mjs`: unit and integration coverage for OAuth helpers,
-  pagination, SQLite idempotency, multiple clips, heatmap selection, terminal
-  no-heatmap handling, and duplicate-free reruns.
-- `src/Audiogram/Oscilloscope.tsx`: gray waveform and advancing white progress
-  effect.
-- `src/Root.tsx`: waveform configuration, including the lower sample count.
+- `scripts/youtube-pipeline.mjs`: complete executable pipeline.
+- `scripts/audiogram-ledger.mjs`: schema, migration, and state transitions.
+- `scripts/youtube-inbox-pipeline-core.mjs`: playlist/heatmap orchestration.
+- `scripts/clip-package-assets.mjs`: partial acquisition and caption alignment.
+- `scripts/clip-processing-core.mjs`: idempotent package/treatment orchestration.
+- `scripts/treatment-registry.mjs`: explicit treatment allowlist.
+- `scripts/treatment-runner.mjs`: generic atomic Remotion renderer.
+- `src/Root.tsx`: dynamic metadata and `AudiogramBasic` registration.
+- `src/Audiogram/Main.tsx`: package-driven V1 presentation.
+- `scripts/*.test.mjs`: migration, idempotency, failure isolation, acquisition,
+  registry, renderer, OAuth, heatmap, and pagination coverage.
 
-## Verification baseline
+## Deferred work
 
-At this checkpoint:
+V2 adds local Whisper model weights as a caption fallback. V1 intentionally has
+a YouTube-captions-only policy.
 
-- `npm run test:youtube`: 12 tests passed, 0 failed.
-- `npm run lint`: ESLint and TypeScript completed successfully.
-- Live playlist run: succeeded and persisted the selected heatmap clip.
-- Live idempotency rerun: performed no second heatmap analysis.
-- Repository media check: no `.mp4`, `.webm`, `.m4a`, or `.mp3` was created by
-  the metadata-only stage.
+Also deferred:
 
-Node.js 22 currently prints an experimental-feature warning for its built-in
-`node:sqlite` module. The current implementation and tests pass despite that
-warning. Treat a Node runtime upgrade as a separate, tested change.
+- Additional treatments and any treatment-selection UI.
+- A manual single-URL ingestion command.
+- Retry/recovery commands for terminal failures.
+- A fallback selection policy for videos without a YouTube heatmap.
+- Daily scheduling and remote durable execution.
 
-## Not implemented yet
-
-- Downloading only the selected media interval.
-- Feeding that interval and its metadata into the Remotion composition.
-- Generating or importing captions for the selected interval.
-- Rendering the final Remotion artifact.
-- Updating `clips.status` and `artifact_relative_path` after a successful render.
-- A manual single-URL ingestion command. Links can still be explored manually,
-  but they do not yet enter the ledger through a dedicated command.
-- Automatic daily scheduling.
-- Automatic retries or a recovery command for `failed` jobs.
-- A policy for videos that do not expose a YouTube heatmap.
-
-## Next implementation slice
-
-Build one end-to-end artifact for the existing selected clip without downloading
-the entire source video:
-
-1. Read the rank-1 selected interval from SQLite.
-2. Use yt-dlp's time-range support (`--download-sections`) with FFmpeg to acquire
-   only the interval required by the composition.
-3. Store the media under a deterministic, project-relative working path.
-4. Generate or align captions for that interval.
-5. Pass the clip-specific media, timing, title, and captions into Remotion.
-6. Render the artifact to a deterministic output path.
-7. Only after a successful render, set the clip to `rendered`, save
-   `artifact_relative_path`, and mark the processing job `rendered` when its
-   required clips are complete.
-8. Rerun the command and verify that neither the media nor the artifact is
-   produced twice.
-
-Important constraint: the default workflow must not download a full YouTube
-video merely to render a short excerpt. If a source or format prevents reliable
-range acquisition, record the exact failure and stop instead of silently falling
-back to a full download.
-
-## Deferred scheduling decision
-
-Prove the complete pipeline manually before scheduling it. For always-on
-execution:
-
-1. Use a ChatGPT Work scheduled task only if it can invoke a connected remote
-   service that owns the executable pipeline and persistent state.
-2. Otherwise prefer GitHub Actions with `openai/codex-action`.
-3. Keep a small scheduled VM or container as a fallback if GitHub Actions is not
-   suitable for yt-dlp, FFmpeg, and Remotion.
-
-A remote runner must provide secure Google OAuth token storage, yt-dlp and
-FFmpeg, Node/Remotion dependencies, durable database storage, and durable output
-artifact storage. Do not pursue a Grok-based alternative for this project.
+When several independent treatments are added, subagent-driven development may
+be appropriate. The single-treatment V1 was implemented inline with one final
+independent review.

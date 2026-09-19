@@ -1,97 +1,74 @@
-# Remotion Audiogram Template
+# Audiogram Inbox
 
-This template is for creating "audiograms". In other words, video clips from podcast episodes, or any other audio. It's a popular way of sharing audio snippets on social media.
+Audiogram Inbox turns the strongest YouTube Most Replayed moment from videos in
+a private playlist into reusable clip packages and rendered Remotion artifacts.
 
-[Example video](https://twitter.com/marcusstenbeck/status/1460641903326732300)
+V1 registers one treatment, `audiogram-basic@1`, but discovery, package assets,
+the SQLite ledger, and the renderer are treatment-independent.
 
-<p align="center">
-  <img src="https://github.com/marcusstenbeck/remotion-template-audiogram/raw/main/Promo.png">
-</p>
+## Run the MVP
 
-## Getting started
+Prerequisites:
 
-```
-npm i
-```
+- Node.js 22
+- yt-dlp
+- FFmpeg and ffprobe
+- A Google desktop OAuth client authorized for read-only YouTube access
 
-```
-npx remotion studio
-```
-
-Start changing things like this:
-
-- Adjust parameters in `src/Root.tsx` or in the Studio sidebar
-- Replacing audio, cover and subtitles in the `public` folder
-
-## How do I render my video?
-
-Run this:
+Install locked dependencies and run the pipeline:
 
 ```console
-npx remotion render
+npm ci
+npm run youtube:inbox
 ```
 
-Or check out the [Remotion docs](/docs/render/). There are lots of ways to render.
+On first authorization, open the printed Google OAuth URL. The pipeline looks
+for a private playlist named `Audiogram Inbox` by default.
 
-## Where to get a transcript?
+## Verify development changes
 
-You can generate the captions or supply a .srt file or a .json file that follows the [`@remotion/captions`](https://remotion.dev/docs/captions/caption) format.
-
-### Generate captions
-
-- With the built-in transcription script using [`@remotion/install-whisper-cpp`](https://www.remotion.dev/docs/install-whisper-cpp/):
-
-  ```console
-  bun transcribe.ts
-  # With Node.js: `npx tsx transcribe.ts`
-  ```
-
-  This will:
-
-  - Ask for your audio file path (supports any ffmpeg format)
-  - Ask for the speech start time (to avoid false triggers from background music, intro jingles or noise)
-  - Generate captions.json in the public folder
-
-- Alternatively, use [`@remotion/openai-whisper`](https://www.remotion.dev/docs/openai-whisper/openai-whisper-api-to-captions) to get captions from OpenAI Whisper into the right shape.
-
-**Get it from a provider:**
-
-- Your podcasting host might provide them for you.
-- Descript makes transcription really easy.
-- There are tons of other, paid solutions, like [Otter.ai](https://otter.ai), [Scriptme.io](https://scriptme.io) and [ListenRobo.com](https://listenrobo.com).
-
-If you supply a .srt, make sure to export subtitles that are segmented by word rather than by sentence.
-
-## Optimizing for long audio files
-
-If your audio is long, make sure to pass a `.wav` file as audio.  
-The template will use [`useWindowedAudioData()`](/docs/use-windowed-audio-data) to only fetch the data around the current time.
-
-Otherwise, the waveform of the whole audio needs to be fetched, which may be slow.
-
-## Docs
-
-Get started with Remotion by reading the [fundamentals page](https://www.remotion.dev/docs/the-fundamentals).
-
-## Help
-
-We provide help [on our Discord server](https://discord.gg/6VzzNDwUwV).
-
-## Issues
-
-Found an issue with Remotion? Upgrade Remotion to receive fixes:
-
-```
-npx remotion upgrade
+```console
+npm run test:youtube
+npm run lint
+npx remotion compositions
 ```
 
-Didn't help? [File an issue here](https://github.com/remotion-dev/remotion/issues/new).
+Open the composition interactively:
 
-## Contributing
+```console
+npm run dev
+```
 
-The source of this template is in the [Remotion Monorepo](https://github.com/remotion-dev/remotion/tree/main/packages/template-audiogram).  
-Don't send pull requests here, this is only a mirror.
+## Runtime outputs
 
-## License
+Clip packages are generated under:
 
-Note that for some entities a company license is needed. Read [the terms here](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md).
+```text
+public/generated/<video-id>/<package-version>/clip-<rank>/
+```
+
+Rendered treatment artifacts are published under:
+
+```text
+out/treatments/<treatment-id>/<treatment-version>/<video-id>/
+```
+
+Both directories are ignored by Git. OAuth credentials and the SQLite ledger
+live in `~/Library/Application Support/Audiogram Inbox/` and must not be
+committed.
+
+The default workflow downloads only the selected audio interval. It never
+silently falls back to downloading the full video. V1 uses YouTube creator or
+automatic captions only; local Whisper is planned for V2.
+
+## Documentation
+
+- [Project status and operational handoff](docs/PROJECT_STATUS.md)
+- [Generic package and treatment design](docs/superpowers/specs/2026-09-18-clip-package-treatment-registry-design.md)
+- [Implementation plan](docs/superpowers/plans/2026-09-18-clip-package-treatment-registry.md)
+
+## Remotion licensing
+
+This project derives from Remotion's Audiogram template. Review the
+[Remotion license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md)
+for applicable commercial terms.

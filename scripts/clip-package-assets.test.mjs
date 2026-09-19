@@ -79,9 +79,9 @@ test("acquires audio, manual captions, and thumbnail into a deterministic packag
   );
 
   assert.deepEqual(assets, [
-    {role: "audio", relativePath: "public/generated/video-1/v1/clip-2/audio.wav"},
-    {role: "captions", relativePath: "public/generated/video-1/v1/clip-2/captions.json"},
-    {role: "thumbnail", relativePath: "public/generated/video-1/v1/clip-2/thumbnail.jpg"},
+    {role: "audio", relativePath: "public/generated/video-1/v1/clip-2/audio.wav", provenance: "yt_dlp"},
+    {role: "captions", relativePath: "public/generated/video-1/v1/clip-2/captions.json", provenance: "youtube_creator"},
+    {role: "thumbnail", relativePath: "public/generated/video-1/v1/clip-2/thumbnail.jpg", provenance: "yt_dlp"},
   ]);
   assert.equal(
     calls.filter(({args}) => args.includes("--write-auto-subs")).length,

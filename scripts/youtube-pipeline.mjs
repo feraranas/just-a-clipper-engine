@@ -7,6 +7,8 @@ import {join} from "node:path";
 import {google} from "googleapis";
 
 import {openAudiogramLedger} from "./audiogram-ledger.mjs";
+import {acquireClipPackageAssets} from "./clip-package-assets.mjs";
+import {processClipPackages} from "./clip-processing-core.mjs";
 import {
   findPlaylistByTitle,
   mergeOAuthTokens,
@@ -14,6 +16,9 @@ import {
 } from "./youtube-auth-core.mjs";
 import {syncAndAnalyzeInbox} from "./youtube-inbox-pipeline-core.mjs";
 import {collectPlaylistItems} from "./youtube-playlist-core.mjs";
+import {renderTreatmentRun} from "./treatment-runner.mjs";
+import {treatmentRegistry} from "./treatment-registry.mjs";
+import {resolvePackageVersion} from "./youtube-pipeline-config.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -31,7 +36,7 @@ const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
 const playlistTitle = process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
-const treatmentVersion = process.env.AUDIOGRAM_TREATMENT_VERSION ?? "v1";
+const packageVersion = resolvePackageVersion(process.env);
 const maxClips = Number.parseInt(process.env.AUDIOGRAM_MAX_CLIPS ?? "1", 10);
 const minimumSeparationSeconds = Number.parseFloat(
   process.env.AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS ?? "20",
@@ -184,29 +189,48 @@ try {
     maxClips,
     minimumSeparationSeconds,
     playlist,
-    treatmentVersion,
+    packageVersion,
     videos,
   });
-  const failures = pipeline.analyzed.filter(({status}) => status === "failed");
+  const processing = await processClipPackages({
+    ledger,
+    registry: treatmentRegistry,
+    treatments: [{id: "audiogram-basic", version: "1"}],
+    acquireAssets: (clipPackage) =>
+      acquireClipPackageAssets(clipPackage, {projectRoot: process.cwd()}),
+    renderTreatment: ({clipPackage, treatment}) =>
+      renderTreatmentRun(
+        {clipPackage, treatment},
+        {projectRoot: process.cwd()},
+      ),
+  });
+  const analysisFailures = pipeline.analyzed.filter(
+    ({status}) => status === "failed",
+  );
 
   console.log(
     JSON.stringify(
       {
         playlist,
-        treatmentVersion,
+        packageVersion,
+        treatments: ["audiogram-basic@1"],
         ledgerPath,
         videosFound: videos.length,
         ...pipeline,
+        processing,
       },
       null,
       2,
     ),
   );
 
-  if (failures.length > 0) {
+  if (
+    analysisFailures.length > 0 ||
+    processing.packages.failed > 0 ||
+    processing.treatments.failed > 0
+  ) {
     process.exitCode = 1;
   }
 } finally {
   ledger.close();
 }
-

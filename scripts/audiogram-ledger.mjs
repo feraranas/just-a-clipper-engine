@@ -44,6 +44,8 @@ const mapAsset = (row) => ({
   clipPackageId: row.clip_package_id,
   role: row.role,
   relativePath: row.relative_path,
+  provenance: row.provenance,
+  metadataJson: row.metadata_json,
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
@@ -102,6 +104,8 @@ const createGenericTables = (database) => {
       clip_package_id INTEGER NOT NULL REFERENCES clip_packages(id) ON DELETE CASCADE,
       role TEXT NOT NULL,
       relative_path TEXT NOT NULL,
+      provenance TEXT,
+      metadata_json TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       UNIQUE (clip_package_id, role)
@@ -191,6 +195,21 @@ const migrateLegacyTables = (database) => {
   }
 };
 
+const ensureClipAssetColumns = (database) => {
+  const columns = new Set(
+    database
+      .prepare("PRAGMA table_info(clip_assets)")
+      .all()
+      .map(({name}) => name),
+  );
+  if (!columns.has("provenance")) {
+    database.exec("ALTER TABLE clip_assets ADD COLUMN provenance TEXT");
+  }
+  if (!columns.has("metadata_json")) {
+    database.exec("ALTER TABLE clip_assets ADD COLUMN metadata_json TEXT");
+  }
+};
+
 export const openAudiogramLedger = (
   path,
   {now = () => new Date().toISOString()} = {},
@@ -209,6 +228,7 @@ export const openAudiogramLedger = (
     ) STRICT;
   `);
   migrateLegacyTables(database);
+  ensureClipAssetColumns(database);
 
   const getVideoStatement = database.prepare("SELECT * FROM videos WHERE video_id = ?");
   const getPackageJobStatement = database.prepare(
@@ -385,6 +405,23 @@ export const openAudiogramLedger = (
         sourceUrl: row.source_url,
         assets: listAssets(row.clip_package_id),
       })),
+    listReadyPackages: () =>
+      database.prepare(`
+        SELECT clip_packages.*, package_jobs.video_id, package_jobs.package_version,
+               videos.title, videos.source_url
+        FROM clip_packages
+        JOIN package_jobs ON package_jobs.id = clip_packages.package_job_id
+        JOIN videos ON videos.video_id = package_jobs.video_id
+        WHERE clip_packages.status = 'ready'
+        ORDER BY clip_packages.id
+      `).all().map((row) => ({
+        ...mapClipPackage(row),
+        videoId: row.video_id,
+        packageVersion: row.package_version,
+        title: row.title,
+        sourceUrl: row.source_url,
+        assets: listAssets(row.id),
+      })),
     listSelectedPackages: () =>
       database.prepare(`
         SELECT clip_packages.*, package_jobs.video_id, package_jobs.package_version,
@@ -424,10 +461,13 @@ export const openAudiogramLedger = (
       try {
         const upsertAsset = database.prepare(`
           INSERT INTO clip_assets (
-            clip_package_id, role, relative_path, created_at, updated_at
-          ) VALUES (?, ?, ?, ?, ?)
+            clip_package_id, role, relative_path, provenance, metadata_json,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(clip_package_id, role) DO UPDATE SET
             relative_path = excluded.relative_path,
+            provenance = excluded.provenance,
+            metadata_json = excluded.metadata_json,
             updated_at = excluded.updated_at
         `);
         for (const asset of assets) {
@@ -435,6 +475,8 @@ export const openAudiogramLedger = (
             packageId,
             asset.role,
             asset.relativePath,
+            asset.provenance ?? null,
+            asset.metadataJson ?? null,
             timestamp,
             timestamp,
           );
