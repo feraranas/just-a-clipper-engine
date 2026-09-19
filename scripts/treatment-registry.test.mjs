@@ -72,4 +72,18 @@ test("rejects malformed treatment definitions at registration", () => {
     () => createTreatmentRegistry([{...audiogramBasicTreatment, compositionId: ""}]),
     /compositionId must be a non-empty string/,
   );
+  assert.throws(
+    () =>
+      createTreatmentRegistry([
+        {...audiogramBasicTreatment, output: {extension: "../zip", codec: "h264"}},
+      ]),
+    /Unsupported output extension: \.\.\/zip/,
+  );
+  assert.throws(
+    () =>
+      createTreatmentRegistry([
+        {...audiogramBasicTreatment, output: {extension: "mp4", codec: "vp9"}},
+      ]),
+    /Unsupported output codec: vp9/,
+  );
 });

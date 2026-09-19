@@ -45,6 +45,12 @@ const validateTreatmentDefinition = (treatment) => {
   }
   assertNonemptyString(treatment.output.extension, "output.extension");
   assertNonemptyString(treatment.output.codec, "output.codec");
+  if (treatment.output.extension !== "mp4") {
+    throw new Error(`Unsupported output extension: ${treatment.output.extension}`);
+  }
+  if (treatment.output.codec !== "h264") {
+    throw new Error(`Unsupported output codec: ${treatment.output.codec}`);
+  }
 };
 
 const toPublicFileName = (relativePath) => {
