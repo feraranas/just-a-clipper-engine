@@ -134,9 +134,38 @@ test("rejects bad cue grounding, ranks, duplicate ideas/spans, and false editori
       payoffCueId: validParsed.clips[1].payoffCueId,
       endCueId: validParsed.clips[1].endCueId,
     }),
-    mutate({ editorialChecks: { ...checks, containsSponsorOrCta: true } }),
   ])
     assert.throws(() => deriveClipSelections(parsed, transcript, recipe));
+});
+
+test("rejects the fixture sponsor arc when output admits sponsor content", () => {
+  assert.match(
+    transcript.cues.find((cue) => cue.id === "c000005").text,
+    /sponsored/i,
+  );
+  assert.match(
+    transcript.cues.find((cue) => cue.id === "c000006").text,
+    /subscribe|promo code/i,
+  );
+  const sponsor = {
+    ...selection(1, "sponsor-call-to-action", [
+      "c000004",
+      "c000005",
+      "c000006",
+      "c000007",
+      "c000008",
+    ]),
+    editorialChecks: { ...checks, containsSponsorOrCta: true },
+  };
+  assert.throws(
+    () =>
+      deriveClipSelections(
+        { clips: [sponsor, ...validParsed.clips.slice(1)] },
+        transcript,
+        recipe,
+      ),
+    /containsSponsorOrCta/,
+  );
 });
 
 test("rejects narrative-free quote, short/long clips, overlap, and spacing independent of rank", () => {

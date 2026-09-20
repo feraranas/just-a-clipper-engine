@@ -1,4 +1,7 @@
-import { buildTranscriptZodSchema } from "./clip-selection-contract.mjs";
+import {
+  buildTranscriptZodSchema,
+  TRANSCRIPT_LIMITS,
+} from "./clip-selection-contract.mjs";
 
 const numericUsage = (usage, field) => {
   const value = usage?.[field];
@@ -67,9 +70,13 @@ export const extractStructuredOutput = (response, limits) => {
     throw new Error(
       "Structured response convenience text conflicts with message text",
     );
-  const maximumBytes = limits?.maximumOutputTextUtf8Bytes;
-  if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 0)
+  const requestedMaximumBytes = limits?.maximumOutputTextUtf8Bytes;
+  if (!Number.isSafeInteger(requestedMaximumBytes) || requestedMaximumBytes < 0)
     throw new Error("Invalid output text byte limit");
+  const maximumBytes = Math.min(
+    requestedMaximumBytes,
+    TRANSCRIPT_LIMITS.maximumOutputTextUtf8Bytes,
+  );
   const bytes = Buffer.byteLength(text, "utf8");
   if (bytes > maximumBytes)
     throw new Error(

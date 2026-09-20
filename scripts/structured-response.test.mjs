@@ -126,3 +126,32 @@ test("rejects conflicting convenience text, malformed/oversize/schema-invalid JS
     ),
   );
 });
+
+test("enforces the absolute 24 KiB ceiling when a caller supplies a larger limit", () => {
+  const escapeExpandedClip = (rank) => ({
+    ...clip(rank),
+    title: "\u0001".repeat(80),
+    contextSummary: "\u0001".repeat(240),
+    insightSummary: "\u0002".repeat(240),
+    payoffSummary: "\u0003".repeat(240),
+  });
+  const text = JSON.stringify({
+    clips: Array.from({ length: 5 }, (_, index) =>
+      escapeExpandedClip(index + 1),
+    ),
+  });
+  assert.ok(Buffer.byteLength(text, "utf8") > 24_576);
+
+  const message = response().output[1];
+  const oversized = response({
+    output: [{ ...message, content: [{ ...message.content[0], text }] }],
+  });
+  assert.throws(
+    () =>
+      extractStructuredOutput(oversized, {
+        desiredClipCount: 5,
+        maximumOutputTextUtf8Bytes: 100_000,
+      }),
+    /exceeds the 24576 byte limit/,
+  );
+});
