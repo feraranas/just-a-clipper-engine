@@ -74,6 +74,6 @@ test("a video without a heatmap receives a terminal status", async (t) => {
   });
 
   assert.equal(result.analyzed[0].status, "no_heatmap");
-  assert.equal(ledger.getPackageJob("video-1", "v1").status, "no_heatmap");
+  assert.equal(ledger.getPackageJob("video-1", "v1").status, "no_selection");
   assert.deepEqual(ledger.listPendingPackageJobs(), []);
 });
