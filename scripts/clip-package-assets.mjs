@@ -193,6 +193,9 @@ const validateClipPackageIdentity = (clipPackage) => {
   ) {
     throw new Error("Invalid package time range");
   }
+  if (!Number.isFinite(clipPackage.score)) {
+    throw new Error(`Invalid package score: ${clipPackage.score}`);
+  }
   return { ...clipPackage, videoId, packageVersion };
 };
 
@@ -225,6 +228,43 @@ export const getClipPackagePaths = (
 const invalidPackage = (projectRoot, directory, kind, reason) => {
   const packagePath = toProjectRelative(projectRoot, directory).slice(0, 160);
   return new Error(`Invalid ${kind} clip package at ${packagePath}: ${reason}`);
+};
+
+const invalidManagedPath = (projectRoot, path, reason) => {
+  const managedPath = toProjectRelative(projectRoot, path).slice(0, 160);
+  return new Error(
+    `Invalid managed clip package path at ${managedPath}: ${reason}`,
+  );
+};
+
+const validateManagedAncestorDirectories = async (clipPackage, projectRoot) => {
+  const managedDirectories = [
+    join(projectRoot, "public"),
+    join(projectRoot, "public", "generated"),
+    join(projectRoot, "public", "generated", clipPackage.videoId),
+    join(
+      projectRoot,
+      "public",
+      "generated",
+      clipPackage.videoId,
+      clipPackage.packageVersion,
+    ),
+  ];
+  for (const directory of managedDirectories) {
+    let entry;
+    try {
+      entry = await lstat(directory);
+    } catch (error) {
+      if (error?.code === "ENOENT") return;
+      throw error;
+    }
+    if (entry.isSymbolicLink()) {
+      throw invalidManagedPath(projectRoot, directory, "symbolic link");
+    }
+    if (!entry.isDirectory()) {
+      throw invalidManagedPath(projectRoot, directory, "not a directory");
+    }
+  }
 };
 
 const sameNumber = (actual, expected) =>
@@ -477,6 +517,7 @@ export const inspectPublishedClipPackage = async (
   const { finalDirectory } = getClipPackagePaths(validatedPackage, {
     projectRoot,
   });
+  await validateManagedAncestorDirectories(validatedPackage, projectRoot);
   try {
     const directory = await lstat(finalDirectory);
     if (directory.isSymbolicLink()) {

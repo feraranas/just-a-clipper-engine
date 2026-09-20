@@ -315,6 +315,11 @@ test("rejects rank and interval errors before filesystem writes or commands", as
     exampleClipPackage({ rank: 0 }),
     exampleClipPackage({ startSeconds: -1 }),
     exampleClipPackage({ endSeconds: 10 }),
+    exampleClipPackage({ score: Number.NaN }),
+    exampleClipPackage({ score: Number.POSITIVE_INFINITY }),
+    exampleClipPackage({ score: Number.NEGATIVE_INFINITY }),
+    exampleClipPackage({ score: undefined }),
+    exampleClipPackage({ score: "0.9" }),
   ]) {
     let processCalls = 0;
     await assert.rejects(
@@ -326,12 +331,69 @@ test("rejects rank and interval errors before filesystem writes or commands", as
           throw new Error("external command should not run");
         },
       }),
-      /Invalid package (rank|time range)/,
+      /Invalid package (rank|time range|score)/,
     );
     assert.equal(processCalls, 0);
   }
 
   await assertMissing(join(projectRoot, "public"));
+});
+
+test("rejects a managed ancestor symlink without touching its external target", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-ancestor-"));
+  const externalRoot = await mkdtemp(join(tmpdir(), "clip-package-external-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() => rm(externalRoot, { recursive: true, force: true }));
+  await mkdir(join(projectRoot, "public"));
+  await symlink(externalRoot, join(projectRoot, "public", "generated"), "dir");
+  let processCalls = 0;
+
+  const error = await acquireClipPackageAssets(exampleClipPackage(), {
+    projectRoot,
+    createStagingId: () => "must-not-be-used",
+    runCommand: async () => {
+      processCalls += 1;
+      throw new Error("external command should not run");
+    },
+  }).then(
+    () => null,
+    (acquisitionError) => acquisitionError,
+  );
+
+  assert.deepEqual(
+    {
+      isBoundedDiagnostic:
+        /Invalid managed clip package path.*symbolic link/.test(error?.message),
+      processCalls,
+      externalEntries: await readdir(externalRoot),
+    },
+    {
+      isBoundedDiagnostic: true,
+      processCalls: 0,
+      externalEntries: [],
+    },
+  );
+});
+
+test("rejects a non-directory managed ancestor before external commands", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-ancestor-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  await mkdir(join(projectRoot, "public"));
+  await writeFile(join(projectRoot, "public", "generated"), "not a directory");
+  let processCalls = 0;
+
+  await assert.rejects(
+    acquireClipPackageAssets(exampleClipPackage(), {
+      projectRoot,
+      createStagingId: () => "must-not-be-used",
+      runCommand: async () => {
+        processCalls += 1;
+        throw new Error("external command should not run");
+      },
+    }),
+    /Invalid managed clip package path.*not a directory/,
+  );
+  assert.equal(processCalls, 0);
 });
 
 test("rejects an unsafe staging ID before filesystem writes or commands", async (t) => {
