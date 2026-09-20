@@ -86,6 +86,17 @@ export const normalizeTranscriptCues = (cues) => {
   }));
 };
 
+export const computeTranscriptIdentity = ({ source, language, cues }) => {
+  const canonicalTranscript = { source, language, cues };
+  return {
+    sha256: sha256Canonical(canonicalTranscript),
+    canonicalUtf8Bytes: Buffer.byteLength(
+      canonicalJson(canonicalTranscript),
+      "utf8",
+    ),
+  };
+};
+
 const metadataArgs = (sourceUrl) => [
   "--no-playlist",
   "--skip-download",
@@ -143,17 +154,17 @@ export const fetchYoutubeTranscript = async (
       input: await readFile(join(temporaryDirectory, srtFiles[0]), "utf8"),
     });
     const cues = normalizeTranscriptCues(captions);
-    const canonicalUtf8Bytes = Buffer.byteLength(canonicalJson(cues), "utf8");
+    const identity = computeTranscriptIdentity({ ...track, cues });
+    const { canonicalUtf8Bytes } = identity;
     if (canonicalUtf8Bytes > maxCanonicalUtf8Bytes) {
       throw new Error(
-        `Canonical transcript exceeds the ${maxCanonicalUtf8Bytes} byte limit`,
+        `Canonical transcript is ${canonicalUtf8Bytes} bytes and exceeds the ${maxCanonicalUtf8Bytes} byte limit`,
       );
     }
     return deepFreeze({
       ...track,
       cues,
-      sha256: sha256Canonical(cues),
-      canonicalUtf8Bytes,
+      ...identity,
     });
   } finally {
     await rm(temporaryDirectory, { recursive: true, force: true });

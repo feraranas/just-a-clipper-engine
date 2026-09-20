@@ -5,10 +5,37 @@ import { dirname, join } from "node:path";
 import test from "node:test";
 
 import {
+  computeTranscriptIdentity,
   fetchYoutubeTranscript,
   normalizeTranscriptCues,
   selectEnglishCaptionTrack,
 } from "./youtube-transcript-core.mjs";
+
+test("transcript identity binds source and exact language around identical cues", () => {
+  const cues = [{ id: "c000001", startMs: 0, endMs: 1_000, text: "Same cues" }];
+  const creatorEnglish = computeTranscriptIdentity({
+    source: "youtube_creator",
+    language: "en",
+    cues,
+  });
+  const automaticEnglish = computeTranscriptIdentity({
+    source: "youtube_auto",
+    language: "en",
+    cues,
+  });
+  const creatorUsEnglish = computeTranscriptIdentity({
+    source: "youtube_creator",
+    language: "en-US",
+    cues,
+  });
+
+  assert.notEqual(creatorEnglish.sha256, automaticEnglish.sha256);
+  assert.notEqual(creatorEnglish.sha256, creatorUsEnglish.sha256);
+  assert.notEqual(
+    creatorEnglish.canonicalUtf8Bytes,
+    creatorUsEnglish.canonicalUtf8Bytes,
+  );
+});
 
 test("selects creator then automatic English tracks in deterministic priority order", () => {
   const metadata = {
@@ -87,7 +114,7 @@ test("normalizes, validates, stable-sorts, retains ties, then assigns IDs", () =
   }
 });
 
-test("fetches exact selected caption only, hashes canonical cues, and removes temp files", async (t) => {
+test("fetches exact selected caption only, hashes the canonical envelope, and removes temp files", async (t) => {
   const tempRoot = await mkdtemp(join(tmpdir(), "transcript-test-"));
   t.after(() => rm(tempRoot, { recursive: true, force: true }));
   const calls = [];
@@ -128,9 +155,9 @@ test("fetches exact selected caption only, hashes canonical cues, and removes te
   assert.equal(first.language, "en");
   assert.equal(
     first.sha256,
-    "5c1198d58a7e4da1c9af1150cd6bfcca85ca3a36032f52e6b618786a85ec20c1",
+    "c1c181db014e3dd70f212bef03fd0dbbff5943b28b7d06e9ad7720115b193fb9",
   );
-  assert.equal(first.canonicalUtf8Bytes, 120);
+  assert.equal(first.canonicalUtf8Bytes, 172);
   assert.deepEqual(await readdir(tempRoot), []);
   for (const { args } of calls) {
     assert.ok(args.includes("--skip-download"));
@@ -207,7 +234,7 @@ test("rejects transcripts over the canonical UTF-8 byte limit without echoing te
     () => null,
     (value) => value,
   );
-  assert.match(error.message, /524288/);
+  assert.match(error.message, /is \d+ bytes and exceeds the 524288 byte limit/);
   assert.ok(!error.message.includes("SECRET"));
   assert.deepEqual(await readdir(tempRoot), []);
 });
