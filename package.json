@@ -42,6 +42,8 @@
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
+    "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
+    "test:selector:live": "node scripts/clip-selector-smoke.mjs",
     "youtube:login:chatgpt": "node scripts/chatgpt-oauth-login.mjs",
     "test:youtube": "node --test scripts/*.test.mjs",
     "youtube:discover": "node scripts/youtube-inbox.mjs"
