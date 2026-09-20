@@ -844,6 +844,96 @@ test("already-versioned malformed v1 is rejected without repair or version stamp
   unchanged.close();
 });
 
+test("column-complete v1 with altered structural invariants is rejected unchanged", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "ledger.sqlite");
+  const malformed = new DatabaseSync(path);
+  malformed.exec(`
+    CREATE TABLE videos (
+      video_id TEXT PRIMARY KEY, title TEXT NOT NULL, source_url TEXT NOT NULL,
+      playlist_id TEXT, first_seen_at TEXT NOT NULL, last_seen_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE package_jobs (
+      id INTEGER PRIMARY KEY,
+      video_id TEXT NOT NULL,
+      package_version TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'discovered',
+      heatmap_json TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE TABLE clip_packages (
+      id INTEGER PRIMARY KEY,
+      package_job_id INTEGER NOT NULL REFERENCES package_jobs(id) ON DELETE CASCADE,
+      rank INTEGER NOT NULL CHECK (rank >= 1),
+      start_seconds REAL NOT NULL CHECK (start_seconds >= 0),
+      end_seconds REAL NOT NULL CHECK (end_seconds > start_seconds),
+      score REAL NOT NULL,
+      status TEXT NOT NULL DEFAULT 'selected'
+        CHECK (status IN ('selected', 'ready', 'failed')),
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (package_job_id, rank)
+    ) STRICT;
+    CREATE TABLE clip_assets (
+      id INTEGER PRIMARY KEY,
+      clip_package_id INTEGER NOT NULL REFERENCES clip_packages(id) ON DELETE CASCADE,
+      role TEXT NOT NULL,
+      relative_path TEXT NOT NULL,
+      provenance TEXT,
+      metadata_json TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (clip_package_id, role)
+    ) STRICT;
+    CREATE TABLE treatment_runs (
+      id INTEGER PRIMARY KEY,
+      clip_package_id INTEGER NOT NULL REFERENCES clip_packages(id) ON DELETE CASCADE,
+      treatment_id TEXT NOT NULL,
+      treatment_version TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK (status IN ('pending', 'rendered', 'failed')),
+      artifact_relative_path TEXT,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (clip_package_id, treatment_id, treatment_version)
+    ) STRICT;
+    CREATE INDEX package_jobs_status_idx ON package_jobs(status);
+    CREATE INDEX clip_packages_status_idx ON clip_packages(status);
+    CREATE INDEX treatment_runs_status_idx ON treatment_runs(status);
+    INSERT INTO videos VALUES (
+      'video-1', 'title', 'https://youtu.be/video-1', NULL,
+      '${timestamp}', '${timestamp}'
+    );
+    INSERT INTO package_jobs VALUES (
+      1, 'video-1', 'v1', 'discovered', NULL, NULL,
+      '${timestamp}', '${timestamp}'
+    );
+    PRAGMA user_version = 1;
+  `);
+  const schemaBefore = readSchemaSql(malformed);
+  const dataBefore = malformed.prepare("SELECT * FROM package_jobs").all();
+  malformed.close();
+
+  assert.throws(
+    () => openAudiogramLedger(path),
+    /invalid.*version 1.*package_jobs.*strict|structural/i,
+  );
+
+  const unchanged = new DatabaseSync(path);
+  assert.deepEqual(readSchemaSql(unchanged), schemaBefore);
+  assert.deepEqual(
+    unchanged.prepare("SELECT * FROM package_jobs").all(),
+    dataBefore,
+  );
+  assert.equal(readSchemaVersion(unchanged), 1);
+  unchanged.close();
+});
+
 test("v1 migration preserves related rows and assigns honest terminal and unprocessed recipes", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -1348,5 +1438,111 @@ test("transcript reads recompute persisted identity and failed writes roll back 
   assert.throws(
     () => ledger.getTranscript(transcriptId),
     /transcript.*identity|sha256/i,
+  );
+});
+
+test("completed selections cannot be re-recorded over ready or failed package state", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
+  t.after(() => ledger.close());
+
+  ledger.syncPlaylistVideos({
+    playlistId: "playlist-1",
+    packageVersion: "heatmap-v1",
+    selectionRecipe: defaultHeatmapRecipe,
+    videos: [
+      { videoId: "heatmap", title: "heatmap", url: "https://youtu.be/heatmap" },
+    ],
+  });
+  const heatmapJob = ledger.getPackageJob("heatmap", "heatmap-v1");
+  ledger.recordHeatmapSelection({
+    jobId: heatmapJob.id,
+    selectionRecipe: defaultHeatmapRecipe,
+    heatmap,
+    packages: heatmapPackages,
+  });
+  const [readyPackage] = ledger.listClipPackages(heatmapJob.id);
+  ledger.markPackageReady({
+    packageId: readyPackage.id,
+    assets: [{ role: "audio", relativePath: "public/generated/audio.wav" }],
+  });
+  const originalHeatmapRun = ledger.getSelectionRun(heatmapJob.id);
+
+  assert.throws(
+    () =>
+      ledger.recordHeatmapSelection({
+        jobId: heatmapJob.id,
+        selectionRecipe: defaultHeatmapRecipe,
+        heatmap: [],
+        packages: [],
+      }),
+    /selection.*already.*completed|immutable/i,
+  );
+  assert.equal(
+    ledger.getPackageJob("heatmap", "heatmap-v1").status,
+    "selection_ready",
+  );
+  assert.deepEqual(ledger.getSelectionRun(heatmapJob.id), originalHeatmapRun);
+  assert.equal(ledger.getClipPackage(readyPackage.id).status, "ready");
+  assert.equal(ledger.getClipPackage(readyPackage.id).assets.length, 1);
+
+  ledger.syncPlaylistVideos({
+    playlistId: "playlist-1",
+    packageVersion: "transcript-v1",
+    selectionRecipe: transcriptRecipe,
+    videos: [
+      {
+        videoId: "transcript",
+        title: "transcript",
+        url: "https://youtu.be/transcript",
+      },
+    ],
+  });
+  const transcriptJob = ledger.getPackageJob("transcript", "transcript-v1");
+  ledger.recordTranscriptSelection({
+    jobId: transcriptJob.id,
+    transcript,
+    result: transcriptResult,
+    packages: [{ rank: 1, startMs: 0, endMs: 31_000, score: 0.9 }],
+    provenance: {
+      providerId: "openai-api",
+      model: transcriptRecipe.recipe.provider.model,
+      recipeSha256: transcriptRecipe.sha256,
+    },
+    selectionRecipe: transcriptRecipe,
+  });
+  const [failedPackage] = ledger.listClipPackages(transcriptJob.id);
+  ledger.markPackageFailed(failedPackage.id, "download failed");
+  const originalTranscriptRun = ledger.getSelectionRun(transcriptJob.id);
+
+  assert.throws(
+    () =>
+      ledger.recordTranscriptSelection({
+        jobId: transcriptJob.id,
+        transcript,
+        result: transcriptResult,
+        packages: [],
+        provenance: {
+          providerId: "openai-api",
+          model: transcriptRecipe.recipe.provider.model,
+          recipeSha256: transcriptRecipe.sha256,
+        },
+        selectionRecipe: transcriptRecipe,
+      }),
+    /selection.*already.*completed|immutable/i,
+  );
+  assert.equal(
+    ledger.getPackageJob("transcript", "transcript-v1").status,
+    "selection_ready",
+  );
+  assert.deepEqual(
+    ledger.getSelectionRun(transcriptJob.id),
+    originalTranscriptRun,
+  );
+  assert.equal(ledger.getClipPackage(failedPackage.id).status, "failed");
+  assert.equal(
+    ledger.getClipPackage(failedPackage.id).lastError,
+    "download failed",
   );
 });

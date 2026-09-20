@@ -504,8 +504,113 @@ const validateRequiredColumns = (database, version, requiredTables) => {
   }
 };
 
-const validateSchemaVersion1 = (database) =>
+const quoteIdentifier = (value) => `"${value.replaceAll('"', '""')}"`;
+
+const normalizedTableSql = (database, table) =>
+  database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table)
+    ?.sql?.replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const uniqueColumnSets = (database, table) =>
+  database
+    .prepare(`PRAGMA index_list(${quoteIdentifier(table)})`)
+    .all()
+    .filter((index) => index.unique === 1 && index.origin !== "pk")
+    .map((index) =>
+      database
+        .prepare(`PRAGMA index_info(${quoteIdentifier(index.name)})`)
+        .all()
+        .sort((left, right) => left.seqno - right.seqno)
+        .map(({ name }) => name)
+        .join(","),
+    )
+    .sort();
+
+const foreignKeyContracts = (database, table) =>
+  database
+    .prepare(`PRAGMA foreign_key_list(${quoteIdentifier(table)})`)
+    .all()
+    .map((foreignKey) =>
+      [
+        foreignKey.from,
+        foreignKey.table,
+        foreignKey.to,
+        foreignKey.on_update,
+        foreignKey.on_delete,
+      ].join("|"),
+    )
+    .sort();
+
+const VERSION_1_STRUCTURE = {
+  videos: { unique: [], foreignKeys: [], checks: [] },
+  package_jobs: {
+    unique: ["video_id,package_version"],
+    foreignKeys: ["video_id|videos|video_id|NO ACTION|CASCADE"],
+    checks: [
+      "check (status in ('discovered', 'heatmap_ready', 'no_heatmap', 'failed'))",
+    ],
+  },
+  clip_packages: {
+    unique: ["package_job_id,rank"],
+    foreignKeys: ["package_job_id|package_jobs|id|NO ACTION|CASCADE"],
+    checks: [
+      "check (rank >= 1)",
+      "check (start_seconds >= 0)",
+      "check (end_seconds > start_seconds)",
+      "check (status in ('selected', 'ready', 'failed'))",
+    ],
+  },
+  clip_assets: {
+    unique: ["clip_package_id,role"],
+    foreignKeys: ["clip_package_id|clip_packages|id|NO ACTION|CASCADE"],
+    checks: [],
+  },
+  treatment_runs: {
+    unique: ["clip_package_id,treatment_id,treatment_version"],
+    foreignKeys: ["clip_package_id|clip_packages|id|NO ACTION|CASCADE"],
+    checks: ["check (status in ('pending', 'rendered', 'failed'))"],
+  },
+};
+
+const validateSchemaVersion1 = (database) => {
   validateRequiredColumns(database, 1, REQUIRED_SCHEMA_VERSION_1_COLUMNS);
+  const tableList = new Map(
+    database
+      .prepare("PRAGMA table_list")
+      .all()
+      .filter(({ schema }) => schema === "main")
+      .map((row) => [row.name, row]),
+  );
+  for (const [table, expected] of Object.entries(VERSION_1_STRUCTURE)) {
+    const sql = normalizedTableSql(database, table);
+    if (!sql || tableList.get(table)?.strict !== 1 || !/\) strict$/.test(sql))
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} missing STRICT structural invariant`,
+      );
+    for (const check of expected.checks)
+      if (!sql.includes(check))
+        throw new Error(
+          `Invalid audiogram schema version 1: table ${table} missing CHECK structural invariant`,
+        );
+    if (
+      JSON.stringify(uniqueColumnSets(database, table)) !==
+      JSON.stringify(expected.unique)
+    )
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} has altered UNIQUE structural invariants`,
+      );
+    if (
+      JSON.stringify(foreignKeyContracts(database, table)) !==
+      JSON.stringify(expected.foreignKeys)
+    )
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} has altered foreign-key structural invariants`,
+      );
+  }
+};
 
 const validateSchemaVersion2 = (database, { validateRecipes = false } = {}) => {
   validateRequiredColumns(database, 2, REQUIRED_SCHEMA_VERSION_2_COLUMNS);
@@ -1031,6 +1136,19 @@ export const openAudiogramLedger = (
       );
   };
 
+  const assertSelectionCanBeRecorded = (jobId) => {
+    const existingRun = database
+      .prepare("SELECT 1 FROM selection_runs WHERE package_job_id = ?")
+      .get(jobId);
+    const existingPackage = database
+      .prepare("SELECT 1 FROM clip_packages WHERE package_job_id = ? LIMIT 1")
+      .get(jobId);
+    if (existingRun || existingPackage)
+      throw new Error(
+        `Selection for package job ${jobId} is already completed and immutable`,
+      );
+  };
+
   const validateUsage = (usage) => {
     if (usage === undefined) return;
     if (!isPlainObject(usage)) throw new Error("Invalid provider usage");
@@ -1082,6 +1200,7 @@ export const openAudiogramLedger = (
         .get(jobId);
       if (!job) throw new Error(`Unknown package job ${jobId}`);
       ensureJobRecipe(job, requestedRecipe);
+      assertSelectionCanBeRecorded(jobId);
       database
         .prepare(
           `
@@ -1162,6 +1281,7 @@ export const openAudiogramLedger = (
         .get(jobId);
       if (!job) throw new Error(`Unknown package job ${jobId}`);
       ensureJobRecipe(job, requestedRecipe);
+      assertSelectionCanBeRecorded(jobId);
       const upsertedTranscript = database
         .prepare(
           `
