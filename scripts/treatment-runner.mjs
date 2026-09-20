@@ -1,37 +1,28 @@
-import {execFile} from "node:child_process";
-import {mkdir, rename, stat, writeFile} from "node:fs/promises";
-import {join, relative, sep} from "node:path";
-import {promisify} from "node:util";
+import { execFile } from "node:child_process";
+import { mkdir, rename, stat, writeFile } from "node:fs/promises";
+import { join, relative, sep } from "node:path";
+import { promisify } from "node:util";
 
-import {assertRequiredAssets} from "./treatment-registry.mjs";
+import { safePathPart } from "./path-components.mjs";
+import { assertRequiredAssets } from "./treatment-registry.mjs";
 
 const execFileAsync = promisify(execFile);
 
-const defaultRunCommand = async (command, args, {cwd}) =>
+const defaultRunCommand = async (command, args, { cwd }) =>
   execFileAsync(command, args, {
     cwd,
     maxBuffer: 10 * 1024 * 1024,
   });
 
-const safePathPart = (value, label) => {
-  if (!/^[A-Za-z0-9._-]+$/.test(String(value))) {
-    throw new Error(`Invalid ${label}: ${value}`);
-  }
-  return String(value);
-};
-
 const toProjectRelative = (projectRoot, path) =>
   relative(projectRoot, path).split(sep).join("/");
 
 export const renderTreatmentRun = async (
-  {clipPackage, treatment},
-  {projectRoot = process.cwd(), runCommand = defaultRunCommand} = {},
+  { clipPackage, treatment },
+  { projectRoot = process.cwd(), runCommand = defaultRunCommand } = {},
 ) => {
   const treatmentId = safePathPart(treatment.id, "treatment ID");
-  const treatmentVersion = safePathPart(
-    treatment.version,
-    "treatment version",
-  );
+  const treatmentVersion = safePathPart(treatment.version, "treatment version");
   const videoId = safePathPart(clipPackage.videoId, "video ID");
   if (!Number.isInteger(clipPackage.rank) || clipPackage.rank < 1) {
     throw new Error(`Invalid package rank: ${clipPackage.rank}`);
@@ -46,7 +37,7 @@ export const renderTreatmentRun = async (
     treatmentVersion,
     videoId,
   );
-  await mkdir(outputDirectory, {recursive: true});
+  await mkdir(outputDirectory, { recursive: true });
   const baseName = `clip-${clipPackage.rank}`;
   const propsPath = join(outputDirectory, `${baseName}.props.json`);
   const outputPath = join(
@@ -72,7 +63,7 @@ export const renderTreatmentRun = async (
       `--props=${propsPath}`,
       `--codec=${treatment.output.codec}`,
     ],
-    {cwd: projectRoot},
+    { cwd: projectRoot },
   );
   const rendered = await stat(partialPath);
   if (!rendered.isFile() || rendered.size === 0) {

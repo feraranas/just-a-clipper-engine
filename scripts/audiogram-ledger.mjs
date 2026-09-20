@@ -1,6 +1,6 @@
-import {DatabaseSync} from "node:sqlite";
+import { DatabaseSync } from "node:sqlite";
 
-import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
 const mapVideo = (row) =>
   row
@@ -186,7 +186,10 @@ const migrateLegacyTables = (database) => {
     const packageCount = database
       .prepare("SELECT COUNT(*) AS count FROM clip_packages")
       .get().count;
-    if (legacyJobCount !== packageJobCount || legacyClipCount !== packageCount) {
+    if (
+      legacyJobCount !== packageJobCount ||
+      legacyClipCount !== packageCount
+    ) {
       throw new Error("Legacy ledger migration row-count validation failed");
     }
 
@@ -202,7 +205,7 @@ const ensureClipAssetColumns = (database) => {
     database
       .prepare("PRAGMA table_info(clip_assets)")
       .all()
-      .map(({name}) => name),
+      .map(({ name }) => name),
   );
   if (!columns.has("provenance")) {
     database.exec("ALTER TABLE clip_assets ADD COLUMN provenance TEXT");
@@ -214,9 +217,9 @@ const ensureClipAssetColumns = (database) => {
 
 export const openAudiogramLedger = (
   path,
-  {now = () => new Date().toISOString()} = {},
+  { now = () => new Date().toISOString() } = {},
 ) => {
-  const database = new DatabaseSync(path, {timeout: 5_000});
+  const database = new DatabaseSync(path, { timeout: 5_000 });
   database.exec(`
     PRAGMA journal_mode = WAL;
     PRAGMA foreign_keys = ON;
@@ -232,12 +235,14 @@ export const openAudiogramLedger = (
   migrateLegacyTables(database);
   ensureClipAssetColumns(database);
 
-  const getVideoStatement = database.prepare("SELECT * FROM videos WHERE video_id = ?");
+  const getVideoStatement = database.prepare(
+    "SELECT * FROM videos WHERE video_id = ?",
+  );
   const getPackageJobStatement = database.prepare(
     "SELECT * FROM package_jobs WHERE video_id = ? AND package_version = ?",
   );
 
-  const syncPlaylistVideos = ({playlistId, packageVersion, videos}) => {
+  const syncPlaylistVideos = ({ playlistId, packageVersion, videos }) => {
     let discovered = 0;
     let existing = 0;
     const timestamp = now();
@@ -277,22 +282,28 @@ export const openAudiogramLedger = (
       database.exec("ROLLBACK");
       throw error;
     }
-    return {discovered, existing};
+    return { discovered, existing };
   };
 
-  const recordHeatmapSelection = ({jobId, heatmap, packages}) => {
+  const recordHeatmapSelection = ({ jobId, heatmap, packages }) => {
     const timestamp = now();
     const status = packages.length > 0 ? "heatmap_ready" : "no_heatmap";
     database.exec("BEGIN IMMEDIATE");
     try {
-      database.prepare(`
+      database
+        .prepare(
+          `
         UPDATE package_jobs
         SET status = ?, heatmap_json = ?, last_error = NULL, updated_at = ?
         WHERE id = ?
-      `).run(status, JSON.stringify(heatmap), timestamp, jobId);
-      database.prepare(
-        "DELETE FROM clip_packages WHERE package_job_id = ? AND status = 'selected'",
-      ).run(jobId);
+      `,
+        )
+        .run(status, JSON.stringify(heatmap), timestamp, jobId);
+      database
+        .prepare(
+          "DELETE FROM clip_packages WHERE package_job_id = ? AND status = 'selected'",
+        )
+        .run(jobId);
       const insertPackage = database.prepare(`
         INSERT INTO clip_packages (
           package_job_id, rank, start_seconds, end_seconds, score,
@@ -324,39 +335,56 @@ export const openAudiogramLedger = (
 
   const listAssets = (packageId) =>
     database
-      .prepare("SELECT * FROM clip_assets WHERE clip_package_id = ? ORDER BY role")
+      .prepare(
+        "SELECT * FROM clip_assets WHERE clip_package_id = ? ORDER BY role",
+      )
       .all(packageId)
       .map(mapAsset);
 
   return {
     close: () => database.close(),
     countPackageJobs: () =>
-      database.prepare("SELECT COUNT(*) AS count FROM package_jobs").get().count,
+      database.prepare("SELECT COUNT(*) AS count FROM package_jobs").get()
+        .count,
     countVideos: () =>
       database.prepare("SELECT COUNT(*) AS count FROM videos").get().count,
-    ensureTreatmentRun: ({packageId, treatmentId, treatmentVersion}) => {
+    ensureTreatmentRun: ({ packageId, treatmentId, treatmentVersion }) => {
       const timestamp = now();
-      database.prepare(`
+      database
+        .prepare(
+          `
         INSERT INTO treatment_runs (
           clip_package_id, treatment_id, treatment_version, status,
           created_at, updated_at
         ) VALUES (?, ?, ?, 'pending', ?, ?)
         ON CONFLICT(clip_package_id, treatment_id, treatment_version) DO NOTHING
-      `).run(packageId, treatmentId, treatmentVersion, timestamp, timestamp);
-      return mapTreatmentRun(database.prepare(`
+      `,
+        )
+        .run(packageId, treatmentId, treatmentVersion, timestamp, timestamp);
+      return mapTreatmentRun(
+        database
+          .prepare(
+            `
         SELECT * FROM treatment_runs
         WHERE clip_package_id = ? AND treatment_id = ? AND treatment_version = ?
-      `).get(packageId, treatmentId, treatmentVersion));
+      `,
+          )
+          .get(packageId, treatmentId, treatmentVersion),
+      );
     },
     getClipPackage: (packageId) => {
-      const row = database.prepare(`
+      const row = database
+        .prepare(
+          `
         SELECT clip_packages.*, package_jobs.video_id, package_jobs.package_version,
                videos.title, videos.source_url
         FROM clip_packages
         JOIN package_jobs ON package_jobs.id = clip_packages.package_job_id
         JOIN videos ON videos.video_id = package_jobs.video_id
         WHERE clip_packages.id = ?
-      `).get(packageId);
+      `,
+        )
+        .get(packageId);
       return row
         ? {
             ...mapClipPackage(row),
@@ -373,22 +401,31 @@ export const openAudiogramLedger = (
     getVideo: (videoId) => mapVideo(getVideoStatement.get(videoId)),
     listClipPackages: (jobId) =>
       database
-        .prepare("SELECT * FROM clip_packages WHERE package_job_id = ? ORDER BY rank")
+        .prepare(
+          "SELECT * FROM clip_packages WHERE package_job_id = ? ORDER BY rank",
+        )
         .all(jobId)
         .map(mapClipPackage),
     listPendingPackageJobs: () =>
-      database.prepare(`
+      database
+        .prepare(
+          `
         SELECT package_jobs.*, videos.title, videos.source_url
         FROM package_jobs JOIN videos USING (video_id)
         WHERE package_jobs.status = 'discovered'
         ORDER BY package_jobs.id
-      `).all().map((row) => ({
-        ...mapPackageJob(row),
-        title: row.title,
-        sourceUrl: row.source_url,
-      })),
+      `,
+        )
+        .all()
+        .map((row) => ({
+          ...mapPackageJob(row),
+          title: row.title,
+          sourceUrl: row.source_url,
+        })),
     listPendingTreatmentRuns: () =>
-      database.prepare(`
+      database
+        .prepare(
+          `
         SELECT treatment_runs.*, clip_packages.rank,
                package_jobs.video_id, package_jobs.package_version,
                videos.title, videos.source_url
@@ -398,17 +435,22 @@ export const openAudiogramLedger = (
         JOIN videos ON videos.video_id = package_jobs.video_id
         WHERE treatment_runs.status = 'pending'
         ORDER BY treatment_runs.id
-      `).all().map((row) => ({
-        ...mapTreatmentRun(row),
-        rank: row.rank,
-        videoId: row.video_id,
-        packageVersion: row.package_version,
-        title: row.title,
-        sourceUrl: row.source_url,
-        assets: listAssets(row.clip_package_id),
-      })),
+      `,
+        )
+        .all()
+        .map((row) => ({
+          ...mapTreatmentRun(row),
+          rank: row.rank,
+          videoId: row.video_id,
+          packageVersion: row.package_version,
+          title: row.title,
+          sourceUrl: row.source_url,
+          assets: listAssets(row.clip_package_id),
+        })),
     listReadyPackages: () =>
-      database.prepare(`
+      database
+        .prepare(
+          `
         SELECT clip_packages.*, package_jobs.video_id, package_jobs.package_version,
                videos.title, videos.source_url
         FROM clip_packages
@@ -416,16 +458,21 @@ export const openAudiogramLedger = (
         JOIN videos ON videos.video_id = package_jobs.video_id
         WHERE clip_packages.status = 'ready'
         ORDER BY clip_packages.id
-      `).all().map((row) => ({
-        ...mapClipPackage(row),
-        videoId: row.video_id,
-        packageVersion: row.package_version,
-        title: row.title,
-        sourceUrl: row.source_url,
-        assets: listAssets(row.id),
-      })),
+      `,
+        )
+        .all()
+        .map((row) => ({
+          ...mapClipPackage(row),
+          videoId: row.video_id,
+          packageVersion: row.package_version,
+          title: row.title,
+          sourceUrl: row.source_url,
+          assets: listAssets(row.id),
+        })),
     listSelectedPackages: () =>
-      database.prepare(`
+      database
+        .prepare(
+          `
         SELECT clip_packages.*, package_jobs.video_id, package_jobs.package_version,
                videos.title, videos.source_url
         FROM clip_packages
@@ -433,31 +480,44 @@ export const openAudiogramLedger = (
         JOIN videos ON videos.video_id = package_jobs.video_id
         WHERE clip_packages.status = 'selected'
         ORDER BY clip_packages.id
-      `).all().map((row) => ({
-        ...mapClipPackage(row),
-        videoId: row.video_id,
-        packageVersion: row.package_version,
-        title: row.title,
-        sourceUrl: row.source_url,
-      })),
+      `,
+        )
+        .all()
+        .map((row) => ({
+          ...mapClipPackage(row),
+          videoId: row.video_id,
+          packageVersion: row.package_version,
+          title: row.title,
+          sourceUrl: row.source_url,
+        })),
     listTreatmentRuns: (packageId) =>
       database
-        .prepare("SELECT * FROM treatment_runs WHERE clip_package_id = ? ORDER BY id")
+        .prepare(
+          "SELECT * FROM treatment_runs WHERE clip_package_id = ? ORDER BY id",
+        )
         .all(packageId)
         .map(mapTreatmentRun),
     markPackageFailed: (packageId, error) => {
-      database.prepare(`
+      database
+        .prepare(
+          `
         UPDATE clip_packages
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(sanitizeErrorDiagnostic(error), now(), packageId);
+      `,
+        )
+        .run(sanitizeErrorDiagnostic(error), now(), packageId);
     },
     markPackageJobFailed: (jobId, error) => {
-      database.prepare(`
+      database
+        .prepare(
+          `
         UPDATE package_jobs
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(sanitizeErrorDiagnostic(error), now(), jobId);
+      `,
+        )
+        .run(sanitizeErrorDiagnostic(error), now(), jobId);
     },
-    markPackageReady: ({packageId, assets}) => {
+    markPackageReady: ({ packageId, assets }) => {
       const timestamp = now();
       database.exec("BEGIN IMMEDIATE");
       try {
@@ -483,10 +543,14 @@ export const openAudiogramLedger = (
             timestamp,
           );
         }
-        database.prepare(`
+        database
+          .prepare(
+            `
           UPDATE clip_packages
           SET status = 'ready', last_error = NULL, updated_at = ? WHERE id = ?
-        `).run(timestamp, packageId);
+        `,
+          )
+          .run(timestamp, packageId);
         database.exec("COMMIT");
       } catch (error) {
         database.exec("ROLLBACK");
@@ -494,17 +558,25 @@ export const openAudiogramLedger = (
       }
     },
     markTreatmentRunFailed: (runId, error) => {
-      database.prepare(`
+      database
+        .prepare(
+          `
         UPDATE treatment_runs
         SET status = 'failed', last_error = ?, updated_at = ? WHERE id = ?
-      `).run(sanitizeErrorDiagnostic(error), now(), runId);
+      `,
+        )
+        .run(sanitizeErrorDiagnostic(error), now(), runId);
     },
     markTreatmentRunRendered: (runId, artifactRelativePath) => {
-      database.prepare(`
+      database
+        .prepare(
+          `
         UPDATE treatment_runs
         SET status = 'rendered', artifact_relative_path = ?, last_error = NULL,
             updated_at = ? WHERE id = ?
-      `).run(artifactRelativePath, now(), runId);
+      `,
+        )
+        .run(artifactRelativePath, now(), runId);
     },
     recordHeatmapSelection,
     syncPlaylistVideos,

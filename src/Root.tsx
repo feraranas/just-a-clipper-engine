@@ -40,7 +40,9 @@ export const RemotionRoot: React.FC = () => {
         }}
         // Determine the length of the video based on the duration of the audio file
         calculateMetadata={async ({ props }) => {
-          const captions = await getSubtitles(staticFile(props.captionsFileName));
+          const captions = await getSubtitles(
+            staticFile(props.captionsFileName),
+          );
           const input = new Input({
             source: new UrlSource(staticFile(props.audioFileName)),
             formats: ALL_FORMATS,

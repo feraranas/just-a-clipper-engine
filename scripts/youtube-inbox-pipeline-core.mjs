@@ -3,7 +3,7 @@ import {
   fetchYtDlpMetadata,
   selectTopHeatmapClips,
 } from "./youtube-heatmap-core.mjs";
-import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
 export const syncAndAnalyzeInbox = async ({
   ledger,
@@ -19,7 +19,7 @@ export const syncAndAnalyzeInbox = async ({
     packageVersion,
     videos,
   });
-  const currentVideoIds = new Set(videos.map(({videoId}) => videoId));
+  const currentVideoIds = new Set(videos.map(({ videoId }) => videoId));
   const pendingJobs = ledger
     .listPendingPackageJobs()
     .filter(
@@ -38,7 +38,7 @@ export const syncAndAnalyzeInbox = async ({
         minimumSeparationSeconds,
       });
 
-      ledger.recordHeatmapSelection({jobId: job.id, heatmap, packages});
+      ledger.recordHeatmapSelection({ jobId: job.id, heatmap, packages });
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
@@ -46,10 +46,7 @@ export const syncAndAnalyzeInbox = async ({
         packages,
       });
     } catch (error) {
-      ledger.markPackageJobFailed(
-        job.id,
-        sanitizeErrorDiagnostic(error),
-      );
+      ledger.markPackageJobFailed(job.id, sanitizeErrorDiagnostic(error));
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
@@ -59,5 +56,5 @@ export const syncAndAnalyzeInbox = async ({
     }
   }
 
-  return {sync, analyzed};
+  return { sync, analyzed };
 };

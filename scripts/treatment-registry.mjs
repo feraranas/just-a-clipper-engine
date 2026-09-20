@@ -1,3 +1,5 @@
+import { safePathPart } from "./path-components.mjs";
+
 const treatmentKey = (id, version) => `${id}@${version}`;
 
 const assetPathsByRole = (clipPackage) =>
@@ -25,6 +27,8 @@ const assertNonemptyString = (value, label) => {
 const validateTreatmentDefinition = (treatment) => {
   assertNonemptyString(treatment.id, "id");
   assertNonemptyString(treatment.version, "version");
+  safePathPart(treatment.id, "treatment ID");
+  safePathPart(treatment.version, "treatment version");
   assertNonemptyString(treatment.compositionId, "compositionId");
   if (!Array.isArray(treatment.requiredAssetRoles)) {
     throw new Error("requiredAssetRoles must be an array");
@@ -46,7 +50,9 @@ const validateTreatmentDefinition = (treatment) => {
   assertNonemptyString(treatment.output.extension, "output.extension");
   assertNonemptyString(treatment.output.codec, "output.codec");
   if (treatment.output.extension !== "mp4") {
-    throw new Error(`Unsupported output extension: ${treatment.output.extension}`);
+    throw new Error(
+      `Unsupported output extension: ${treatment.output.extension}`,
+    );
   }
   if (treatment.output.codec !== "h264") {
     throw new Error(`Unsupported output codec: ${treatment.output.codec}`);
@@ -55,7 +61,10 @@ const validateTreatmentDefinition = (treatment) => {
 
 const toPublicFileName = (relativePath) => {
   const prefix = "public/";
-  if (!relativePath.startsWith(prefix) || relativePath.length === prefix.length) {
+  if (
+    !relativePath.startsWith(prefix) ||
+    relativePath.length === prefix.length
+  ) {
     throw new Error(`Treatment asset must be inside public/: ${relativePath}`);
   }
   return relativePath.slice(prefix.length);
@@ -66,7 +75,7 @@ export const audiogramBasicTreatment = Object.freeze({
   version: "1",
   compositionId: "AudiogramBasic",
   requiredAssetRoles: Object.freeze(["audio", "captions", "thumbnail"]),
-  output: Object.freeze({extension: "mp4", codec: "h264"}),
+  output: Object.freeze({ extension: "mp4", codec: "h264" }),
   buildProps: (clipPackage) => {
     assertRequiredAssets(audiogramBasicTreatment, clipPackage);
     const assets = assetPathsByRole(clipPackage);

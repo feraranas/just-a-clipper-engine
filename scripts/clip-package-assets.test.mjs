@@ -1,5 +1,13 @@
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { parseSrt } from "@remotion/captions";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  stat,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
@@ -91,21 +99,21 @@ test("cue-level captions become individually timed words without embedded newlin
     ]),
     [
       {
-        text: "Hello ",
+        text: "Hello",
         startMs: 1_000,
         endMs: 2_000,
         timestampMs: 1_500,
         confidence: 0.8,
       },
       {
-        text: "world ",
+        text: " world",
         startMs: 2_000,
         endMs: 3_000,
         timestampMs: 2_500,
         confidence: 0.8,
       },
       {
-        text: "again.",
+        text: " again.",
         startMs: 3_000,
         endMs: 4_000,
         timestampMs: 3_500,
@@ -114,6 +122,71 @@ test("cue-level captions become individually timed words without embedded newlin
       },
     ],
   );
+});
+
+test("parsed punctuated SRT sentences keep readable spacing and sentence-final punctuation", () => {
+  const { captions } = parseSrt({
+    input: [
+      "1",
+      "00:00:00,000 --> 00:00:01,000",
+      "First sentence.",
+      "",
+      "2",
+      "00:00:01,000 --> 00:00:02,000",
+      "Second sentence!",
+    ].join("\n"),
+  });
+
+  const words = splitCaptionsIntoTimedWords(captions);
+
+  assert.equal(
+    words.map(({ text }) => text).join(""),
+    "First sentence. Second sentence!",
+  );
+  assert.deepEqual(
+    words.filter(({ text }) => /[.!?]$/.test(text)).map(({ text }) => text),
+    [" sentence.", " sentence!"],
+  );
+});
+
+test("rejects navigation package path components before creating package output", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-paths-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const validPackage = {
+    videoId: "video-1",
+    title: "A useful video",
+    packageVersion: "v1",
+    rank: 1,
+    sourceUrl: "https://youtu.be/video-1",
+    startSeconds: 10,
+    endSeconds: 30,
+    score: 0.9,
+  };
+
+  for (const [field, label] of [
+    ["videoId", "video ID"],
+    ["packageVersion", "package version"],
+  ]) {
+    for (const value of [".", ".."]) {
+      let processCalls = 0;
+      await assert.rejects(
+        acquireClipPackageAssets(
+          { ...validPackage, [field]: value },
+          {
+            projectRoot,
+            runCommand: async () => {
+              processCalls += 1;
+              throw new Error("external command should not run");
+            },
+          },
+        ),
+        { message: `Invalid ${label}: ${value}` },
+      );
+      assert.equal(processCalls, 0);
+    }
+  }
+
+  await assert.rejects(stat(join(projectRoot, "public")), { code: "ENOENT" });
 });
 
 test("acquires audio, manual captions, and thumbnail into a deterministic package", async (t) => {
@@ -193,14 +266,14 @@ test("acquires audio, manual captions, and thumbnail into a deterministic packag
     ),
     [
       {
-        text: "Hello ",
+        text: "Hello",
         startMs: 0,
         endMs: 2_500,
         timestampMs: 1_250,
         confidence: 1,
       },
       {
-        text: "world ",
+        text: " world",
         startMs: 2_500,
         endMs: 5_000,
         timestampMs: 3_750,

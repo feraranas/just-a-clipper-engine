@@ -4,18 +4,13 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 
+import { safePathPart } from "./path-components.mjs";
+
 const execFileAsync = promisify(execFile);
 const durationToleranceSeconds = 3;
 
 const defaultRunCommand = async (command, args) =>
   execFileAsync(command, args, { maxBuffer: 10 * 1024 * 1024 });
-
-const safePathPart = (value, label) => {
-  if (!/^[A-Za-z0-9._-]+$/.test(String(value))) {
-    throw new Error(`Invalid ${label}: ${value}`);
-  }
-  return String(value);
-};
 
 export const buildPartialAudioArgs = ({
   sourceUrl,
@@ -60,8 +55,9 @@ const buildThumbnailArgs = ({ sourceUrl, outputTemplate }) => [
   sourceUrl,
 ];
 
-export const splitCaptionsIntoTimedWords = (captions) =>
-  captions.flatMap((caption) => {
+export const splitCaptionsIntoTimedWords = (captions) => {
+  let hasEmittedWord = false;
+  return captions.flatMap((caption) => {
     const words = caption.text
       .replace(/\s+/g, " ")
       .trim()
@@ -76,8 +72,10 @@ export const splitCaptionsIntoTimedWords = (captions) =>
       const endMs = isLastWord
         ? caption.endMs
         : caption.startMs + wordDuration * (index + 1);
+      const text = `${hasEmittedWord ? " " : ""}${word}`;
+      hasEmittedWord = true;
       return {
-        text: isLastWord && caption.pageBreakAfter ? word : `${word} `,
+        text,
         startMs,
         endMs,
         timestampMs: startMs + (endMs - startMs) / 2,
@@ -88,6 +86,7 @@ export const splitCaptionsIntoTimedWords = (captions) =>
       };
     });
   });
+};
 
 export const trimAndRebaseCaptions = (
   captions,

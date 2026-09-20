@@ -1,24 +1,24 @@
-import {randomBytes} from "node:crypto";
-import {mkdir, readFile, writeFile} from "node:fs/promises";
-import {createServer} from "node:http";
-import {homedir} from "node:os";
-import {join} from "node:path";
+import { randomBytes } from "node:crypto";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-import {google} from "googleapis";
+import { google } from "googleapis";
 
-import {openAudiogramLedger} from "./audiogram-ledger.mjs";
-import {acquireClipPackageAssets} from "./clip-package-assets.mjs";
-import {processClipPackages} from "./clip-processing-core.mjs";
+import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
+import { processClipPackages } from "./clip-processing-core.mjs";
 import {
   findPlaylistByTitle,
   mergeOAuthTokens,
   parseInstalledClient,
 } from "./youtube-auth-core.mjs";
-import {syncAndAnalyzeInbox} from "./youtube-inbox-pipeline-core.mjs";
-import {collectPlaylistItems} from "./youtube-playlist-core.mjs";
-import {renderTreatmentRun} from "./treatment-runner.mjs";
-import {treatmentRegistry} from "./treatment-registry.mjs";
-import {resolvePackageVersion} from "./youtube-pipeline-config.mjs";
+import { syncAndAnalyzeInbox } from "./youtube-inbox-pipeline-core.mjs";
+import { collectPlaylistItems } from "./youtube-playlist-core.mjs";
+import { renderTreatmentRun } from "./treatment-runner.mjs";
+import { treatmentRegistry } from "./treatment-registry.mjs";
+import { resolvePackageVersion } from "./youtube-pipeline-config.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -35,7 +35,8 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
-const playlistTitle = process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
+const playlistTitle =
+  process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
 const packageVersion = resolvePackageVersion(process.env);
 const maxClips = Number.parseInt(process.env.AUDIOGRAM_MAX_CLIPS ?? "1", 10);
 const minimumSeparationSeconds = Number.parseFloat(
@@ -47,16 +48,19 @@ if (!Number.isInteger(maxClips) || maxClips < 1) {
   throw new Error("AUDIOGRAM_MAX_CLIPS must be a positive integer");
 }
 
-if (!Number.isFinite(minimumSeparationSeconds) || minimumSeparationSeconds < 0) {
+if (
+  !Number.isFinite(minimumSeparationSeconds) ||
+  minimumSeparationSeconds < 0
+) {
   throw new Error(
     "AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS must be a non-negative number",
   );
 }
 
-await mkdir(appSupportDirectory, {recursive: true, mode: 0o700});
+await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
 
 const clientConfig = JSON.parse(await readFile(clientPath, "utf8"));
-const {clientId, clientSecret} = parseInstalledClient(clientConfig);
+const { clientId, clientSecret } = parseInstalledClient(clientConfig);
 
 let oauth2Client;
 let storedTokens;
@@ -98,19 +102,29 @@ if (storedTokens) {
           throw new Error("Google OAuth callback did not include a code");
         }
 
-        const {tokens} = await oauth2Client.getToken(code);
+        const { tokens } = await oauth2Client.getToken(code);
         storedTokens = mergeOAuthTokens({}, tokens);
-        await writeFile(tokenPath, `${JSON.stringify(storedTokens, null, 2)}\n`, {
-          mode: 0o600,
-        });
+        await writeFile(
+          tokenPath,
+          `${JSON.stringify(storedTokens, null, 2)}\n`,
+          {
+            mode: 0o600,
+          },
+        );
         oauth2Client.setCredentials(storedTokens);
 
-        response.writeHead(200, {"Content-Type": "text/plain; charset=utf-8"});
-        response.end("Audiogram Inbox authorization complete. You can close this tab.");
+        response.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+        });
+        response.end(
+          "Audiogram Inbox authorization complete. You can close this tab.",
+        );
         server.close();
         resolve();
       } catch (error) {
-        response.writeHead(400, {"Content-Type": "text/plain; charset=utf-8"});
+        response.writeHead(400, {
+          "Content-Type": "text/plain; charset=utf-8",
+        });
         response.end(`Authorization failed: ${error.message}`);
         server.close();
         reject(error);
@@ -121,7 +135,11 @@ if (storedTokens) {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       const redirectUri = `http://127.0.0.1:${address.port}/oauth2callback`;
-      oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+      oauth2Client = new google.auth.OAuth2(
+        clientId,
+        clientSecret,
+        redirectUri,
+      );
 
       const authorizationUrl = oauth2Client.generateAuthUrl({
         access_type: "offline",
@@ -143,7 +161,7 @@ oauth2Client.on("tokens", async (tokens) => {
   });
 });
 
-const youtube = google.youtube({version: "v3", auth: oauth2Client});
+const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 const playlist = await findPlaylistByTitle(async (pageToken) => {
   const response = await youtube.playlists.list({
     maxResults: 50,
@@ -195,17 +213,17 @@ try {
   const processing = await processClipPackages({
     ledger,
     registry: treatmentRegistry,
-    treatments: [{id: "audiogram-basic", version: "1"}],
+    treatments: [{ id: "audiogram-basic", version: "1" }],
     acquireAssets: (clipPackage) =>
-      acquireClipPackageAssets(clipPackage, {projectRoot: process.cwd()}),
-    renderTreatment: ({clipPackage, treatment}) =>
+      acquireClipPackageAssets(clipPackage, { projectRoot: process.cwd() }),
+    renderTreatment: ({ clipPackage, treatment }) =>
       renderTreatmentRun(
-        {clipPackage, treatment},
-        {projectRoot: process.cwd()},
+        { clipPackage, treatment },
+        { projectRoot: process.cwd() },
       ),
   });
   const analysisFailures = pipeline.analyzed.filter(
-    ({status}) => status === "failed",
+    ({ status }) => status === "failed",
   );
 
   console.log(

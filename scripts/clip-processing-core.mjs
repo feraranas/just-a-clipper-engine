@@ -6,26 +6,23 @@ export const processClipPackages = async ({
   renderTreatment,
 }) => {
   const result = {
-    packages: {ready: 0, failed: 0},
-    treatments: {rendered: 0, failed: 0},
+    packages: { ready: 0, failed: 0 },
+    treatments: { rendered: 0, failed: 0 },
   };
 
   for (const clipPackage of ledger.listSelectedPackages()) {
     try {
       const assets = await acquireAssets(clipPackage);
-      ledger.markPackageReady({packageId: clipPackage.id, assets});
+      ledger.markPackageReady({ packageId: clipPackage.id, assets });
       result.packages.ready += 1;
     } catch (error) {
-      ledger.markPackageFailed(
-        clipPackage.id,
-        sanitizeErrorDiagnostic(error),
-      );
+      ledger.markPackageFailed(clipPackage.id, sanitizeErrorDiagnostic(error));
       result.packages.failed += 1;
     }
   }
 
   for (const clipPackage of ledger.listReadyPackages()) {
-    for (const {id, version} of treatments) {
+    for (const { id, version } of treatments) {
       registry.get(id, version);
       ledger.ensureTreatmentRun({
         packageId: clipPackage.id,
@@ -46,14 +43,11 @@ export const processClipPackages = async ({
       ledger.markTreatmentRunRendered(run.id, artifactRelativePath);
       result.treatments.rendered += 1;
     } catch (error) {
-      ledger.markTreatmentRunFailed(
-        run.id,
-        sanitizeErrorDiagnostic(error),
-      );
+      ledger.markTreatmentRunFailed(run.id, sanitizeErrorDiagnostic(error));
       result.treatments.failed += 1;
     }
   }
 
   return result;
 };
-import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";

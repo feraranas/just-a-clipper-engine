@@ -30,10 +30,15 @@ const redactSecrets = (value) =>
 
 export const sanitizeErrorDiagnostic = (
   error,
-  {maximumLength = defaultMaximumLength} = {},
+  { maximumLength = defaultMaximumLength } = {},
 ) => {
-  if (!Number.isInteger(maximumLength) || maximumLength <= truncatedSuffix.length) {
-    throw new Error("maximumLength must be a positive integer larger than the suffix");
+  if (
+    !Number.isInteger(maximumLength) ||
+    maximumLength <= truncatedSuffix.length
+  ) {
+    throw new Error(
+      "maximumLength must be a positive integer larger than the suffix",
+    );
   }
   const redacted = redactSecrets(errorText(error));
   if (redacted.length <= maximumLength) return redacted;

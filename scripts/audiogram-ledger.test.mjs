@@ -1,15 +1,15 @@
 import assert from "node:assert/strict";
-import {mkdtemp, rm} from "node:fs/promises";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
-import {DatabaseSync} from "node:sqlite";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 
-import {openAudiogramLedger} from "./audiogram-ledger.mjs";
+import { openAudiogramLedger } from "./audiogram-ledger.mjs";
 
 test("migrates legacy processing records without data loss", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const path = join(directory, "ledger.sqlite");
   const legacy = new DatabaseSync(path);
   legacy.exec(`
@@ -72,7 +72,7 @@ test("migrates legacy processing records without data loss", async (t) => {
 
 test("playlist sync is idempotent and preserves completed packaging", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
 
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"), {
     now: () => "2026-09-16T12:00:00.000Z",
@@ -91,14 +91,14 @@ test("playlist sync is idempotent and preserves completed packaging", async (t) 
     ],
   });
 
-  assert.deepEqual(firstSync, {discovered: 1, existing: 0});
+  assert.deepEqual(firstSync, { discovered: 1, existing: 0 });
   const job = ledger.getPackageJob("video-1", "v1");
   assert.equal(job.status, "discovered");
 
   ledger.recordHeatmapSelection({
     jobId: job.id,
-    heatmap: [{startTime: 10, endTime: 30, value: 0.9}],
-    packages: [{rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9}],
+    heatmap: [{ startTime: 10, endTime: 30, value: 0.9 }],
+    packages: [{ rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9 }],
   });
 
   const secondSync = ledger.syncPlaylistVideos({
@@ -113,7 +113,7 @@ test("playlist sync is idempotent and preserves completed packaging", async (t) 
     ],
   });
 
-  assert.deepEqual(secondSync, {discovered: 0, existing: 1});
+  assert.deepEqual(secondSync, { discovered: 0, existing: 1 });
   assert.equal(ledger.getVideo("video-1").title, "Updated title");
   assert.equal(ledger.getPackageJob("video-1", "v1").status, "heatmap_ready");
   assert.deepEqual(ledger.listClipPackages(job.id), [
@@ -135,7 +135,7 @@ test("playlist sync is idempotent and preserves completed packaging", async (t) 
 
 test("a new package version creates a new job without duplicating the video", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
 
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
   t.after(() => ledger.close());
@@ -151,8 +151,8 @@ test("a new package version creates a new job without duplicating the video", as
     ],
   };
 
-  ledger.syncPlaylistVideos({...input, packageVersion: "v1"});
-  ledger.syncPlaylistVideos({...input, packageVersion: "v2"});
+  ledger.syncPlaylistVideos({ ...input, packageVersion: "v1" });
+  ledger.syncPlaylistVideos({ ...input, packageVersion: "v2" });
 
   assert.equal(ledger.countVideos(), 1);
   assert.equal(ledger.countPackageJobs(), 2);
@@ -160,7 +160,7 @@ test("a new package version creates a new job without duplicating the video", as
 
 test("a job can retain multiple ranked clips", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
 
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
   t.after(() => ledger.close());
@@ -182,27 +182,29 @@ test("a job can retain multiple ranked clips", async (t) => {
     jobId: job.id,
     heatmap: [],
     packages: [
-      {rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9},
-      {rank: 2, startSeconds: 90, endSeconds: 110, score: 0.7},
+      { rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9 },
+      { rank: 2, startSeconds: 90, endSeconds: 110, score: 0.7 },
     ],
   });
 
   assert.deepEqual(
-    ledger.listClipPackages(job.id).map(({rank, startSeconds, endSeconds}) => ({
-      rank,
-      startSeconds,
-      endSeconds,
-    })),
+    ledger
+      .listClipPackages(job.id)
+      .map(({ rank, startSeconds, endSeconds }) => ({
+        rank,
+        startSeconds,
+        endSeconds,
+      })),
     [
-      {rank: 1, startSeconds: 10, endSeconds: 30},
-      {rank: 2, startSeconds: 90, endSeconds: 110},
+      { rank: 1, startSeconds: 10, endSeconds: 30 },
+      { rank: 2, startSeconds: 90, endSeconds: 110 },
     ],
   );
 });
 
 test("ready packages retain typed assets and one idempotent treatment run", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"), {
     now: () => "2026-09-18T12:00:00.000Z",
   });
@@ -211,22 +213,30 @@ test("ready packages retain typed assets and one idempotent treatment run", asyn
   ledger.syncPlaylistVideos({
     playlistId: "playlist-1",
     packageVersion: "v1",
-    videos: [{videoId: "video-1", title: "A video", url: "https://youtu.be/video-1"}],
+    videos: [
+      { videoId: "video-1", title: "A video", url: "https://youtu.be/video-1" },
+    ],
   });
   const job = ledger.getPackageJob("video-1", "v1");
   ledger.recordHeatmapSelection({
     jobId: job.id,
     heatmap: [],
-    packages: [{rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9}],
+    packages: [{ rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9 }],
   });
   const [clipPackage] = ledger.listClipPackages(job.id);
   const assets = [
-    {role: "audio", relativePath: "public/generated/video-1/v1/clip-1/audio.wav"},
-    {role: "captions", relativePath: "public/generated/video-1/v1/clip-1/captions.json"},
+    {
+      role: "audio",
+      relativePath: "public/generated/video-1/v1/clip-1/audio.wav",
+    },
+    {
+      role: "captions",
+      relativePath: "public/generated/video-1/v1/clip-1/captions.json",
+    },
   ];
 
-  ledger.markPackageReady({packageId: clipPackage.id, assets});
-  ledger.markPackageReady({packageId: clipPackage.id, assets});
+  ledger.markPackageReady({ packageId: clipPackage.id, assets });
+  ledger.markPackageReady({ packageId: clipPackage.id, assets });
   const firstRun = ledger.ensureTreatmentRun({
     packageId: clipPackage.id,
     treatmentId: "audiogram-basic",
@@ -241,43 +251,50 @@ test("ready packages retain typed assets and one idempotent treatment run", asyn
   assert.equal(firstRun.id, secondRun.id);
   assert.equal(ledger.listTreatmentRuns(clipPackage.id).length, 1);
   assert.deepEqual(
-    ledger.getClipPackage(clipPackage.id).assets.map(({role, relativePath}) => ({
-      role,
-      relativePath,
-    })),
+    ledger
+      .getClipPackage(clipPackage.id)
+      .assets.map(({ role, relativePath }) => ({
+        role,
+        relativePath,
+      })),
     assets,
   );
   assert.equal(ledger.listSelectedPackages().length, 0);
   assert.equal(ledger.listPendingTreatmentRuns().length, 1);
 
-  ledger.markTreatmentRunRendered(firstRun.id, "out/treatments/audiogram-basic/1/video-1/clip-1.mp4");
+  ledger.markTreatmentRunRendered(
+    firstRun.id,
+    "out/treatments/audiogram-basic/1/video-1/clip-1.mp4",
+  );
   assert.equal(ledger.listPendingTreatmentRuns().length, 0);
   assert.equal(ledger.listTreatmentRuns(clipPackage.id)[0].status, "rendered");
 });
 
 test("package and treatment failures are isolated and retain their errors", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-ledger-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
   t.after(() => ledger.close());
 
   ledger.syncPlaylistVideos({
     playlistId: "playlist-1",
     packageVersion: "v1",
-    videos: [{videoId: "video-1", title: "A video", url: "https://youtu.be/video-1"}],
+    videos: [
+      { videoId: "video-1", title: "A video", url: "https://youtu.be/video-1" },
+    ],
   });
   const job = ledger.getPackageJob("video-1", "v1");
   ledger.recordHeatmapSelection({
     jobId: job.id,
     heatmap: [],
     packages: [
-      {rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9},
-      {rank: 2, startSeconds: 40, endSeconds: 60, score: 0.8},
+      { rank: 1, startSeconds: 10, endSeconds: 30, score: 0.9 },
+      { rank: 2, startSeconds: 40, endSeconds: 60, score: 0.8 },
     ],
   });
   const [failedPackage, readyPackage] = ledger.listClipPackages(job.id);
   ledger.markPackageFailed(failedPackage.id, "download failed");
-  ledger.markPackageReady({packageId: readyPackage.id, assets: []});
+  ledger.markPackageReady({ packageId: readyPackage.id, assets: [] });
   const run = ledger.ensureTreatmentRun({
     packageId: readyPackage.id,
     treatmentId: "audiogram-basic",
@@ -285,9 +302,15 @@ test("package and treatment failures are isolated and retain their errors", asyn
   });
   ledger.markTreatmentRunFailed(run.id, "render failed");
 
-  assert.equal(ledger.getClipPackage(failedPackage.id).lastError, "download failed");
+  assert.equal(
+    ledger.getClipPackage(failedPackage.id).lastError,
+    "download failed",
+  );
   assert.equal(ledger.getClipPackage(readyPackage.id).status, "ready");
-  assert.equal(ledger.listTreatmentRuns(readyPackage.id)[0].lastError, "render failed");
+  assert.equal(
+    ledger.listTreatmentRuns(readyPackage.id)[0].lastError,
+    "render failed",
+  );
 
   const unsafeError = new Error(
     `--api-key secret-value ${"diagnostic".repeat(500)}`,

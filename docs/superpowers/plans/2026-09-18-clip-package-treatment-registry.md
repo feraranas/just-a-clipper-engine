@@ -117,11 +117,14 @@ and `clips` tables, insert one heatmap-ready selected clip and one rendered
 clip, then open it through `openAudiogramLedger()`:
 
 ```js
-const migrated = openAudiogramLedger(path, {now});
+const migrated = openAudiogramLedger(path, { now });
 assert.equal(migrated.getPackageJob("video-1", "v1").status, "heatmap_ready");
 assert.equal(migrated.listClipPackages(jobId)[0].status, "selected");
 assert.equal(migrated.listClipPackages(jobId)[1].status, "ready");
-assert.equal(migrated.listTreatmentRuns(packageId)[0].treatmentId, "audiogram-basic");
+assert.equal(
+  migrated.listTreatmentRuns(packageId)[0].treatmentId,
+  "audiogram-basic",
+);
 ```
 
 - [ ] **Step 2: Run the migration test and verify RED**
@@ -213,16 +216,16 @@ assert.throws(
   () => createTreatmentRegistry([definition, definition]),
   /Duplicate treatment audiogram-basic@1/,
 );
-assert.throws(() => registry.get("missing", "1"), /Unknown treatment missing@1/);
-assert.deepEqual(
-  audiogramBasicTreatment.buildInputProps(packageWithAssets),
-  {
-    title: "Example",
-    audioFileName: "generated/video-1/v1/clip-1/audio.wav",
-    captionsFileName: "generated/video-1/v1/clip-1/captions.json",
-    coverImageFileName: "generated/video-1/v1/clip-1/thumbnail.jpg",
-  },
+assert.throws(
+  () => registry.get("missing", "1"),
+  /Unknown treatment missing@1/,
 );
+assert.deepEqual(audiogramBasicTreatment.buildInputProps(packageWithAssets), {
+  title: "Example",
+  audioFileName: "generated/video-1/v1/clip-1/audio.wav",
+  captionsFileName: "generated/video-1/v1/clip-1/captions.json",
+  coverImageFileName: "generated/video-1/v1/clip-1/thumbnail.jpg",
+});
 ```
 
 Also assert that missing `audio`, `captions`, or `thumbnail` is reported
@@ -282,12 +285,16 @@ Assert partial audio arguments contain all of:
 ```js
 [
   "--no-playlist",
-  "--download-sections", "*10-30",
+  "--download-sections",
+  "*10-30",
   "--extract-audio",
-  "--audio-format", "wav",
-  "--output", outputTemplate,
-  "--", sourceUrl,
-]
+  "--audio-format",
+  "wav",
+  "--output",
+  outputTemplate,
+  "--",
+  sourceUrl,
+];
 ```
 
 Assert no code path builds an audio command without the time section. Assert
@@ -370,7 +377,7 @@ For a complete package, assert:
   temporaryArtifactPath,
   `--props=${propsPath}`,
   "--codec=h264",
-]
+];
 ```
 
 Assert successful non-empty output is renamed atomically to the final path and a

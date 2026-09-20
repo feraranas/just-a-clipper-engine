@@ -1,13 +1,14 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {sanitizeErrorDiagnostic} from "./error-diagnostics.mjs";
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
 test("error diagnostics redact credentials and remain deliberately bounded", () => {
   const error = new Error(
     `yt-dlp --api-key super-secret https://example.test/video?access_token=url-secret ${"x".repeat(5_000)}`,
   );
-  error.stderr = "Authorization: Bearer bearer-secret\nrefresh_token=json-secret";
+  error.stderr =
+    "Authorization: Bearer bearer-secret\nrefresh_token=json-secret";
 
   const diagnostic = sanitizeErrorDiagnostic(error);
 

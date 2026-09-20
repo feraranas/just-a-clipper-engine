@@ -1,20 +1,20 @@
 import assert from "node:assert/strict";
-import {mkdtemp, rm} from "node:fs/promises";
-import {tmpdir} from "node:os";
-import {join} from "node:path";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import test from "node:test";
 
-import {openAudiogramLedger} from "./audiogram-ledger.mjs";
-import {syncAndAnalyzeInbox} from "./youtube-inbox-pipeline-core.mjs";
+import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { syncAndAnalyzeInbox } from "./youtube-inbox-pipeline-core.mjs";
 
 test("a completed video is not analyzed again on the next playlist sync", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-pipeline-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
 
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
   t.after(() => ledger.close());
 
-  const playlist = {id: "playlist-1", title: "Audiogram Inbox"};
+  const playlist = { id: "playlist-1", title: "Audiogram Inbox" };
   const videos = [
     {
       videoId: "video-1",
@@ -26,7 +26,7 @@ test("a completed video is not analyzed again on the next playlist sync", async 
   const fetchMetadata = async () => {
     metadataRequests += 1;
     return {
-      heatmap: [{start_time: 20, end_time: 40, value: 0.9}],
+      heatmap: [{ start_time: 20, end_time: 40, value: 0.9 }],
     };
   };
 
@@ -46,15 +46,15 @@ test("a completed video is not analyzed again on the next playlist sync", async 
   });
 
   assert.equal(metadataRequests, 1);
-  assert.deepEqual(first.sync, {discovered: 1, existing: 0});
+  assert.deepEqual(first.sync, { discovered: 1, existing: 0 });
   assert.equal(first.analyzed[0].status, "heatmap_ready");
-  assert.deepEqual(second.sync, {discovered: 0, existing: 1});
+  assert.deepEqual(second.sync, { discovered: 0, existing: 1 });
   assert.deepEqual(second.analyzed, []);
 });
 
 test("a video without a heatmap receives a terminal status", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "audiogram-pipeline-"));
-  t.after(() => rm(directory, {recursive: true, force: true}));
+  t.after(() => rm(directory, { recursive: true, force: true }));
 
   const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
   t.after(() => ledger.close());
@@ -62,7 +62,7 @@ test("a video without a heatmap receives a terminal status", async (t) => {
   const result = await syncAndAnalyzeInbox({
     fetchMetadata: async () => ({}),
     ledger,
-    playlist: {id: "playlist-1", title: "Audiogram Inbox"},
+    playlist: { id: "playlist-1", title: "Audiogram Inbox" },
     packageVersion: "v1",
     videos: [
       {

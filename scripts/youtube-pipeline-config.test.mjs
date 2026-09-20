@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import {resolvePackageVersion} from "./youtube-pipeline-config.mjs";
+import { resolvePackageVersion } from "./youtube-pipeline-config.mjs";
 
 test("package version prefers the new variable and supports the legacy fallback", () => {
   assert.equal(
@@ -12,7 +12,7 @@ test("package version prefers the new variable and supports the legacy fallback"
     "v3",
   );
   assert.equal(
-    resolvePackageVersion({AUDIOGRAM_TREATMENT_VERSION: "legacy"}),
+    resolvePackageVersion({ AUDIOGRAM_TREATMENT_VERSION: "legacy" }),
     "legacy",
   );
   assert.equal(resolvePackageVersion({}), "v1");
