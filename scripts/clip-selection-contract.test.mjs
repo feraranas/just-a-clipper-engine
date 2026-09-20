@@ -89,13 +89,85 @@ test("recipe hashes include real prompt/schema and all behavior inputs", () => {
   );
 });
 
-test("real transcript schemas enforce exact output shape and normalized Unicode bounds", () => {
+test("JSON Schema recursively enumerates the exact strict transcript contract", () => {
   const schema = buildTranscriptJsonSchema(3);
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ["clips"]);
+  assert.deepEqual(Object.keys(schema.properties), ["clips"]);
+  assert.deepEqual(schema.properties.clips.type, "array");
   assert.equal(schema.properties.clips.minItems, 3);
   assert.equal(schema.properties.clips.maxItems, 3);
-  assert.equal(schema.properties.clips.items.additionalProperties, false);
+  const item = schema.properties.clips.items;
+  assert.equal(item.type, "object");
+  assert.equal(item.additionalProperties, false);
+  assert.deepEqual(Object.keys(item.properties), [
+    "rank",
+    "title",
+    "ideaKey",
+    "startCueId",
+    "contextCueId",
+    "insightCueId",
+    "payoffCueId",
+    "endCueId",
+    "contextSummary",
+    "insightSummary",
+    "payoffSummary",
+    "score",
+    "editorialChecks",
+  ]);
+  assert.deepEqual(item.required, Object.keys(item.properties));
+  assert.deepEqual(item.properties.rank, {
+    type: "integer",
+    minimum: 1,
+    maximum: 3,
+  });
+  assert.deepEqual(item.properties.title, {
+    type: "string",
+    minLength: 12,
+    maxLength: 80,
+  });
+  assert.deepEqual(item.properties.ideaKey, {
+    type: "string",
+    minLength: 3,
+    maxLength: 48,
+    pattern: "^[a-z0-9]+(?:-[a-z0-9]+)*$",
+  });
+  for (const name of [
+    "startCueId",
+    "contextCueId",
+    "insightCueId",
+    "payoffCueId",
+    "endCueId",
+  ])
+    assert.deepEqual(item.properties[name], {
+      type: "string",
+      pattern: "^c\\d{6}$",
+    });
+  for (const name of ["contextSummary", "insightSummary", "payoffSummary"])
+    assert.deepEqual(item.properties[name], {
+      type: "string",
+      minLength: 20,
+      maxLength: 240,
+    });
+  assert.deepEqual(item.properties.score, {
+    type: "number",
+    minimum: 0,
+    maximum: 1,
+  });
+  const editorial = item.properties.editorialChecks;
+  assert.equal(editorial.type, "object");
+  assert.equal(editorial.additionalProperties, false);
+  assert.deepEqual(editorial.required, Object.keys(editorial.properties));
+  assert.deepEqual(editorial.properties, {
+    selfContained: { type: "boolean", const: true },
+    hasSetupBeforeClaim: { type: "boolean", const: true },
+    completeThought: { type: "boolean", const: true },
+    substantiveInsight: { type: "boolean", const: true },
+    containsSponsorOrCta: { type: "boolean", const: false },
+  });
+});
+
+test("Zod enforces matching count, numeric, regex, literal, and Unicode boundaries", () => {
   const validator = buildTranscriptZodSchema(3);
   const valid = { clips: [clip, { ...clip, rank: 2 }, { ...clip, rank: 3 }] };
   assert.equal(validator.parse(valid).clips.length, 3);
@@ -104,8 +176,12 @@ test("real transcript schemas enforce exact output shape and normalized Unicode 
     { title: "😀".repeat(81) },
     { score: NaN },
     { score: Infinity },
+    { score: -Infinity },
+    { score: -0.01 },
+    { score: 1.01 },
     { rank: 0 },
     { rank: 4 },
+    { rank: 1.5 },
     { ideaKey: "bad_key" },
     { startCueId: "c1" },
     { extra: true },
@@ -133,4 +209,50 @@ test("real transcript schemas enforce exact output shape and normalized Unicode 
     "😀".repeat(80),
   );
   assert.equal(validator.safeParse({ clips: [clip] }).success, false);
+  assert.equal(
+    buildTranscriptZodSchema(4).safeParse({ clips: [...valid.clips, clip] })
+      .success,
+    true,
+  );
+  for (const [field, minimum, maximum] of [
+    ["title", 12, 80],
+    ["ideaKey", 3, 48],
+    ["contextSummary", 20, 240],
+    ["insightSummary", 20, 240],
+    ["payoffSummary", 20, 240],
+  ]) {
+    const character = field === "ideaKey" ? "a" : "😀";
+    assert.equal(
+      validator.safeParse({
+        clips: [{ ...clip, [field]: character.repeat(minimum) }, clip, clip],
+      }).success,
+      true,
+    );
+    assert.equal(
+      validator.safeParse({
+        clips: [{ ...clip, [field]: character.repeat(maximum) }, clip, clip],
+      }).success,
+      true,
+    );
+    assert.equal(
+      validator.safeParse({
+        clips: [
+          { ...clip, [field]: character.repeat(minimum - 1) },
+          clip,
+          clip,
+        ],
+      }).success,
+      false,
+    );
+    assert.equal(
+      validator.safeParse({
+        clips: [
+          { ...clip, [field]: character.repeat(maximum + 1) },
+          clip,
+          clip,
+        ],
+      }).success,
+      false,
+    );
+  }
 });
