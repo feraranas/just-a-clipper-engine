@@ -330,6 +330,60 @@ test("OAuth surfaces a swallowed catalog body timeout and makes no Responses cal
   assert.equal(fetchCalls, 1);
 });
 
+test("OAuth lets the bounded transport own the pre-header Responses timeout", async (t) => {
+  const credentials = await oauthFixture(t);
+  const timers = new Map();
+  let responsesInit;
+  let responsesStarted;
+  const didStartResponses = new Promise((resolve) => {
+    responsesStarted = resolve;
+  });
+  const provider = createStructuredGenerationProvider(
+    config({}, "chatgpt-oauth"),
+    {
+      ...credentials,
+      scheduler: {
+        setTimeout(callback, milliseconds) {
+          const handle = {};
+          timers.set(handle, { callback, milliseconds });
+          return handle;
+        },
+        clearTimeout(handle) {
+          timers.delete(handle);
+        },
+      },
+      fetch: async (url, init) => {
+        if (String(url).includes("/models?"))
+          return Response.json({
+            models: [
+              {
+                slug: "gpt-5.6-terra",
+                visibility: "list",
+                supported_in_api: true,
+                use_responses_lite: false,
+              },
+            ],
+          });
+        responsesInit = init;
+        responsesStarted();
+        return new Promise(() => {});
+      },
+    },
+  );
+
+  const pending = provider.generateStructured(request());
+  await didStartResponses;
+  const responseDeadline = [...timers.values()].find(
+    ({ milliseconds }) => milliseconds === 120_000,
+  );
+  assert.ok(responseDeadline);
+  responseDeadline.callback();
+  await assert.rejects(pending, { code: "oauth_responses_timeout" });
+  assert.ok(
+    Number(new Headers(responsesInit.headers).get("x-stainless-timeout")) > 120,
+  );
+});
+
 test("rejects every caller-owned provider override before fetch", async () => {
   let fetchCalls = 0;
   const provider = createStructuredGenerationProvider(config(), {

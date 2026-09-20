@@ -18,6 +18,7 @@ const OAUTH_PROVIDER_ID = "chatgpt-oauth";
 const OFFICIAL_BASE_URL = "https://api.openai.com/v1";
 const OAUTH_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const OFFICIAL_TIMEOUT_MS = 120_000;
+const OAUTH_SDK_TIMEOUT_MS = 125_000;
 const FORMAT_NAME = "transcript_clip_selection";
 const generateKeys = new Set(["instructions", "input", "jsonSchema", "signal"]);
 const dependencyKeys = new Set([
@@ -283,7 +284,7 @@ export const createStructuredGenerationProvider = (
           baseURL: transport.baseURL,
           fetch: transport.fetch,
           maxRetries: 0,
-          timeout: OFFICIAL_TIMEOUT_MS,
+          timeout: OAUTH_SDK_TIMEOUT_MS,
           logLevel: "off",
           logger: silentSdkLogger,
         });
@@ -291,7 +292,7 @@ export const createStructuredGenerationProvider = (
           response = await client.responses.create(body, {
             signal: request.signal,
             maxRetries: 0,
-            timeout: OFFICIAL_TIMEOUT_MS,
+            timeout: OAUTH_SDK_TIMEOUT_MS,
           });
           if (boundedError) throw boundedError;
         } catch (error) {
