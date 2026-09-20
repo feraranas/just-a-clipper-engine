@@ -1,8 +1,12 @@
 import OpenAI from "openai";
+import { createOpenAIOAuthTransport } from "@openai-oauth/core";
 
+import { createBoundedAllowlistedFetch } from "./bounded-fetch.mjs";
 import { canonicalJson, sha256Canonical } from "./canonical-json.mjs";
+import { loadFreshChatGptSession } from "./chatgpt-oauth-credentials.mjs";
 import {
   buildSelectionRecipe,
+  OAUTH_CODEX_VERSION,
   SELECTOR_MODEL,
   TRANSCRIPT_LIMITS,
 } from "./clip-selection-contract.mjs";
@@ -10,11 +14,21 @@ import { SafeDiagnosticError } from "./error-diagnostics.mjs";
 import { extractStructuredOutput } from "./structured-response.mjs";
 
 const OFFICIAL_PROVIDER_ID = "openai-api";
+const OAUTH_PROVIDER_ID = "chatgpt-oauth";
 const OFFICIAL_BASE_URL = "https://api.openai.com/v1";
+const OAUTH_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const OFFICIAL_TIMEOUT_MS = 120_000;
 const FORMAT_NAME = "transcript_clip_selection";
 const generateKeys = new Set(["instructions", "input", "jsonSchema", "signal"]);
-const dependencyKeys = new Set(["apiKey", "environment", "fetch", "scheduler"]);
+const dependencyKeys = new Set([
+  "apiKey",
+  "environment",
+  "fetch",
+  "scheduler",
+  "authFile",
+  "projectRoot",
+  "now",
+]);
 const schedulerKeys = new Set(["setTimeout", "clearTimeout"]);
 const defaultScheduler = {
   setTimeout: (callback, milliseconds) => setTimeout(callback, milliseconds),
@@ -90,12 +104,21 @@ export const createStructuredGenerationProvider = (
   dependencies = {},
 ) => {
   exactKeys(dependencies, dependencyKeys, "provider dependency");
+  const providerId = config?.providerId;
+  const invalidConfigurationMessage =
+    providerId === OFFICIAL_PROVIDER_ID
+      ? "Official structured provider configuration is invalid"
+      : providerId === OAUTH_PROVIDER_ID
+        ? "ChatGPT OAuth structured provider configuration is invalid"
+        : "Structured provider configuration is invalid";
   if (
     !config ||
-    config.providerId !== OFFICIAL_PROVIDER_ID ||
-    config.model !== SELECTOR_MODEL
+    ![OFFICIAL_PROVIDER_ID, OAUTH_PROVIDER_ID].includes(providerId) ||
+    config.model !== SELECTOR_MODEL ||
+    (providerId === OAUTH_PROVIDER_ID &&
+      config.codexVersion !== OAUTH_CODEX_VERSION)
   )
-    throw new Error("Official structured provider configuration is invalid");
+    throw new Error(invalidConfigurationMessage);
   if (
     dependencies.environment !== undefined &&
     (!dependencies.environment ||
@@ -108,6 +131,14 @@ export const createStructuredGenerationProvider = (
     typeof dependencies.fetch !== "function"
   )
     throw new Error("fetch must be a function");
+  for (const key of ["authFile", "projectRoot"])
+    if (
+      dependencies[key] !== undefined &&
+      (typeof dependencies[key] !== "string" || !dependencies[key])
+    )
+      throw new Error(`${key} must be a nonempty string`);
+  if (dependencies.now !== undefined && typeof dependencies.now !== "function")
+    throw new Error("now must be a function");
   const scheduler = dependencies.scheduler ?? defaultScheduler;
   exactKeys(scheduler, schedulerKeys, "scheduler");
   if (
@@ -116,7 +147,10 @@ export const createStructuredGenerationProvider = (
   )
     throw new Error("scheduler must provide setTimeout and clearTimeout");
 
-  const apiKey = apiKeyFrom(dependencies);
+  const apiKey =
+    providerId === OFFICIAL_PROVIDER_ID
+      ? apiKeyFrom(dependencies)
+      : "unused-oauth-placeholder";
   const selectionRecipe = buildSelectionRecipe(config);
   const { recipe, sha256: recipeSha256 } = selectionRecipe;
   if (
@@ -125,27 +159,30 @@ export const createStructuredGenerationProvider = (
     recipe.limits.maximumOutputTextUtf8Bytes >
       TRANSCRIPT_LIMITS.maximumOutputTextUtf8Bytes
   )
-    throw new Error("Official structured provider configuration is invalid");
+    throw new Error(invalidConfigurationMessage);
   const expectedInstructionsSha256 = recipe.prompt.sha256;
   const expectedJsonSchemaSha256 = recipe.outputSchema.sha256;
   const desiredClipCount = recipe.desiredClipCount;
   const maximumOutputTextUtf8Bytes = recipe.limits.maximumOutputTextUtf8Bytes;
-  const client = new OpenAI({
-    apiKey,
-    adminAPIKey: null,
-    organization: null,
-    project: null,
-    webhookSecret: null,
-    baseURL: OFFICIAL_BASE_URL,
-    maxRetries: 0,
-    timeout: OFFICIAL_TIMEOUT_MS,
-    logLevel: "off",
-    logger: silentSdkLogger,
-    ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
-  });
+  const officialClient =
+    providerId === OFFICIAL_PROVIDER_ID
+      ? new OpenAI({
+          apiKey,
+          adminAPIKey: null,
+          organization: null,
+          project: null,
+          webhookSecret: null,
+          baseURL: OFFICIAL_BASE_URL,
+          maxRetries: 0,
+          timeout: OFFICIAL_TIMEOUT_MS,
+          logLevel: "off",
+          logger: silentSdkLogger,
+          ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
+        })
+      : undefined;
 
   return {
-    providerId: OFFICIAL_PROVIDER_ID,
+    providerId,
     model: SELECTOR_MODEL,
     async generateStructured(request) {
       const jsonSchema = validateRequest(request);
@@ -157,52 +194,115 @@ export const createStructuredGenerationProvider = (
         throw new Error(
           "Structured generation jsonSchema does not match the configured selection recipe",
         );
-      const operationController = new AbortController();
-      let didTimeOut = false;
-      const deadline = scheduler.setTimeout(() => {
-        didTimeOut = true;
-        operationController.abort();
-      }, OFFICIAL_TIMEOUT_MS);
-      const abortFromCaller = () =>
-        operationController.abort(request.signal?.reason);
-      if (request.signal?.aborted) abortFromCaller();
-      else
-        request.signal?.addEventListener("abort", abortFromCaller, {
-          once: true,
-        });
-      let response;
-      try {
-        response = await client.responses.create(
-          {
-            model: SELECTOR_MODEL,
-            store: false,
-            max_output_tokens: TRANSCRIPT_LIMITS.officialMaximumOutputTokens,
-            instructions: request.instructions,
-            input: request.input,
-            text: {
-              format: {
-                name: FORMAT_NAME,
-                type: "json_schema",
-                schema: jsonSchema,
-                strict: true,
-              },
-            },
+      const body = {
+        model: SELECTOR_MODEL,
+        store: false,
+        ...(providerId === OFFICIAL_PROVIDER_ID
+          ? {
+              max_output_tokens: TRANSCRIPT_LIMITS.officialMaximumOutputTokens,
+            }
+          : {}),
+        instructions: request.instructions,
+        input: request.input,
+        text: {
+          format: {
+            name: FORMAT_NAME,
+            type: "json_schema",
+            schema: jsonSchema,
+            strict: true,
           },
-          {
+        },
+      };
+      let response;
+      if (providerId === OFFICIAL_PROVIDER_ID) {
+        const operationController = new AbortController();
+        let didTimeOut = false;
+        const deadline = scheduler.setTimeout(() => {
+          didTimeOut = true;
+          operationController.abort();
+        }, OFFICIAL_TIMEOUT_MS);
+        const abortFromCaller = () =>
+          operationController.abort(request.signal?.reason);
+        if (request.signal?.aborted) abortFromCaller();
+        else
+          request.signal?.addEventListener("abort", abortFromCaller, {
+            once: true,
+          });
+        try {
+          response = await officialClient.responses.create(body, {
             signal: operationController.signal,
             maxRetries: 0,
             timeout: OFFICIAL_TIMEOUT_MS,
+          });
+        } catch (error) {
+          throw new SafeDiagnosticError({
+            providerId,
+            code: didTimeOut ? "provider_timeout" : "provider_request_failed",
+            httpStatus: safeHttpStatus(error),
+          });
+        } finally {
+          scheduler.clearTimeout(deadline);
+          request.signal?.removeEventListener("abort", abortFromCaller);
+        }
+      } else {
+        let boundedError;
+        const boundedFetch = createBoundedAllowlistedFetch({
+          fetch: dependencies.fetch,
+          scheduler,
+          signal: request.signal,
+          onError(error) {
+            boundedError ??= error;
           },
-        );
-      } catch (error) {
-        throw new SafeDiagnosticError({
-          providerId: OFFICIAL_PROVIDER_ID,
-          code: didTimeOut ? "provider_timeout" : "provider_request_failed",
-          httpStatus: safeHttpStatus(error),
         });
-      } finally {
-        scheduler.clearTimeout(deadline);
-        request.signal?.removeEventListener("abort", abortFromCaller);
+        const credentialOptions = {
+          ...(dependencies.authFile ? { authFile: dependencies.authFile } : {}),
+          ...(dependencies.projectRoot
+            ? { projectRoot: dependencies.projectRoot }
+            : {}),
+          ...(dependencies.environment
+            ? { environment: dependencies.environment }
+            : {}),
+          ...(dependencies.now ? { now: dependencies.now } : {}),
+          ...(dependencies.fetch ? { fetch: dependencies.fetch } : {}),
+          scheduler,
+          signal: request.signal,
+        };
+        const transport = createOpenAIOAuthTransport({
+          auth: () => loadFreshChatGptSession(credentialOptions),
+          baseURL: OAUTH_BASE_URL,
+          codexVersion: OAUTH_CODEX_VERSION,
+          responsesState: false,
+          fetch: boundedFetch,
+        });
+        const client = new OpenAI({
+          apiKey,
+          adminAPIKey: null,
+          organization: null,
+          project: null,
+          webhookSecret: null,
+          baseURL: transport.baseURL,
+          fetch: transport.fetch,
+          maxRetries: 0,
+          timeout: OFFICIAL_TIMEOUT_MS,
+          logLevel: "off",
+          logger: silentSdkLogger,
+        });
+        try {
+          response = await client.responses.create(body, {
+            signal: request.signal,
+            maxRetries: 0,
+            timeout: OFFICIAL_TIMEOUT_MS,
+          });
+          if (boundedError) throw boundedError;
+        } catch (error) {
+          if (boundedError) throw boundedError;
+          if (error instanceof SafeDiagnosticError) throw error;
+          throw new SafeDiagnosticError({
+            providerId,
+            code: "provider_request_failed",
+            httpStatus: safeHttpStatus(error),
+          });
+        }
       }
 
       let extracted;
@@ -213,7 +313,7 @@ export const createStructuredGenerationProvider = (
         });
       } catch {
         throw new SafeDiagnosticError({
-          providerId: OFFICIAL_PROVIDER_ID,
+          providerId,
           code: "provider_response_invalid",
         });
       }
@@ -221,7 +321,7 @@ export const createStructuredGenerationProvider = (
       return {
         parsed: extracted.parsed,
         provenance: {
-          providerId: OFFICIAL_PROVIDER_ID,
+          providerId,
           model: SELECTOR_MODEL,
           ...(responseId ? { responseId } : {}),
           recipeSha256,

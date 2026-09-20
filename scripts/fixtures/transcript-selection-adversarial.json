@@ -110,5 +110,72 @@
       "endMs": 180000,
       "text": "At the next review, the team keeps or reverts the change using that observed result."
     }
-  ]
+  ],
+  "validResponse": {
+    "clips": [
+      {
+        "rank": 1,
+        "title": "Prioritize work by uncertainty removed",
+        "ideaKey": "uncertainty-removal",
+        "startCueId": "c000001",
+        "contextCueId": "c000002",
+        "insightCueId": "c000003",
+        "payoffCueId": "c000004",
+        "endCueId": "c000004",
+        "contextSummary": "Busy queues can conceal that important assumptions remain untested.",
+        "insightSummary": "Rank work by the amount of uncertainty it can remove.",
+        "payoffSummary": "Run the smallest decisive experiment before committing more effort.",
+        "score": 0.95,
+        "editorialChecks": {
+          "selfContained": true,
+          "hasSetupBeforeClaim": true,
+          "completeThought": true,
+          "substantiveInsight": true,
+          "containsSponsorOrCta": false
+        }
+      },
+      {
+        "rank": 2,
+        "title": "Turn roadmap promises into testable hypotheses",
+        "ideaKey": "roadmap-evidence",
+        "startCueId": "c000007",
+        "contextCueId": "c000008",
+        "insightCueId": "c000009",
+        "payoffCueId": "c000010",
+        "endCueId": "c000010",
+        "contextSummary": "Dates and polished project names can hide uncertainty in a roadmap.",
+        "insightSummary": "Each roadmap item should name the evidence that would change the decision.",
+        "payoffSummary": "Leaders can revise direction without treating new learning as failure.",
+        "score": 0.9,
+        "editorialChecks": {
+          "selfContained": true,
+          "hasSetupBeforeClaim": true,
+          "completeThought": true,
+          "substantiveInsight": true,
+          "containsSponsorOrCta": false
+        }
+      },
+      {
+        "rank": 3,
+        "title": "Make retrospectives produce operating experiments",
+        "ideaKey": "retrospective-experiment",
+        "startCueId": "c000013",
+        "contextCueId": "c000014",
+        "insightCueId": "c000015",
+        "payoffCueId": "c000016",
+        "endCueId": "c000018",
+        "contextSummary": "Retrospectives often create timelines without assigning the next experiment.",
+        "insightSummary": "An observation creates value when it becomes a testable operating change.",
+        "payoffSummary": "Predict the result, then keep or revert the change using observed evidence.",
+        "score": 0.85,
+        "editorialChecks": {
+          "selfContained": true,
+          "hasSetupBeforeClaim": true,
+          "completeThought": true,
+          "substantiveInsight": true,
+          "containsSponsorOrCta": false
+        }
+      }
+    ]
+  }
 }
