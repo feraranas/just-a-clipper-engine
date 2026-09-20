@@ -25,7 +25,13 @@ test("renders any registry treatment to its deterministic artifact path", async 
 
   const artifactRelativePath = await renderTreatmentRun(
     {
-      clipPackage: { videoId: "video-1", rank: 3, title: "A clip", assets: [] },
+      clipPackage: {
+        videoId: "video-1",
+        packageVersion: "v2",
+        rank: 3,
+        title: "A clip",
+        assets: [],
+      },
       treatment,
     },
     { projectRoot, runCommand },
@@ -33,7 +39,7 @@ test("renders any registry treatment to its deterministic artifact path", async 
 
   assert.equal(
     artifactRelativePath,
-    "out/treatments/future-treatment/2/video-1/clip-3.mp4",
+    "out/treatments/future-treatment/2/video-1/v2/clip-3.mp4",
   );
   assert.deepEqual(calls[0], {
     command: "npx",
@@ -43,9 +49,9 @@ test("renders any registry treatment to its deterministic artifact path", async 
       "FutureComposition",
       join(
         projectRoot,
-        "out/treatments/future-treatment/2/video-1/.clip-3.partial.mp4",
+        "out/treatments/future-treatment/2/video-1/v2/.clip-3.partial.mp4",
       ),
-      `--props=${join(projectRoot, "out/treatments/future-treatment/2/video-1/clip-3.props.json")}`,
+      `--props=${join(projectRoot, "out/treatments/future-treatment/2/video-1/v2/clip-3.props.json")}`,
       "--codec=h264",
     ],
   });
@@ -54,7 +60,7 @@ test("renders any registry treatment to its deterministic artifact path", async 
       await readFile(
         join(
           projectRoot,
-          "out/treatments/future-treatment/2/video-1/clip-3.props.json",
+          "out/treatments/future-treatment/2/video-1/v2/clip-3.props.json",
         ),
         "utf8",
       ),
@@ -66,7 +72,7 @@ test("renders any registry treatment to its deterministic artifact path", async 
       await stat(
         join(
           projectRoot,
-          "out/treatments/future-treatment/2/video-1/clip-3.mp4",
+          "out/treatments/future-treatment/2/video-1/v2/clip-3.mp4",
         ),
       )
     ).size,
@@ -88,7 +94,10 @@ test("does not publish an empty partial render", async (t) => {
 
   await assert.rejects(
     renderTreatmentRun(
-      { clipPackage: { videoId: "video-1", rank: 1 }, treatment },
+      {
+        clipPackage: { videoId: "video-1", packageVersion: "v1", rank: 1 },
+        treatment,
+      },
       {
         projectRoot,
         runCommand: async (_command, args) => writeFile(args[3], ""),
@@ -105,7 +114,12 @@ test("missing required assets stop rendering before the process starts", async (
   await assert.rejects(
     renderTreatmentRun(
       {
-        clipPackage: { videoId: "video-1", rank: 1, assets: [] },
+        clipPackage: {
+          videoId: "video-1",
+          packageVersion: "v1",
+          rank: 1,
+          assets: [],
+        },
         treatment: {
           id: "requires-audio",
           version: "1",
@@ -130,7 +144,12 @@ test("missing required assets stop rendering before the process starts", async (
 test("rejects navigation render path components before creating treatment output", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-paths-"));
   t.after(() => rm(projectRoot, { recursive: true, force: true }));
-  const validClipPackage = { videoId: "video-1", rank: 1, assets: [] };
+  const validClipPackage = {
+    videoId: "video-1",
+    packageVersion: "v1",
+    rank: 1,
+    assets: [],
+  };
   const validTreatment = {
     id: "audiogram-basic",
     version: "1",
@@ -142,6 +161,7 @@ test("rejects navigation render path components before creating treatment output
 
   for (const [target, field, label] of [
     ["clipPackage", "videoId", "video ID"],
+    ["clipPackage", "packageVersion", "package version"],
     ["treatment", "id", "treatment ID"],
     ["treatment", "version", "treatment version"],
   ]) {
@@ -169,5 +189,44 @@ test("rejects navigation render path components before creating treatment output
     }
   }
 
+  await assert.rejects(stat(join(projectRoot, "out")), { code: "ENOENT" });
+});
+
+test("requires a package version before creating treatment output", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "treatment-paths-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  let processCalls = 0;
+
+  for (const packageVersion of [undefined, null]) {
+    await assert.rejects(
+      renderTreatmentRun(
+        {
+          clipPackage: {
+            videoId: "video-1",
+            packageVersion,
+            rank: 1,
+            assets: [],
+          },
+          treatment: {
+            id: "audiogram-basic",
+            version: "1",
+            compositionId: "AudiogramBasic",
+            output: { extension: "mp4", codec: "h264" },
+            requiredAssetRoles: [],
+            buildProps: () => ({}),
+          },
+        },
+        {
+          projectRoot,
+          runCommand: async () => {
+            processCalls += 1;
+          },
+        },
+      ),
+      { message: `Invalid package version: ${packageVersion}` },
+    );
+  }
+
+  assert.equal(processCalls, 0);
   await assert.rejects(stat(join(projectRoot, "out")), { code: "ENOENT" });
 });

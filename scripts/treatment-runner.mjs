@@ -24,6 +24,13 @@ export const renderTreatmentRun = async (
   const treatmentId = safePathPart(treatment.id, "treatment ID");
   const treatmentVersion = safePathPart(treatment.version, "treatment version");
   const videoId = safePathPart(clipPackage.videoId, "video ID");
+  if (clipPackage.packageVersion == null) {
+    throw new Error(`Invalid package version: ${clipPackage.packageVersion}`);
+  }
+  const packageVersion = safePathPart(
+    clipPackage.packageVersion,
+    "package version",
+  );
   if (!Number.isInteger(clipPackage.rank) || clipPackage.rank < 1) {
     throw new Error(`Invalid package rank: ${clipPackage.rank}`);
   }
@@ -36,6 +43,7 @@ export const renderTreatmentRun = async (
     treatmentId,
     treatmentVersion,
     videoId,
+    packageVersion,
   );
   await mkdir(outputDirectory, { recursive: true });
   const baseName = `clip-${clipPackage.rank}`;

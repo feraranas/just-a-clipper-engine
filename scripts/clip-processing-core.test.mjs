@@ -55,7 +55,7 @@ test("a completed package and treatment are skipped on the next run", async (t) 
     },
     renderTreatment: async () => {
       renders += 1;
-      return "out/treatments/audiogram-basic/1/video-1/clip-1.mp4";
+      return "out/treatments/audiogram-basic/1/video-1/v1/clip-1.mp4";
     },
   };
 
