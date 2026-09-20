@@ -21,6 +21,26 @@ import {
   splitCaptionsIntoTimedWords,
   trimAndRebaseCaptions,
 } from "./clip-package-assets.mjs";
+import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
+
+const exampleTranscript = (overrides = {}) => {
+  const transcript = {
+    id: 17,
+    source: "youtube_creator",
+    language: "en",
+    cues: [
+      { id: "c000001", startMs: 10_000, endMs: 20_000, text: "Hello world" },
+      {
+        id: "c000002",
+        startMs: 20_000,
+        endMs: 30_000,
+        text: "Persisted transcript",
+      },
+    ],
+    ...overrides,
+  };
+  return { ...transcript, ...computeTranscriptIdentity(transcript) };
+};
 
 const exampleClipPackage = (overrides = {}) => ({
   videoId: "video-1",
@@ -34,35 +54,48 @@ const exampleClipPackage = (overrides = {}) => ({
   ...overrides,
 });
 
-const packageManifest = (clipPackage, overrides = {}) => ({
-  schemaVersion: 1,
-  packageVersion: clipPackage.packageVersion,
-  source: {
-    videoId: clipPackage.videoId,
-    title: clipPackage.title,
-    sourceUrl: clipPackage.sourceUrl,
-  },
-  interval: {
-    rank: clipPackage.rank,
-    startSeconds: clipPackage.startSeconds,
-    endSeconds: clipPackage.endSeconds,
-    score: clipPackage.score,
-  },
-  assets: [
-    { role: "audio", fileName: "audio.wav", provenance: "yt_dlp" },
-    {
-      role: "captions",
-      fileName: "captions.json",
-      provenance: "youtube_creator",
+const packageManifest = (clipPackage, overrides = {}) => {
+  const transcript = clipPackage.transcript;
+  return {
+    schemaVersion: 1,
+    packageVersion: clipPackage.packageVersion,
+    source: {
+      videoId: clipPackage.videoId,
+      title: clipPackage.title,
+      sourceUrl: clipPackage.sourceUrl,
     },
-    {
-      role: "thumbnail",
-      fileName: "thumbnail.jpg",
-      provenance: "yt_dlp",
+    interval: {
+      rank: clipPackage.rank,
+      startSeconds: clipPackage.startSeconds,
+      endSeconds: clipPackage.endSeconds,
+      score: clipPackage.score,
     },
-  ],
-  ...overrides,
-});
+    ...(transcript
+      ? {
+          transcript: {
+            id: transcript.id,
+            sha256: transcript.sha256,
+            source: transcript.source,
+            language: transcript.language,
+          },
+        }
+      : {}),
+    assets: [
+      { role: "audio", fileName: "audio.wav", provenance: "yt_dlp" },
+      {
+        role: "captions",
+        fileName: "captions.json",
+        provenance: transcript?.source ?? "youtube_creator",
+      },
+      {
+        role: "thumbnail",
+        fileName: "thumbnail.jpg",
+        provenance: "yt_dlp",
+      },
+    ],
+    ...overrides,
+  };
+};
 
 const finalDirectoryFor = (projectRoot, clipPackage) =>
   join(
@@ -541,6 +574,90 @@ test("stages and atomically publishes a complete deterministic package", async (
   );
 });
 
+test("derives package captions from a persisted transcript without downloading captions", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-transcript-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const transcript = exampleTranscript();
+  const clipPackage = exampleClipPackage({ transcript });
+  const { calls, runCommand } = createRunner();
+
+  const assets = await acquireClipPackageAssets(clipPackage, {
+    projectRoot,
+    runCommand,
+    createStagingId: () => "transcript",
+  });
+
+  const ytDlpCalls = calls.filter(({ command }) => command === "yt-dlp");
+  assert.equal(
+    ytDlpCalls.filter(({ args }) =>
+      args.some((argument) =>
+        ["--write-subs", "--write-auto-subs"].includes(argument),
+      ),
+    ).length,
+    0,
+  );
+  assert.ok(
+    ytDlpCalls.every(
+      ({ args }) =>
+        args.includes("--skip-download") ||
+        args.includes("--download-sections"),
+    ),
+  );
+  assert.equal(
+    ytDlpCalls.filter(({ args }) => args.includes("--download-sections"))
+      .length,
+    1,
+  );
+  const directory = finalDirectoryFor(projectRoot, clipPackage);
+  assert.deepEqual(
+    JSON.parse(await readFile(join(directory, "captions.json"), "utf8")),
+    [
+      {
+        text: "Hello",
+        startMs: 0,
+        endMs: 5_000,
+        timestampMs: 2_500,
+        confidence: null,
+      },
+      {
+        text: " world",
+        startMs: 5_000,
+        endMs: 10_000,
+        timestampMs: 7_500,
+        confidence: null,
+      },
+      {
+        text: " Persisted",
+        startMs: 10_000,
+        endMs: 15_000,
+        timestampMs: 12_500,
+        confidence: null,
+      },
+      {
+        text: " transcript",
+        startMs: 15_000,
+        endMs: 20_000,
+        timestampMs: 17_500,
+        confidence: null,
+      },
+    ],
+  );
+  assert.deepEqual(
+    JSON.parse(await readFile(join(directory, "package.json"), "utf8"))
+      .transcript,
+    {
+      id: 17,
+      sha256: transcript.sha256,
+      source: "youtube_creator",
+      language: "en",
+    },
+  );
+  assert.equal(
+    assets.find(({ role }) => role === "captions").provenance,
+    "youtube_creator",
+  );
+});
+
 test("exposes canonical final and sibling staging paths", () => {
   assert.equal(typeof clipPackageAssets.getClipPackagePaths, "function");
 
@@ -644,6 +761,45 @@ test("reuses a complete published package without external commands", async (t) 
       provenance: "yt_dlp",
     },
   ]);
+});
+
+test("does not reuse a published transcript package with different transcript provenance", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "clip-package-transcript-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const transcript = exampleTranscript();
+  const clipPackage = exampleClipPackage({ transcript });
+  const directory = await writePublishedPackage(projectRoot, clipPackage, {
+    manifest: packageManifest(clipPackage, {
+      transcript: {
+        id: transcript.id,
+        sha256: "0".repeat(64),
+        source: transcript.source,
+        language: transcript.language,
+      },
+    }),
+  });
+  const manifestBefore = await readFile(
+    join(directory, "package.json"),
+    "utf8",
+  );
+  let processCalls = 0;
+
+  await assert.rejects(
+    acquireClipPackageAssets(clipPackage, {
+      projectRoot,
+      runCommand: async () => {
+        processCalls += 1;
+        throw new Error("external command should not run");
+      },
+    }),
+    /Invalid published clip package.*transcript identity mismatch/,
+  );
+
+  assert.equal(processCalls, 0);
+  assert.equal(
+    await readFile(join(directory, "package.json"), "utf8"),
+    manifestBefore,
+  );
 });
 
 test("inspectPublishedClipPackage distinguishes absence from a valid package", async (t) => {

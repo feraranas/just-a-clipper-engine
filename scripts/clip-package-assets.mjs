@@ -15,6 +15,7 @@ import { join, relative, sep } from "node:path";
 import { promisify } from "node:util";
 
 import { safePathPart } from "./path-components.mjs";
+import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 
 const execFileAsync = promisify(execFile);
 const durationToleranceSeconds = 3;
@@ -176,6 +177,39 @@ const requiredPathPart = (value, label) => {
   return safePathPart(value, label);
 };
 
+const validateTranscript = (transcript) => {
+  if (transcript === null || transcript === undefined) return null;
+  if (
+    !Number.isSafeInteger(transcript.id) ||
+    transcript.id < 1 ||
+    !["youtube_creator", "youtube_auto"].includes(transcript.source) ||
+    typeof transcript.language !== "string" ||
+    !transcript.language ||
+    !/^[a-f0-9]{64}$/.test(transcript.sha256) ||
+    !Array.isArray(transcript.cues) ||
+    transcript.cues.length === 0
+  ) {
+    throw new Error("Invalid persisted transcript");
+  }
+  for (const [index, cue] of transcript.cues.entries()) {
+    if (
+      !cue ||
+      typeof cue.id !== "string" ||
+      !Number.isFinite(cue.startMs) ||
+      !Number.isFinite(cue.endMs) ||
+      cue.startMs < 0 ||
+      cue.endMs <= cue.startMs ||
+      typeof cue.text !== "string"
+    ) {
+      throw new Error(`Invalid persisted transcript cue at index ${index}`);
+    }
+  }
+  if (computeTranscriptIdentity(transcript).sha256 !== transcript.sha256) {
+    throw new Error("Persisted transcript sha256 does not match its cues");
+  }
+  return transcript;
+};
+
 const validateClipPackageIdentity = (clipPackage) => {
   const videoId = requiredPathPart(clipPackage.videoId, "video ID");
   const packageVersion = requiredPathPart(
@@ -196,7 +230,8 @@ const validateClipPackageIdentity = (clipPackage) => {
   if (!Number.isFinite(clipPackage.score)) {
     throw new Error(`Invalid package score: ${clipPackage.score}`);
   }
-  return { ...clipPackage, videoId, packageVersion };
+  const transcript = validateTranscript(clipPackage.transcript);
+  return { ...clipPackage, videoId, packageVersion, transcript };
 };
 
 export const getClipPackagePaths = (
@@ -363,6 +398,35 @@ const readAndValidateManifest = async (
       "video identity mismatch",
     );
   }
+  const expectedTranscript = clipPackage.transcript;
+  if (expectedTranscript) {
+    const transcript = manifest.transcript;
+    if (
+      !transcript ||
+      typeof transcript !== "object" ||
+      Array.isArray(transcript) ||
+      Object.keys(transcript).sort().join(",") !==
+        "id,language,sha256,source" ||
+      transcript.id !== expectedTranscript.id ||
+      transcript.sha256 !== expectedTranscript.sha256 ||
+      transcript.source !== expectedTranscript.source ||
+      transcript.language !== expectedTranscript.language
+    ) {
+      throw invalidPackage(
+        projectRoot,
+        directory,
+        kind,
+        "transcript identity mismatch",
+      );
+    }
+  } else if (manifest.transcript !== undefined) {
+    throw invalidPackage(
+      projectRoot,
+      directory,
+      kind,
+      "unexpected transcript identity",
+    );
+  }
   const interval = manifest.interval;
   if (
     !interval ||
@@ -434,6 +498,17 @@ const readAndValidateManifest = async (
   }
   if (assetRoles.some((role) => !recordsByRole.has(role))) {
     throw invalidPackage(projectRoot, directory, kind, "missing asset role");
+  }
+  if (
+    expectedTranscript &&
+    recordsByRole.get("captions").provenance !== expectedTranscript.source
+  ) {
+    throw invalidPackage(
+      projectRoot,
+      directory,
+      kind,
+      "caption transcript provenance mismatch",
+    );
   }
 
   for (const role of assetRoles) {
@@ -602,40 +677,59 @@ export const acquireClipPackageAssets = async (
       );
     }
 
-    const captionTemplate = join(paths.stagingDirectory, "captions.%(ext)s");
-    await runCommand(
-      "yt-dlp",
-      buildCaptionArgs({
-        sourceUrl: validatedPackage.sourceUrl,
-        outputTemplate: captionTemplate,
-        automatic: false,
-      }),
-    );
-    let srtPath = await findGeneratedFile(paths.stagingDirectory, ".srt");
-    let captionsProvenance = "youtube_creator";
-    if (!srtPath) {
+    let localCaptions;
+    let captionsProvenance;
+    if (validatedPackage.transcript) {
+      captionsProvenance = validatedPackage.transcript.source;
+      localCaptions = trimAndRebaseCaptions(
+        splitCaptionsIntoTimedWords(
+          validatedPackage.transcript.cues.map((cue) => ({
+            ...cue,
+            timestampMs: cue.startMs + (cue.endMs - cue.startMs) / 2,
+            confidence: null,
+          })),
+        ),
+        validatedPackage,
+      );
+    } else {
+      const captionTemplate = join(paths.stagingDirectory, "captions.%(ext)s");
       await runCommand(
         "yt-dlp",
         buildCaptionArgs({
           sourceUrl: validatedPackage.sourceUrl,
           outputTemplate: captionTemplate,
-          automatic: true,
+          automatic: false,
         }),
       );
-      srtPath = await findGeneratedFile(paths.stagingDirectory, ".srt");
-      captionsProvenance = "youtube_auto";
-    }
-    if (!srtPath) {
-      throw new Error(
-        "YouTube captions are unavailable for the selected video",
+      let srtPath = await findGeneratedFile(paths.stagingDirectory, ".srt");
+      captionsProvenance = "youtube_creator";
+      if (!srtPath) {
+        await runCommand(
+          "yt-dlp",
+          buildCaptionArgs({
+            sourceUrl: validatedPackage.sourceUrl,
+            outputTemplate: captionTemplate,
+            automatic: true,
+          }),
+        );
+        srtPath = await findGeneratedFile(paths.stagingDirectory, ".srt");
+        captionsProvenance = "youtube_auto";
+      }
+      if (!srtPath) {
+        throw new Error(
+          "YouTube captions are unavailable for the selected video",
+        );
+      }
+      await assertNonemptyFile(srtPath, "captions");
+      const { captions } = parseSrt({
+        input: await readFile(srtPath, "utf8"),
+      });
+      localCaptions = trimAndRebaseCaptions(
+        splitCaptionsIntoTimedWords(captions),
+        validatedPackage,
       );
+      await removeGeneratedFiles(paths.stagingDirectory, ".srt");
     }
-    await assertNonemptyFile(srtPath, "captions");
-    const { captions } = parseSrt({ input: await readFile(srtPath, "utf8") });
-    const localCaptions = trimAndRebaseCaptions(
-      splitCaptionsIntoTimedWords(captions),
-      validatedPackage,
-    );
     if (localCaptions.length === 0) {
       throw new Error("YouTube captions do not overlap the selected clip");
     }
@@ -644,7 +738,6 @@ export const acquireClipPackageAssets = async (
       captionsPath,
       `${JSON.stringify(localCaptions, null, 2)}\n`,
     );
-    await removeGeneratedFiles(paths.stagingDirectory, ".srt");
 
     const thumbnailTemplate = join(paths.stagingDirectory, "thumbnail.%(ext)s");
     await runCommand(
@@ -681,6 +774,16 @@ export const acquireClipPackageAssets = async (
             endSeconds: validatedPackage.endSeconds,
             score: validatedPackage.score,
           },
+          ...(validatedPackage.transcript
+            ? {
+                transcript: {
+                  id: validatedPackage.transcript.id,
+                  sha256: validatedPackage.transcript.sha256,
+                  source: validatedPackage.transcript.source,
+                  language: validatedPackage.transcript.language,
+                },
+              }
+            : {}),
           assets: [
             { role: "audio", fileName: "audio.wav", provenance: "yt_dlp" },
             {

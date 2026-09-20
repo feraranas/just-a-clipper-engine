@@ -1,7 +1,10 @@
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
+
 export const processClipPackages = async ({
   ledger,
   registry,
   treatments,
+  loadTranscriptForPackage,
   acquireAssets,
   renderTreatment,
 }) => {
@@ -9,10 +12,20 @@ export const processClipPackages = async ({
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
   };
+  const transcriptsById = new Map();
 
   for (const clipPackage of ledger.listSelectedPackages()) {
     try {
-      const assets = await acquireAssets(clipPackage);
+      const loadedTranscript = await loadTranscriptForPackage(clipPackage.id);
+      let transcript = null;
+      if (loadedTranscript) {
+        transcript = transcriptsById.get(loadedTranscript.id);
+        if (!transcript) {
+          transcript = loadedTranscript;
+          transcriptsById.set(loadedTranscript.id, transcript);
+        }
+      }
+      const assets = await acquireAssets({ ...clipPackage, transcript });
       ledger.markPackageReady({ packageId: clipPackage.id, assets });
       result.packages.ready += 1;
     } catch (error) {
@@ -50,4 +63,3 @@ export const processClipPackages = async ({
 
   return result;
 };
-import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
