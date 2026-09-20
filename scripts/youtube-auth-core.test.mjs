@@ -27,17 +27,26 @@ test("parseInstalledClient reads a desktop OAuth client", () => {
 test("mergeOAuthTokens preserves an existing refresh token", () => {
   assert.deepEqual(
     mergeOAuthTokens(
-      {refresh_token: "keep-me", access_token: "old"},
-      {access_token: "new", expiry_date: 123},
+      { refresh_token: "keep-me", access_token: "old" },
+      { access_token: "new", expiry_date: 123 },
     ),
-    {refresh_token: "keep-me", access_token: "new", expiry_date: 123},
+    { refresh_token: "keep-me", access_token: "new", expiry_date: 123 },
   );
 });
 
 test("findPlaylistByTitle follows pagination", async () => {
   const pages = new Map([
-    [undefined, {items: [{id: "other", snippet: {title: "Other"}}], nextPageToken: "next"}],
-    ["next", {items: [{id: "inbox-id", snippet: {title: "Audiogram Inbox"}}]}],
+    [
+      undefined,
+      {
+        items: [{ id: "other", snippet: { title: "Other" } }],
+        nextPageToken: "next",
+      },
+    ],
+    [
+      "next",
+      { items: [{ id: "inbox-id", snippet: { title: "Audiogram Inbox" } }] },
+    ],
   ]);
 
   const playlist = await findPlaylistByTitle(
@@ -45,5 +54,5 @@ test("findPlaylistByTitle follows pagination", async () => {
     "Audiogram Inbox",
   );
 
-  assert.deepEqual(playlist, {id: "inbox-id", title: "Audiogram Inbox"});
+  assert.deepEqual(playlist, { id: "inbox-id", title: "Audiogram Inbox" });
 });
