@@ -1,8 +1,31 @@
 import { DatabaseSync } from "node:sqlite";
 
+import { canonicalJson, sha256Canonical } from "./canonical-json.mjs";
+import {
+  buildSelectionRecipe,
+  HEATMAP_SCHEMA_SHA256,
+} from "./clip-selection-contract.mjs";
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
+import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 
-export const AUDIOGRAM_SCHEMA_VERSION = 1;
+export const AUDIOGRAM_SCHEMA_VERSION = 2;
+
+const DEFAULT_SELECTION_RECIPE = buildSelectionRecipe({
+  selectorId: "youtube-heatmap",
+});
+const LEGACY_UNKNOWN_RECIPE_OBJECT = {
+  recipeVersion: 1,
+  selector: { id: "youtube-heatmap-legacy", version: "0" },
+  provider: null,
+  prompt: null,
+  outputSchema: { version: 1, sha256: HEATMAP_SCHEMA_SHA256 },
+  parameters: { maxClips: "unknown", minimumSeparationMs: "unknown" },
+};
+const LEGACY_UNKNOWN_SELECTION_RECIPE = Object.freeze({
+  recipe: Object.freeze(LEGACY_UNKNOWN_RECIPE_OBJECT),
+  json: canonicalJson(LEGACY_UNKNOWN_RECIPE_OBJECT),
+  sha256: sha256Canonical(LEGACY_UNKNOWN_RECIPE_OBJECT),
+});
 
 const LEGACY_TABLES = ["processing_jobs", "clips"];
 const GENERIC_TABLES = [
@@ -64,6 +87,90 @@ const REQUIRED_SCHEMA_VERSION_1_COLUMNS = {
     "updated_at",
   ],
 };
+const REQUIRED_SCHEMA_VERSION_2_COLUMNS = {
+  ...REQUIRED_SCHEMA_VERSION_1_COLUMNS,
+  package_jobs: [
+    ...REQUIRED_SCHEMA_VERSION_1_COLUMNS.package_jobs,
+    "selection_recipe_json",
+    "selection_recipe_sha256",
+  ],
+  transcripts: [
+    "id",
+    "video_id",
+    "source",
+    "language",
+    "content_sha256",
+    "cues_json",
+    "cue_count",
+    "canonical_utf8_bytes",
+    "created_at",
+    "updated_at",
+  ],
+  selection_runs: [
+    "id",
+    "package_job_id",
+    "transcript_id",
+    "selector_id",
+    "selector_version",
+    "provider_id",
+    "model_id",
+    "prompt_version",
+    "prompt_sha256",
+    "output_schema_version",
+    "output_schema_sha256",
+    "provider_response_id",
+    "usage_json",
+    "result_json",
+    "created_at",
+    "updated_at",
+  ],
+};
+
+const isPlainObject = (value) =>
+  value !== null &&
+  typeof value === "object" &&
+  !Array.isArray(value) &&
+  [Object.prototype, null].includes(Object.getPrototypeOf(value));
+
+const validateSelectionRecipe = (selectionRecipe) => {
+  if (
+    !isPlainObject(selectionRecipe) ||
+    !isPlainObject(selectionRecipe.recipe) ||
+    typeof selectionRecipe.json !== "string" ||
+    typeof selectionRecipe.sha256 !== "string"
+  )
+    throw new Error("Invalid selection recipe envelope");
+  const json = canonicalJson(selectionRecipe.recipe);
+  const sha256 = sha256Canonical(selectionRecipe.recipe);
+  if (selectionRecipe.json !== json || selectionRecipe.sha256 !== sha256)
+    throw new Error("Selection recipe JSON/hash is not canonical");
+  return selectionRecipe;
+};
+
+const parseStoredRecipe = (row) => {
+  let recipe;
+  try {
+    recipe = JSON.parse(row.selection_recipe_json);
+  } catch {
+    throw new Error(`Package job ${row.id} has invalid selection recipe JSON`);
+  }
+  let json;
+  let sha256;
+  try {
+    json = canonicalJson(recipe);
+    sha256 = sha256Canonical(recipe);
+  } catch {
+    throw new Error(`Package job ${row.id} has invalid selection recipe JSON`);
+  }
+  if (
+    row.selection_recipe_json !== json ||
+    row.selection_recipe_sha256 !== sha256
+  )
+    throw new Error(
+      `Package job ${row.id} selection recipe JSON/hash is not canonical`,
+    );
+  return { recipe, json, sha256 };
+};
 
 const mapVideo = (row) =>
   row
@@ -85,6 +192,8 @@ const mapPackageJob = (row) =>
         packageVersion: row.package_version,
         status: row.status,
         heatmapJson: row.heatmap_json,
+        selectionRecipeJson: row.selection_recipe_json,
+        selectionRecipeSha256: row.selection_recipe_sha256,
         lastError: row.last_error,
         createdAt: row.created_at,
         updatedAt: row.updated_at,
@@ -126,6 +235,61 @@ const mapTreatmentRun = (row) => ({
   createdAt: row.created_at,
   updatedAt: row.updated_at,
 });
+
+const mapSelectionRun = (row) =>
+  row
+    ? {
+        id: row.id,
+        packageJobId: row.package_job_id,
+        transcriptId: row.transcript_id,
+        selectorId: row.selector_id,
+        selectorVersion: row.selector_version,
+        providerId: row.provider_id,
+        modelId: row.model_id,
+        promptVersion: row.prompt_version,
+        promptSha256: row.prompt_sha256,
+        outputSchemaVersion: row.output_schema_version,
+        outputSchemaSha256: row.output_schema_sha256,
+        providerResponseId: row.provider_response_id,
+        usage: row.usage_json === null ? null : JSON.parse(row.usage_json),
+        result: JSON.parse(row.result_json),
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      }
+    : null;
+
+const mapTranscript = (row) => {
+  if (!row) return null;
+  let cues;
+  try {
+    cues = JSON.parse(row.cues_json);
+  } catch {
+    throw new Error(`Transcript ${row.id} has invalid cue JSON`);
+  }
+  const identity = computeTranscriptIdentity({
+    source: row.source,
+    language: row.language,
+    cues,
+  });
+  if (
+    row.cue_count !== cues.length ||
+    row.content_sha256 !== identity.sha256 ||
+    row.canonical_utf8_bytes !== identity.canonicalUtf8Bytes
+  )
+    throw new Error(`Transcript ${row.id} persisted identity does not match`);
+  return {
+    id: row.id,
+    videoId: row.video_id,
+    source: row.source,
+    language: row.language,
+    sha256: row.content_sha256,
+    cues,
+    cueCount: row.cue_count,
+    canonicalUtf8Bytes: row.canonical_utf8_bytes,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+};
 
 const tableExists = (database, name) =>
   Boolean(
@@ -176,7 +340,7 @@ const classifyUnversionedSchema = (database) => {
   );
 };
 
-const createGenericTables = (database) => {
+const createSchemaVersion1Tables = (database) => {
   database.exec(`
     CREATE TABLE IF NOT EXISTS videos (
       video_id TEXT PRIMARY KEY,
@@ -248,7 +412,7 @@ const createGenericTables = (database) => {
 };
 
 const migrateLegacyTables = (database) => {
-  createGenericTables(database);
+  createSchemaVersion1Tables(database);
   database.exec(`
     INSERT INTO package_jobs (
       id, video_id, package_version, status, heatmap_json, last_error,
@@ -315,13 +479,11 @@ const ensureClipAssetColumns = (database) => {
   }
 };
 
-const validateSchemaVersion1 = (database) => {
-  for (const [table, requiredColumns] of Object.entries(
-    REQUIRED_SCHEMA_VERSION_1_COLUMNS,
-  )) {
+const validateRequiredColumns = (database, version, requiredTables) => {
+  for (const [table, requiredColumns] of Object.entries(requiredTables)) {
     if (!tableExists(database, table)) {
       throw new Error(
-        `Invalid audiogram schema version 1: missing table ${table}`,
+        `Invalid audiogram schema version ${version}: missing table ${table}`,
       );
     }
     const presentColumns = new Set(
@@ -335,38 +497,468 @@ const validateSchemaVersion1 = (database) => {
     );
     if (missingColumns.length > 0) {
       throw new Error(
-        `Invalid audiogram schema version 1: table ${table} missing columns ` +
+        `Invalid audiogram schema version ${version}: table ${table} missing columns ` +
           missingColumns.join(", "),
       );
     }
   }
 };
 
-const migrateSchema = (database) => {
+const quoteIdentifier = (value) => `"${value.replaceAll('"', '""')}"`;
+
+const normalizedTableSql = (database, table) =>
+  database
+    .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+    .get(table)
+    ?.sql?.replace(/\s+/g, " ")
+    .trim()
+    .toLowerCase();
+
+const uniqueColumnSets = (database, table) =>
+  database
+    .prepare(`PRAGMA index_list(${quoteIdentifier(table)})`)
+    .all()
+    .filter((index) => index.unique === 1 && index.origin !== "pk")
+    .map((index) =>
+      database
+        .prepare(`PRAGMA index_info(${quoteIdentifier(index.name)})`)
+        .all()
+        .sort((left, right) => left.seqno - right.seqno)
+        .map(({ name }) => name)
+        .join(","),
+    )
+    .sort();
+
+const foreignKeyContracts = (database, table) =>
+  database
+    .prepare(`PRAGMA foreign_key_list(${quoteIdentifier(table)})`)
+    .all()
+    .map((foreignKey) =>
+      [
+        foreignKey.from,
+        foreignKey.table,
+        foreignKey.to,
+        foreignKey.on_update,
+        foreignKey.on_delete,
+      ].join("|"),
+    )
+    .sort();
+
+const VERSION_1_STRUCTURE = {
+  videos: { unique: [], foreignKeys: [], checks: [] },
+  package_jobs: {
+    unique: ["video_id,package_version"],
+    foreignKeys: ["video_id|videos|video_id|NO ACTION|CASCADE"],
+    checks: [
+      "check (status in ('discovered', 'heatmap_ready', 'no_heatmap', 'failed'))",
+    ],
+  },
+  clip_packages: {
+    unique: ["package_job_id,rank"],
+    foreignKeys: ["package_job_id|package_jobs|id|NO ACTION|CASCADE"],
+    checks: [
+      "check (rank >= 1)",
+      "check (start_seconds >= 0)",
+      "check (end_seconds > start_seconds)",
+      "check (status in ('selected', 'ready', 'failed'))",
+    ],
+  },
+  clip_assets: {
+    unique: ["clip_package_id,role"],
+    foreignKeys: ["clip_package_id|clip_packages|id|NO ACTION|CASCADE"],
+    checks: [],
+  },
+  treatment_runs: {
+    unique: ["clip_package_id,treatment_id,treatment_version"],
+    foreignKeys: ["clip_package_id|clip_packages|id|NO ACTION|CASCADE"],
+    checks: ["check (status in ('pending', 'rendered', 'failed'))"],
+  },
+};
+
+const validateSchemaVersion1 = (database) => {
+  validateRequiredColumns(database, 1, REQUIRED_SCHEMA_VERSION_1_COLUMNS);
+  const tableList = new Map(
+    database
+      .prepare("PRAGMA table_list")
+      .all()
+      .filter(({ schema }) => schema === "main")
+      .map((row) => [row.name, row]),
+  );
+  for (const [table, expected] of Object.entries(VERSION_1_STRUCTURE)) {
+    const sql = normalizedTableSql(database, table);
+    if (!sql || tableList.get(table)?.strict !== 1 || !/\) strict$/.test(sql))
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} missing STRICT structural invariant`,
+      );
+    for (const check of expected.checks)
+      if (!sql.includes(check))
+        throw new Error(
+          `Invalid audiogram schema version 1: table ${table} missing CHECK structural invariant`,
+        );
+    if (
+      JSON.stringify(uniqueColumnSets(database, table)) !==
+      JSON.stringify(expected.unique)
+    )
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} has altered UNIQUE structural invariants`,
+      );
+    if (
+      JSON.stringify(foreignKeyContracts(database, table)) !==
+      JSON.stringify(expected.foreignKeys)
+    )
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} has altered foreign-key structural invariants`,
+      );
+  }
+};
+
+const validateSchemaVersion2 = (database, { validateRecipes = false } = {}) => {
+  validateRequiredColumns(database, 2, REQUIRED_SCHEMA_VERSION_2_COLUMNS);
+  if (validateRecipes)
+    for (const row of database.prepare("SELECT * FROM package_jobs").all())
+      parseStoredRecipe(row);
+  const foreignKeyFailures = database.prepare("PRAGMA foreign_key_check").all();
+  if (foreignKeyFailures.length > 0)
+    throw new Error(
+      "Invalid audiogram schema version 2: foreign-key check failed",
+    );
+};
+
+const validateLegacyHeatmapRecipeMap = (mapping, packageVersions) => {
+  if (!isPlainObject(mapping))
+    throw new Error("Invalid legacy heatmap recipe mapping");
+  for (const [version, parameters] of Object.entries(mapping)) {
+    if (!packageVersions.has(version))
+      throw new Error(
+        `Legacy heatmap recipe mapping references absent package version ${version}`,
+      );
+    if (
+      !isPlainObject(parameters) ||
+      Object.keys(parameters).sort().join(",") !==
+        "maxClips,minimumSeparationMs" ||
+      !Number.isSafeInteger(parameters.maxClips) ||
+      parameters.maxClips < 1 ||
+      !Number.isSafeInteger(parameters.minimumSeparationMs) ||
+      parameters.minimumSeparationMs < 0
+    )
+      throw new Error("Invalid legacy heatmap recipe mapping");
+  }
+};
+
+const normalizeHeatmap = (value, label = "heatmap") => {
+  if (!Array.isArray(value)) throw new Error(`Invalid ${label} JSON`);
+  return value.map((item, index) => {
+    if (
+      !isPlainObject(item) ||
+      !Number.isFinite(item.startTime) ||
+      !Number.isFinite(item.endTime) ||
+      !Number.isFinite(item.value)
+    )
+      throw new Error(`Invalid ${label} item at index ${index}`);
+    return {
+      startTime: item.startTime,
+      endTime: item.endTime,
+      value: item.value,
+    };
+  });
+};
+
+const normalizePackages = (packages, { milliseconds = false } = {}) => {
+  if (!Array.isArray(packages)) throw new Error("Invalid selected packages");
+  return packages.map((item, index) => {
+    const startSeconds = milliseconds
+      ? item?.startMs / 1_000
+      : item?.startSeconds;
+    const endSeconds = milliseconds ? item?.endMs / 1_000 : item?.endSeconds;
+    if (
+      !isPlainObject(item) ||
+      !Number.isSafeInteger(item.rank) ||
+      item.rank < 1 ||
+      !Number.isFinite(startSeconds) ||
+      startSeconds < 0 ||
+      !Number.isFinite(endSeconds) ||
+      endSeconds <= startSeconds ||
+      !Number.isFinite(item.score)
+    )
+      throw new Error(`Invalid selected package at index ${index}`);
+    return { rank: item.rank, startSeconds, endSeconds, score: item.score };
+  });
+};
+
+const createSchemaVersion2Tables = (database) => {
+  database.exec(`
+    CREATE TABLE package_jobs_v2 (
+      id INTEGER PRIMARY KEY,
+      video_id TEXT NOT NULL REFERENCES videos(video_id) ON DELETE CASCADE,
+      package_version TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'discovered'
+        CHECK (status IN ('discovered', 'selection_ready', 'no_selection', 'failed')),
+      heatmap_json TEXT,
+      selection_recipe_json TEXT NOT NULL CHECK(json_valid(selection_recipe_json)),
+      selection_recipe_sha256 TEXT NOT NULL,
+      last_error TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE (video_id, package_version)
+    ) STRICT;
+
+    CREATE TABLE transcripts (
+      id INTEGER PRIMARY KEY,
+      video_id TEXT NOT NULL REFERENCES videos(video_id) ON DELETE CASCADE,
+      source TEXT NOT NULL CHECK(source IN ('youtube_creator','youtube_auto')),
+      language TEXT NOT NULL,
+      content_sha256 TEXT NOT NULL,
+      cues_json TEXT NOT NULL CHECK(json_valid(cues_json)),
+      cue_count INTEGER NOT NULL CHECK(cue_count > 0),
+      canonical_utf8_bytes INTEGER NOT NULL CHECK(canonical_utf8_bytes > 0),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(video_id, source, language, content_sha256)
+    ) STRICT;
+  `);
+};
+
+const createSelectionRunsTable = (database) => {
+  database.exec(`
+    CREATE TABLE selection_runs (
+      id INTEGER PRIMARY KEY,
+      package_job_id INTEGER NOT NULL UNIQUE REFERENCES package_jobs(id) ON DELETE CASCADE,
+      transcript_id INTEGER REFERENCES transcripts(id) ON DELETE RESTRICT,
+      selector_id TEXT NOT NULL,
+      selector_version TEXT NOT NULL,
+      provider_id TEXT,
+      model_id TEXT,
+      prompt_version TEXT,
+      prompt_sha256 TEXT,
+      output_schema_version INTEGER NOT NULL,
+      output_schema_sha256 TEXT NOT NULL,
+      provider_response_id TEXT,
+      usage_json TEXT CHECK(usage_json IS NULL OR json_valid(usage_json)),
+      result_json TEXT NOT NULL CHECK(json_valid(result_json)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+  `);
+};
+
+const recipeForLegacyJob = ({
+  row,
+  hasClips,
+  selectionRecipe,
+  packageVersion,
+  legacyHeatmapRecipeMap,
+}) => {
+  const terminal =
+    row.status === "heatmap_ready" || row.status === "no_heatmap" || hasClips;
+  if (!terminal)
+    return row.package_version === packageVersion
+      ? selectionRecipe
+      : LEGACY_UNKNOWN_SELECTION_RECIPE;
+  const mapped = legacyHeatmapRecipeMap[row.package_version];
+  return mapped
+    ? buildSelectionRecipe({ selectorId: "youtube-heatmap", ...mapped })
+    : LEGACY_UNKNOWN_SELECTION_RECIPE;
+};
+
+const insertSelectionRun = (
+  database,
+  {
+    jobId,
+    transcriptId = null,
+    selectionRecipe,
+    provenance = {},
+    result,
+    createdAt,
+    updatedAt,
+  },
+) => {
+  const { recipe } = selectionRecipe;
+  database
+    .prepare(
+      `
+      INSERT INTO selection_runs (
+        package_job_id, transcript_id, selector_id, selector_version,
+        provider_id, model_id, prompt_version, prompt_sha256,
+        output_schema_version, output_schema_sha256, provider_response_id,
+        usage_json, result_json, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(package_job_id) DO UPDATE SET
+        transcript_id = excluded.transcript_id,
+        selector_id = excluded.selector_id,
+        selector_version = excluded.selector_version,
+        provider_id = excluded.provider_id,
+        model_id = excluded.model_id,
+        prompt_version = excluded.prompt_version,
+        prompt_sha256 = excluded.prompt_sha256,
+        output_schema_version = excluded.output_schema_version,
+        output_schema_sha256 = excluded.output_schema_sha256,
+        provider_response_id = excluded.provider_response_id,
+        usage_json = excluded.usage_json,
+        result_json = excluded.result_json,
+        updated_at = excluded.updated_at
+    `,
+    )
+    .run(
+      jobId,
+      transcriptId,
+      recipe.selector.id,
+      recipe.selector.version,
+      recipe.provider?.id ?? null,
+      recipe.provider?.model ?? null,
+      recipe.prompt?.version ?? null,
+      recipe.prompt?.sha256 ?? null,
+      recipe.outputSchema.version,
+      recipe.outputSchema.sha256,
+      provenance.responseId ?? null,
+      provenance.usage === undefined ? null : canonicalJson(provenance.usage),
+      canonicalJson(result),
+      createdAt,
+      updatedAt,
+    );
+};
+
+const migrateToSchemaVersion2 = (
+  database,
+  { selectionRecipe, packageVersion, legacyHeatmapRecipeMap },
+) => {
+  database.exec("PRAGMA foreign_keys = OFF");
   database.exec("BEGIN IMMEDIATE");
   try {
-    const classification = classifyUnversionedSchema(database);
-    if (classification === "fresh") {
-      createGenericTables(database);
-    } else if (classification === "legacy") {
-      migrateLegacyTables(database);
-    } else {
-      ensureClipAssetColumns(database);
+    if (readSchemaVersion(database) === 0) {
+      const classification = classifyUnversionedSchema(database);
+      if (classification === "fresh") {
+        createSchemaVersion1Tables(database);
+      } else if (classification === "legacy") {
+        migrateLegacyTables(database);
+      } else {
+        ensureClipAssetColumns(database);
+      }
     }
-
     validateSchemaVersion1(database);
+    const jobs = database
+      .prepare("SELECT * FROM package_jobs ORDER BY id")
+      .all();
+    const packageVersions = new Set(jobs.map((row) => row.package_version));
+    validateLegacyHeatmapRecipeMap(legacyHeatmapRecipeMap, packageVersions);
+    const clipCounts = new Map(
+      database
+        .prepare(
+          "SELECT package_job_id, COUNT(*) AS count FROM clip_packages GROUP BY package_job_id",
+        )
+        .all()
+        .map((row) => [row.package_job_id, row.count]),
+    );
+
+    createSchemaVersion2Tables(database);
+    const insertJob = database.prepare(`
+      INSERT INTO package_jobs_v2 (
+        id, video_id, package_version, status, heatmap_json,
+        selection_recipe_json, selection_recipe_sha256, last_error,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+    const completedRuns = [];
+    for (const row of jobs) {
+      const hasClips = (clipCounts.get(row.id) ?? 0) > 0;
+      const recipe = recipeForLegacyJob({
+        row,
+        hasClips,
+        selectionRecipe,
+        packageVersion,
+        legacyHeatmapRecipeMap,
+      });
+      const status =
+        row.status === "heatmap_ready"
+          ? "selection_ready"
+          : row.status === "no_heatmap"
+            ? "no_selection"
+            : row.status;
+      insertJob.run(
+        row.id,
+        row.video_id,
+        row.package_version,
+        status,
+        row.heatmap_json,
+        recipe.json,
+        recipe.sha256,
+        row.last_error,
+        row.created_at,
+        row.updated_at,
+      );
+      if (
+        row.status === "heatmap_ready" ||
+        row.status === "no_heatmap" ||
+        hasClips
+      ) {
+        let parsedHeatmap = [];
+        if (row.heatmap_json !== null) {
+          try {
+            parsedHeatmap = JSON.parse(row.heatmap_json);
+          } catch {
+            throw new Error(`Invalid heatmap JSON for package job ${row.id}`);
+          }
+        }
+        const clips = database
+          .prepare(
+            `SELECT rank, start_seconds, end_seconds, score
+             FROM clip_packages WHERE package_job_id = ? ORDER BY rank`,
+          )
+          .all(row.id)
+          .map((clip) => ({
+            rank: clip.rank,
+            startSeconds: clip.start_seconds,
+            endSeconds: clip.end_seconds,
+            score: clip.score,
+          }));
+        completedRuns.push({
+          row,
+          recipe,
+          result: {
+            schemaVersion: 1,
+            heatmap: normalizeHeatmap(parsedHeatmap, "heatmap migration"),
+            clips: normalizePackages(clips),
+          },
+        });
+      }
+    }
+    database.exec(`
+      DROP TABLE package_jobs;
+      ALTER TABLE package_jobs_v2 RENAME TO package_jobs;
+      CREATE INDEX package_jobs_status_idx ON package_jobs(status);
+    `);
+    createSelectionRunsTable(database);
+    for (const { row, recipe, result } of completedRuns)
+      insertSelectionRun(database, {
+        jobId: row.id,
+        selectionRecipe: recipe,
+        result,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at,
+      });
+
+    validateSchemaVersion2(database, { validateRecipes: true });
     database.exec(`PRAGMA user_version = ${AUDIOGRAM_SCHEMA_VERSION}`);
     database.exec("COMMIT");
   } catch (error) {
     database.exec("ROLLBACK");
+    database.exec("PRAGMA foreign_keys = ON");
     throw error;
   }
+  database.exec("PRAGMA foreign_keys = ON");
 };
 
 export const openAudiogramLedger = (
   path,
-  { now = () => new Date().toISOString() } = {},
+  {
+    now = () => new Date().toISOString(),
+    selectionRecipe = DEFAULT_SELECTION_RECIPE,
+    packageVersion = "v1",
+    legacyHeatmapRecipeMap = {},
+  } = {},
 ) => {
+  const currentSelectionRecipe = validateSelectionRecipe(selectionRecipe);
+  if (typeof packageVersion !== "string" || !packageVersion)
+    throw new Error("packageVersion must be a nonempty string");
   const database = new DatabaseSync(path, { timeout: 5_000 });
   try {
     const schemaVersion = readSchemaVersion(database);
@@ -380,11 +972,19 @@ export const openAudiogramLedger = (
       throw new Error(`Unsupported audiogram schema version ${schemaVersion}`);
     }
 
-    database.exec("PRAGMA foreign_keys = ON");
-    if (schemaVersion === 0) {
-      migrateSchema(database);
+    if (schemaVersion === 0 || schemaVersion === 1) {
+      if (schemaVersion === 1) validateSchemaVersion1(database);
+      migrateToSchemaVersion2(database, {
+        selectionRecipe: currentSelectionRecipe,
+        packageVersion,
+        legacyHeatmapRecipeMap,
+      });
     } else {
-      validateSchemaVersion1(database);
+      database.exec("PRAGMA foreign_keys = ON");
+      validateSchemaVersion2(database);
+    }
+    if (!database.prepare("PRAGMA foreign_keys").get().foreign_keys) {
+      database.exec("PRAGMA foreign_keys = ON");
     }
     database.exec("PRAGMA journal_mode = WAL");
   } catch (error) {
@@ -399,7 +999,56 @@ export const openAudiogramLedger = (
     "SELECT * FROM package_jobs WHERE video_id = ? AND package_version = ?",
   );
 
-  const syncPlaylistVideos = ({ playlistId, packageVersion, videos }) => {
+  const jobHasCompletedSelection = (row) =>
+    row.status === "selection_ready" ||
+    row.status === "no_selection" ||
+    Boolean(
+      database
+        .prepare("SELECT 1 FROM selection_runs WHERE package_job_id = ?")
+        .get(row.id),
+    ) ||
+    Boolean(
+      database
+        .prepare("SELECT 1 FROM clip_packages WHERE package_job_id = ? LIMIT 1")
+        .get(row.id),
+    );
+
+  const ensureJobRecipe = (
+    row,
+    requestedRecipe,
+    { adoptUnprocessed = false } = {},
+  ) => {
+    const stored = parseStoredRecipe(row);
+    if (stored.sha256 === requestedRecipe.sha256) return;
+    const isLegacyUnknown =
+      stored.recipe?.selector?.id === "youtube-heatmap-legacy" &&
+      stored.recipe?.selector?.version === "0";
+    if (adoptUnprocessed && isLegacyUnknown && !jobHasCompletedSelection(row)) {
+      database
+        .prepare(
+          `UPDATE package_jobs
+           SET selection_recipe_json = ?, selection_recipe_sha256 = ?, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(requestedRecipe.json, requestedRecipe.sha256, now(), row.id);
+      return;
+    }
+    if (isLegacyUnknown)
+      throw new Error(
+        `Package version ${row.package_version} uses a historical selection whose prior settings are unknowable; set a new AUDIOGRAM_PACKAGE_VERSION`,
+      );
+    throw new Error(
+      `Selection recipe changed for package version ${row.package_version}; use a new package version`,
+    );
+  };
+
+  const syncPlaylistVideos = ({
+    playlistId,
+    packageVersion,
+    videos,
+    selectionRecipe = currentSelectionRecipe,
+  }) => {
+    const requestedRecipe = validateSelectionRecipe(selectionRecipe);
     let discovered = 0;
     let existing = 0;
     const timestamp = now();
@@ -417,11 +1066,20 @@ export const openAudiogramLedger = (
       `);
       const createJob = database.prepare(`
         INSERT INTO package_jobs (
-          video_id, package_version, status, created_at, updated_at
-        ) VALUES (?, ?, 'discovered', ?, ?)
+          video_id, package_version, status, selection_recipe_json,
+          selection_recipe_sha256, created_at, updated_at
+        ) VALUES (?, ?, 'discovered', ?, ?, ?, ?)
         ON CONFLICT(video_id, package_version) DO NOTHING
       `);
       for (const video of videos) {
+        const existingJob = getPackageJobStatement.get(
+          video.videoId,
+          packageVersion,
+        );
+        if (existingJob)
+          ensureJobRecipe(existingJob, requestedRecipe, {
+            adoptUnprocessed: true,
+          });
         if (getVideoStatement.get(video.videoId)) existing += 1;
         else discovered += 1;
         upsertVideo.run(
@@ -432,7 +1090,14 @@ export const openAudiogramLedger = (
           timestamp,
           timestamp,
         );
-        createJob.run(video.videoId, packageVersion, timestamp, timestamp);
+        createJob.run(
+          video.videoId,
+          packageVersion,
+          requestedRecipe.json,
+          requestedRecipe.sha256,
+          timestamp,
+          timestamp,
+        );
       }
       database.exec("COMMIT");
     } catch (error) {
@@ -442,11 +1107,100 @@ export const openAudiogramLedger = (
     return { discovered, existing };
   };
 
-  const recordHeatmapSelection = ({ jobId, heatmap, packages }) => {
+  const insertPackages = (jobId, packages, timestamp) => {
+    database
+      .prepare(
+        "DELETE FROM clip_packages WHERE package_job_id = ? AND status = 'selected'",
+      )
+      .run(jobId);
+    const insertPackage = database.prepare(`
+      INSERT INTO clip_packages (
+        package_job_id, rank, start_seconds, end_seconds, score,
+        status, created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, 'selected', ?, ?)
+      ON CONFLICT(package_job_id, rank) DO UPDATE SET
+        start_seconds = excluded.start_seconds,
+        end_seconds = excluded.end_seconds,
+        score = excluded.score,
+        updated_at = excluded.updated_at
+    `);
+    for (const clipPackage of packages)
+      insertPackage.run(
+        jobId,
+        clipPackage.rank,
+        clipPackage.startSeconds,
+        clipPackage.endSeconds,
+        clipPackage.score,
+        timestamp,
+        timestamp,
+      );
+  };
+
+  const assertSelectionCanBeRecorded = (jobId) => {
+    const existingRun = database
+      .prepare("SELECT 1 FROM selection_runs WHERE package_job_id = ?")
+      .get(jobId);
+    const existingPackage = database
+      .prepare("SELECT 1 FROM clip_packages WHERE package_job_id = ? LIMIT 1")
+      .get(jobId);
+    if (existingRun || existingPackage)
+      throw new Error(
+        `Selection for package job ${jobId} is already completed and immutable`,
+      );
+  };
+
+  const validateUsage = (usage) => {
+    if (usage === undefined) return;
+    if (!isPlainObject(usage)) throw new Error("Invalid provider usage");
+    const scalar = new Set(["input_tokens", "output_tokens", "total_tokens"]);
+    const nested = new Map([
+      ["input_tokens_details", new Set(["cached_tokens"])],
+      ["output_tokens_details", new Set(["reasoning_tokens"])],
+    ]);
+    for (const [key, value] of Object.entries(usage)) {
+      if (scalar.has(key)) {
+        if (!Number.isSafeInteger(value) || value < 0)
+          throw new Error("Invalid provider usage");
+      } else if (nested.has(key)) {
+        if (!isPlainObject(value)) throw new Error("Invalid provider usage");
+        for (const [nestedKey, nestedValue] of Object.entries(value))
+          if (
+            !nested.get(key).has(nestedKey) ||
+            !Number.isSafeInteger(nestedValue) ||
+            nestedValue < 0
+          )
+            throw new Error("Invalid provider usage");
+      } else {
+        throw new Error("Invalid provider usage");
+      }
+    }
+  };
+
+  const recordHeatmapSelection = ({
+    jobId,
+    heatmap,
+    packages,
+    selectionRecipe = currentSelectionRecipe,
+  }) => {
+    const requestedRecipe = validateSelectionRecipe(selectionRecipe);
+    if (
+      requestedRecipe.recipe.selector.id !== "youtube-heatmap" ||
+      requestedRecipe.recipe.outputSchema.sha256 !== HEATMAP_SCHEMA_SHA256
+    )
+      throw new Error("Heatmap selection requires the current heatmap recipe");
+    const normalizedHeatmap = normalizeHeatmap(heatmap);
+    const normalizedPackages = normalizePackages(packages);
     const timestamp = now();
-    const status = packages.length > 0 ? "heatmap_ready" : "no_heatmap";
+    const status =
+      normalizedPackages.length > 0 ? "selection_ready" : "no_selection";
     database.exec("BEGIN IMMEDIATE");
     try {
+      const job = database
+        .prepare("SELECT * FROM package_jobs WHERE id = ?")
+        .get(jobId);
+      if (!job) throw new Error(`Unknown package job ${jobId}`);
+      ensureJobRecipe(job, requestedRecipe);
+      assertSelectionCanBeRecorded(jobId);
       database
         .prepare(
           `
@@ -455,34 +1209,126 @@ export const openAudiogramLedger = (
         WHERE id = ?
       `,
         )
-        .run(status, JSON.stringify(heatmap), timestamp, jobId);
-      database
+        .run(status, canonicalJson(normalizedHeatmap), timestamp, jobId);
+      insertPackages(jobId, normalizedPackages, timestamp);
+      insertSelectionRun(database, {
+        jobId,
+        selectionRecipe: requestedRecipe,
+        result: {
+          schemaVersion: 1,
+          heatmap: normalizedHeatmap,
+          clips: normalizedPackages,
+        },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      database.exec("COMMIT");
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  };
+
+  const recordTranscriptSelection = ({
+    jobId,
+    transcript,
+    result,
+    packages,
+    provenance,
+    selectionRecipe = currentSelectionRecipe,
+  }) => {
+    const requestedRecipe = validateSelectionRecipe(selectionRecipe);
+    const { recipe } = requestedRecipe;
+    if (recipe.selector.id !== "transcript-llm" || !recipe.provider)
+      throw new Error("Transcript selection requires a transcript recipe");
+    if (
+      !isPlainObject(transcript) ||
+      !["youtube_creator", "youtube_auto"].includes(transcript.source) ||
+      typeof transcript.language !== "string" ||
+      !transcript.language ||
+      !Array.isArray(transcript.cues) ||
+      transcript.cues.length === 0
+    )
+      throw new Error("Invalid transcript envelope");
+    const identity = computeTranscriptIdentity(transcript);
+    if (
+      transcript.sha256 !== identity.sha256 ||
+      transcript.canonicalUtf8Bytes !== identity.canonicalUtf8Bytes
+    )
+      throw new Error(
+        "Transcript identity or sha256 does not match its content",
+      );
+    if (!isPlainObject(result)) throw new Error("Invalid transcript result");
+    const normalizedPackages = normalizePackages(packages, {
+      milliseconds: true,
+    });
+    if (
+      !isPlainObject(provenance) ||
+      provenance.providerId !== recipe.provider.id ||
+      provenance.model !== recipe.provider.model ||
+      provenance.recipeSha256 !== requestedRecipe.sha256 ||
+      (provenance.responseId !== undefined &&
+        (typeof provenance.responseId !== "string" ||
+          !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$/.test(provenance.responseId)))
+    )
+      throw new Error("Transcript provider provenance does not match recipe");
+    validateUsage(provenance.usage);
+    const timestamp = now();
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      const job = database
+        .prepare("SELECT * FROM package_jobs WHERE id = ?")
+        .get(jobId);
+      if (!job) throw new Error(`Unknown package job ${jobId}`);
+      ensureJobRecipe(job, requestedRecipe);
+      assertSelectionCanBeRecorded(jobId);
+      const upsertedTranscript = database
         .prepare(
-          "DELETE FROM clip_packages WHERE package_job_id = ? AND status = 'selected'",
+          `
+          INSERT INTO transcripts (
+            video_id, source, language, content_sha256, cues_json, cue_count,
+            canonical_utf8_bytes, created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(video_id, source, language, content_sha256) DO UPDATE SET
+            cues_json = excluded.cues_json,
+            cue_count = excluded.cue_count,
+            canonical_utf8_bytes = excluded.canonical_utf8_bytes,
+            updated_at = excluded.updated_at
+          RETURNING id
+        `,
         )
-        .run(jobId);
-      const insertPackage = database.prepare(`
-        INSERT INTO clip_packages (
-          package_job_id, rank, start_seconds, end_seconds, score,
-          status, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, 'selected', ?, ?)
-        ON CONFLICT(package_job_id, rank) DO UPDATE SET
-          start_seconds = excluded.start_seconds,
-          end_seconds = excluded.end_seconds,
-          score = excluded.score,
-          updated_at = excluded.updated_at
-      `);
-      for (const clipPackage of packages) {
-        insertPackage.run(
-          jobId,
-          clipPackage.rank,
-          clipPackage.startSeconds,
-          clipPackage.endSeconds,
-          clipPackage.score,
+        .get(
+          job.video_id,
+          transcript.source,
+          transcript.language,
+          identity.sha256,
+          canonicalJson(transcript.cues),
+          transcript.cues.length,
+          identity.canonicalUtf8Bytes,
           timestamp,
           timestamp,
         );
-      }
+      insertPackages(jobId, normalizedPackages, timestamp);
+      insertSelectionRun(database, {
+        jobId,
+        transcriptId: upsertedTranscript.id,
+        selectionRecipe: requestedRecipe,
+        provenance,
+        result,
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      });
+      database
+        .prepare(
+          `UPDATE package_jobs
+           SET status = ?, heatmap_json = NULL, last_error = NULL, updated_at = ?
+           WHERE id = ?`,
+        )
+        .run(
+          normalizedPackages.length > 0 ? "selection_ready" : "no_selection",
+          timestamp,
+          jobId,
+        );
       database.exec("COMMIT");
     } catch (error) {
       database.exec("ROLLBACK");
@@ -556,6 +1402,33 @@ export const openAudiogramLedger = (
     getPackageJob: (videoId, packageVersion) =>
       mapPackageJob(getPackageJobStatement.get(videoId, packageVersion)),
     getSchemaVersion: () => readSchemaVersion(database),
+    getSelectionRun: (jobId) =>
+      mapSelectionRun(
+        database
+          .prepare("SELECT * FROM selection_runs WHERE package_job_id = ?")
+          .get(jobId),
+      ),
+    getTranscript: (transcriptId) =>
+      mapTranscript(
+        database
+          .prepare("SELECT * FROM transcripts WHERE id = ?")
+          .get(transcriptId),
+      ),
+    getTranscriptForPackage: (packageId) =>
+      mapTranscript(
+        database
+          .prepare(
+            `
+            SELECT transcripts.*
+            FROM clip_packages
+            JOIN selection_runs
+              ON selection_runs.package_job_id = clip_packages.package_job_id
+            JOIN transcripts ON transcripts.id = selection_runs.transcript_id
+            WHERE clip_packages.id = ?
+          `,
+          )
+          .get(packageId),
+      ),
     getVideo: (videoId) => mapVideo(getVideoStatement.get(videoId)),
     listClipPackages: (jobId) =>
       database
@@ -737,6 +1610,7 @@ export const openAudiogramLedger = (
         .run(artifactRelativePath, now(), runId);
     },
     recordHeatmapSelection,
+    recordTranscriptSelection,
     syncPlaylistVideos,
   };
 };

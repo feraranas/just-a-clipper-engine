@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import test from "node:test";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
 import { processClipPackages } from "./clip-processing-core.mjs";
+import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import {
   audiogramBasicTreatment,
   createTreatmentRegistry,
 } from "./treatment-registry.mjs";
+import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 
 const seedPackages = (ledger, count = 1) => {
   ledger.syncPlaylistVideos({
@@ -45,6 +48,8 @@ test("a completed package and treatment are skipped on the next run", async (t) 
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
+    loadTranscriptForPackage: (packageId) =>
+      ledger.getTranscriptForPackage(packageId),
     acquireAssets: async () => {
       acquisitions += 1;
       return [
@@ -85,6 +90,8 @@ test("a failed package does not prevent another package from rendering", async (
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
+    loadTranscriptForPackage: (packageId) =>
+      ledger.getTranscriptForPackage(packageId),
     acquireAssets: async (clipPackage) => {
       if (clipPackage.rank === 1) throw new Error("caption download failed");
       return [
@@ -116,6 +123,8 @@ test("a render failure leaves the reusable package ready", async (t) => {
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
+    loadTranscriptForPackage: (packageId) =>
+      ledger.getTranscriptForPackage(packageId),
     acquireAssets: async () => [
       { role: "audio", relativePath: "public/audio.wav" },
       { role: "captions", relativePath: "public/captions.json" },
@@ -132,4 +141,186 @@ test("a render failure leaves the reusable package ready", async (t) => {
   });
   assert.equal(ledger.getClipPackage(clipPackage.id).status, "ready");
   assert.equal(ledger.listTreatmentRuns(clipPackage.id)[0].status, "failed");
+});
+
+test("reopens persisted transcript selections and reuses one transcript for partial package acquisition", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "clip-processing-transcript-"),
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const ledgerPath = join(directory, "ledger.sqlite");
+  const projectRoot = join(directory, "project");
+  const selectionRecipe = buildSelectionRecipe({
+    selectorId: "transcript-llm",
+    providerId: "openai-api",
+    desiredClipCount: 3,
+  });
+  const expectedTranscriptSha256 = (() => {
+    const cues = Array.from({ length: 12 }, (_, index) => ({
+      id: `c${String(index + 1).padStart(6, "0")}`,
+      startMs: index * 10_000,
+      endMs: (index + 1) * 10_000,
+      text: `Cue ${index + 1} persisted words`,
+    }));
+    const transcript = {
+      source: "youtube_creator",
+      language: "en",
+      cues,
+    };
+    Object.assign(transcript, computeTranscriptIdentity(transcript));
+    const ledger = openAudiogramLedger(ledgerPath, { selectionRecipe });
+    ledger.syncPlaylistVideos({
+      playlistId: "playlist-1",
+      packageVersion: "transcript-v1",
+      selectionRecipe,
+      videos: [
+        {
+          videoId: "video-1",
+          title: "A transcript video",
+          url: "https://youtu.be/video-1",
+        },
+      ],
+    });
+    const job = ledger.getPackageJob("video-1", "transcript-v1");
+    ledger.recordTranscriptSelection({
+      jobId: job.id,
+      transcript,
+      result: { clips: [{ rank: 1 }, { rank: 2 }, { rank: 3 }] },
+      packages: [
+        { rank: 1, startMs: 0, endMs: 30_000, score: 0.9 },
+        { rank: 2, startMs: 45_000, endMs: 75_000, score: 0.8 },
+        { rank: 3, startMs: 90_000, endMs: 120_000, score: 0.7 },
+      ],
+      provenance: {
+        providerId: "openai-api",
+        model: selectionRecipe.recipe.provider.model,
+        recipeSha256: selectionRecipe.sha256,
+      },
+      selectionRecipe,
+    });
+    const sha256 = transcript.sha256;
+    ledger.close();
+    return sha256;
+  })();
+
+  const ledger = openAudiogramLedger(ledgerPath, { selectionRecipe });
+  t.after(() => ledger.close());
+  const commands = [];
+  const runCommand = async (command, args) => {
+    commands.push({ command, args });
+    if (command === "ffprobe") return { stdout: "30\n" };
+    const outputTemplate = args[args.indexOf("--output") + 1];
+    await mkdir(dirname(outputTemplate), { recursive: true });
+    if (args.includes("--extract-audio")) {
+      await writeFile(outputTemplate.replace("%(ext)s", "wav"), "audio");
+    } else if (args.includes("--write-thumbnail")) {
+      await writeFile(outputTemplate.replace("%(ext)s", "jpg"), "image");
+    }
+    return { stdout: "" };
+  };
+  let transcriptLoads = 0;
+  let renders = 0;
+  const acquiredTranscripts = [];
+  const dependencies = {
+    ledger,
+    registry: createTreatmentRegistry([audiogramBasicTreatment]),
+    treatments: [{ id: "audiogram-basic", version: "1" }],
+    loadTranscriptForPackage: (packageId) => {
+      transcriptLoads += 1;
+      return ledger.getTranscriptForPackage(packageId);
+    },
+    acquireAssets: async (clipPackage) => {
+      acquiredTranscripts.push(clipPackage.transcript);
+      return acquireClipPackageAssets(clipPackage, {
+        projectRoot,
+        runCommand,
+        createStagingId: () => `package-${clipPackage.rank}`,
+      });
+    },
+    renderTreatment: async ({ clipPackage }) => {
+      renders += 1;
+      return `out/clip-${clipPackage.rank}.mp4`;
+    },
+  };
+
+  const first = await processClipPackages(dependencies);
+
+  assert.deepEqual(first, {
+    packages: { ready: 3, failed: 0 },
+    treatments: { rendered: 3, failed: 0 },
+  });
+  assert.equal(transcriptLoads, 3);
+  assert.equal(acquiredTranscripts.length, 3);
+  assert.ok(
+    acquiredTranscripts.every((value) => value === acquiredTranscripts[0]),
+  );
+  assert.equal(acquiredTranscripts[0].sha256, expectedTranscriptSha256);
+  assert.equal(
+    commands.filter(({ args }) =>
+      args.some((argument) =>
+        ["--write-subs", "--write-auto-subs"].includes(argument),
+      ),
+    ).length,
+    0,
+  );
+  assert.equal(
+    commands.filter(({ args }) => args.includes("--download-sections")).length,
+    3,
+  );
+  assert.ok(
+    commands
+      .filter(({ command }) => command === "yt-dlp")
+      .every(
+        ({ args }) =>
+          args.includes("--skip-download") ||
+          args.includes("--download-sections"),
+      ),
+  );
+  for (const rank of [1, 2, 3]) {
+    const packageDirectory = join(
+      projectRoot,
+      "public",
+      "generated",
+      "video-1",
+      "transcript-v1",
+      `clip-${rank}`,
+    );
+    const manifest = JSON.parse(
+      await readFile(join(packageDirectory, "package.json"), "utf8"),
+    );
+    const captions = JSON.parse(
+      await readFile(join(packageDirectory, "captions.json"), "utf8"),
+    );
+    assert.deepEqual(manifest.transcript, {
+      id: acquiredTranscripts[0].id,
+      sha256: expectedTranscriptSha256,
+      source: "youtube_creator",
+      language: "en",
+    });
+    assert.ok(captions.length > 0);
+    assert.ok(
+      captions.every(
+        ({ startMs, endMs, timestampMs, confidence }) =>
+          Number.isFinite(startMs) &&
+          Number.isFinite(endMs) &&
+          Number.isFinite(timestampMs) &&
+          confidence === null,
+      ),
+    );
+  }
+
+  const beforeSecond = {
+    commands: commands.length,
+    renders,
+    transcriptLoads,
+  };
+  const second = await processClipPackages(dependencies);
+  assert.deepEqual(second, {
+    packages: { ready: 0, failed: 0 },
+    treatments: { rendered: 0, failed: 0 },
+  });
+  assert.deepEqual(
+    { commands: commands.length, renders, transcriptLoads },
+    beforeSecond,
+  );
 });
