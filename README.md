@@ -50,7 +50,7 @@ public/generated/<video-id>/<package-version>/clip-<rank>/
 Rendered treatment artifacts are published under:
 
 ```text
-out/treatments/<treatment-id>/<treatment-version>/<video-id>/
+out/treatments/<treatment-id>/<treatment-version>/<video-id>/<package-version>/
 ```
 
 Both directories are ignored by Git. OAuth credentials and the SQLite ledger
