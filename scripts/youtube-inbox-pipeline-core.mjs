@@ -3,27 +3,28 @@ import {
   fetchYtDlpMetadata,
   selectTopHeatmapClips,
 } from "./youtube-heatmap-core.mjs";
+import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
 export const syncAndAnalyzeInbox = async ({
   ledger,
   playlist,
   videos,
-  treatmentVersion,
+  packageVersion,
   maxClips = 1,
   minimumSeparationSeconds = 20,
   fetchMetadata = fetchYtDlpMetadata,
 }) => {
   const sync = ledger.syncPlaylistVideos({
     playlistId: playlist.id,
-    treatmentVersion,
+    packageVersion,
     videos,
   });
-  const currentVideoIds = new Set(videos.map(({videoId}) => videoId));
+  const currentVideoIds = new Set(videos.map(({ videoId }) => videoId));
   const pendingJobs = ledger
-    .listPendingJobs()
+    .listPendingPackageJobs()
     .filter(
       (job) =>
-        job.treatmentVersion === treatmentVersion &&
+        job.packageVersion === packageVersion &&
         currentVideoIds.has(job.videoId),
     );
   const analyzed = [];
@@ -32,29 +33,28 @@ export const syncAndAnalyzeInbox = async ({
     try {
       const metadata = await fetchMetadata(job.sourceUrl);
       const heatmap = extractHeatmap(metadata);
-      const clips = selectTopHeatmapClips(heatmap, {
+      const packages = selectTopHeatmapClips(heatmap, {
         maxClips,
         minimumSeparationSeconds,
       });
 
-      ledger.recordHeatmapSelection({jobId: job.id, heatmap, clips});
+      ledger.recordHeatmapSelection({ jobId: job.id, heatmap, packages });
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
-        status: clips.length > 0 ? "heatmap_ready" : "no_heatmap",
-        clips,
+        status: packages.length > 0 ? "heatmap_ready" : "no_heatmap",
+        packages,
       });
     } catch (error) {
-      ledger.markJobFailed(job.id, error instanceof Error ? error.message : error);
+      ledger.markPackageJobFailed(job.id, sanitizeErrorDiagnostic(error));
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
         status: "failed",
-        error: error instanceof Error ? error.message : String(error),
+        error: sanitizeErrorDiagnostic(error),
       });
     }
   }
 
-  return {sync, analyzed};
+  return { sync, analyzed };
 };
-
