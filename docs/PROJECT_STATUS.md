@@ -42,7 +42,8 @@ The implementation plan is
 - Google OAuth with read-only YouTube access.
 - Paginated import of the private `Audiogram Inbox` playlist.
 - Metadata-only yt-dlp heatmap extraction and independent-peak selection.
-- Transactional migration from the legacy treatment-scoped ledger.
+- Explicit SQLite schema version 1 with transactional, fail-closed migration
+  from legacy and known unversioned generic ledgers.
 - Reusable packages independent of any Remotion composition.
 - Multiple ranked packages in the schema and orchestration.
 - Partial audio acquisition with `--download-sections`; there is no full-video
@@ -60,7 +61,10 @@ The implementation plan is
 - Dynamic `AudiogramBasic` composition using package title, cover, audio, and
   captions.
 - Compact, contained title and caption typography with four-line pagination.
-- Temporary render output, non-empty validation, and atomic publication.
+- Private sibling staging, complete package validation, and atomic package
+  directory publication, including reuse after a publish-before-ledger crash.
+- Temporary render output, non-empty validation, and atomic treatment-artifact
+  publication.
 - Per-package and per-treatment failure isolation.
 - Duplicate-safe reruns across analysis, acquisition, and rendering.
 
@@ -81,6 +85,14 @@ Package states are `selected`, `ready`, and `failed`. Treatment-run states are
 `pending`, `rendered`, and `failed`. A failed treatment never invalidates its
 reusable package.
 
+The ledger is schema version `1`, stored in SQLite `PRAGMA user_version`. A
+version-zero database is classified transactionally as fresh, legacy-only, or a
+complete known generic schema. Known historical generic ledgers receive only the
+two previously optional `clip_assets` columns before validation. Ambiguous,
+incomplete, malformed, and newer-than-supported schemas fail closed; the version
+is stamped only after migration and validation succeed. An already-versioned
+schema is validated on open and is never silently repaired.
+
 ## Deterministic paths
 
 Generated package assets are runtime files ignored by Git:
@@ -93,13 +105,25 @@ public/generated/<video-id>/<package-version>/clip-<rank>/
 └── package.json
 ```
 
+Acquisition writes to a unique sibling such as
+`.clip-<rank>.staging-<uuid>/`, validates the whole package and its identity,
+then publishes it with one same-filesystem directory rename. If the final
+directory already contains a complete matching package, including after a crash
+between publication and the SQLite ready transition, the next run reuses it
+without reacquisition. An invalid pre-existing final directory causes a bounded
+failure and is never overwritten or deleted.
+
 Treatment output is also ignored by Git:
 
 ```text
-out/treatments/<treatment-id>/<treatment-version>/<video-id>/
+out/treatments/<treatment-id>/<treatment-version>/<video-id>/<package-version>/
 ├── clip-<rank>.props.json
 └── clip-<rank>.mp4
 ```
+
+The versioned treatment path is canonical for new renders. Historical persisted
+artifact paths and files remain valid and are not rewritten or moved
+automatically.
 
 ## Live verification
 
@@ -115,6 +139,8 @@ state | Arthur Brooks`):
 - Treatment run: `audiogram-basic@1`; state: `rendered`.
 - Artifact:
   `out/treatments/audiogram-basic/1/KHd-luu3M8s/clip-1.mp4`.
+- This is the historical path recorded by the 2026-09-18 run, before package
+  version became part of the canonical treatment output identity.
 - Verified corrected artifact size: `2,449,011` bytes.
 - Verified artifact duration: `22.314667` seconds.
 
@@ -204,16 +230,20 @@ for `node:sqlite`; the tests and live pipeline pass with Node `v22.23.2`.
 ## Source map
 
 - `scripts/youtube-pipeline.mjs`: complete executable pipeline.
-- `scripts/audiogram-ledger.mjs`: schema, migration, and state transitions.
+- `scripts/audiogram-ledger.mjs`: explicit schema-version migration,
+  validation, and state transitions.
 - `scripts/youtube-inbox-pipeline-core.mjs`: playlist/heatmap orchestration.
-- `scripts/clip-package-assets.mjs`: partial acquisition and caption alignment.
+- `scripts/clip-package-assets.mjs`: partial acquisition, caption alignment,
+  whole-package validation, atomic publication, and crash-window reuse.
 - `scripts/clip-processing-core.mjs`: idempotent package/treatment orchestration.
 - `scripts/treatment-registry.mjs`: explicit treatment allowlist.
-- `scripts/treatment-runner.mjs`: generic atomic Remotion renderer.
+- `scripts/treatment-runner.mjs`: generic atomic Remotion renderer with
+  package-versioned artifact paths.
 - `src/Root.tsx`: dynamic metadata and `AudiogramBasic` registration.
 - `src/Audiogram/Main.tsx`: package-driven V1 presentation.
-- `scripts/*.test.mjs`: migration, idempotency, failure isolation, acquisition,
-  registry, renderer, OAuth, heatmap, and pagination coverage.
+- `scripts/*.test.mjs`: versioned migration, idempotency, failure isolation,
+  staged acquisition/publication, recovery, registry, renderer, OAuth, heatmap,
+  and pagination coverage.
 
 ## Deferred work
 

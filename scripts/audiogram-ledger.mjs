@@ -2,6 +2,69 @@ import { DatabaseSync } from "node:sqlite";
 
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
+export const AUDIOGRAM_SCHEMA_VERSION = 1;
+
+const LEGACY_TABLES = ["processing_jobs", "clips"];
+const GENERIC_TABLES = [
+  "package_jobs",
+  "clip_packages",
+  "clip_assets",
+  "treatment_runs",
+];
+const REQUIRED_SCHEMA_VERSION_1_COLUMNS = {
+  videos: [
+    "video_id",
+    "title",
+    "source_url",
+    "playlist_id",
+    "first_seen_at",
+    "last_seen_at",
+  ],
+  package_jobs: [
+    "id",
+    "video_id",
+    "package_version",
+    "status",
+    "heatmap_json",
+    "last_error",
+    "created_at",
+    "updated_at",
+  ],
+  clip_packages: [
+    "id",
+    "package_job_id",
+    "rank",
+    "start_seconds",
+    "end_seconds",
+    "score",
+    "status",
+    "last_error",
+    "created_at",
+    "updated_at",
+  ],
+  clip_assets: [
+    "id",
+    "clip_package_id",
+    "role",
+    "relative_path",
+    "provenance",
+    "metadata_json",
+    "created_at",
+    "updated_at",
+  ],
+  treatment_runs: [
+    "id",
+    "clip_package_id",
+    "treatment_id",
+    "treatment_version",
+    "status",
+    "artifact_relative_path",
+    "last_error",
+    "created_at",
+    "updated_at",
+  ],
+};
+
 const mapVideo = (row) =>
   row
     ? {
@@ -71,8 +134,59 @@ const tableExists = (database, name) =>
       .get(name),
   );
 
+const readSchemaVersion = (database) =>
+  database.prepare("PRAGMA user_version").get().user_version;
+
+const classifyUnversionedSchema = (database) => {
+  const presentLegacyTables = LEGACY_TABLES.filter((name) =>
+    tableExists(database, name),
+  );
+  const presentGenericTables = GENERIC_TABLES.filter((name) =>
+    tableExists(database, name),
+  );
+
+  if (presentLegacyTables.length === 0 && presentGenericTables.length === 0) {
+    return "fresh";
+  }
+  if (
+    presentLegacyTables.length === LEGACY_TABLES.length &&
+    presentGenericTables.length === 0
+  ) {
+    return "legacy";
+  }
+  if (
+    presentLegacyTables.length === 0 &&
+    presentGenericTables.length === GENERIC_TABLES.length
+  ) {
+    return "generic";
+  }
+
+  const missingLegacyTables = LEGACY_TABLES.filter(
+    (name) => !presentLegacyTables.includes(name),
+  );
+  const missingGenericTables = GENERIC_TABLES.filter(
+    (name) => !presentGenericTables.includes(name),
+  );
+  throw new Error(
+    `Ambiguous or incomplete unversioned audiogram schema: ` +
+      `present legacy tables [${presentLegacyTables.join(", ")}], ` +
+      `missing legacy tables [${missingLegacyTables.join(", ")}], ` +
+      `present generic tables [${presentGenericTables.join(", ")}], ` +
+      `missing generic tables [${missingGenericTables.join(", ")}]`,
+  );
+};
+
 const createGenericTables = (database) => {
   database.exec(`
+    CREATE TABLE IF NOT EXISTS videos (
+      video_id TEXT PRIMARY KEY,
+      title TEXT NOT NULL,
+      source_url TEXT NOT NULL,
+      playlist_id TEXT,
+      first_seen_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL
+    ) STRICT;
+
     CREATE TABLE IF NOT EXISTS package_jobs (
       id INTEGER PRIMARY KEY,
       video_id TEXT NOT NULL REFERENCES videos(video_id) ON DELETE CASCADE,
@@ -134,70 +248,56 @@ const createGenericTables = (database) => {
 };
 
 const migrateLegacyTables = (database) => {
-  if (!tableExists(database, "processing_jobs")) {
-    createGenericTables(database);
-    return;
+  createGenericTables(database);
+  database.exec(`
+    INSERT INTO package_jobs (
+      id, video_id, package_version, status, heatmap_json, last_error,
+      created_at, updated_at
+    )
+    SELECT id, video_id, treatment_version,
+      CASE status WHEN 'rendered' THEN 'heatmap_ready' ELSE status END,
+      heatmap_json, last_error, created_at, updated_at
+    FROM processing_jobs;
+
+    INSERT INTO clip_packages (
+      id, package_job_id, rank, start_seconds, end_seconds, score, status,
+      last_error, created_at, updated_at
+    )
+    SELECT id, processing_job_id, rank, start_seconds, end_seconds, score,
+      CASE status
+        WHEN 'media_ready' THEN 'ready'
+        WHEN 'rendered' THEN 'ready'
+        ELSE status
+      END,
+      NULL, created_at, updated_at
+    FROM clips;
+
+    INSERT INTO treatment_runs (
+      clip_package_id, treatment_id, treatment_version, status,
+      artifact_relative_path, last_error, created_at, updated_at
+    )
+    SELECT id, 'audiogram-basic', '1', 'rendered', artifact_relative_path,
+      NULL, created_at, updated_at
+    FROM clips WHERE artifact_relative_path IS NOT NULL;
+  `);
+
+  const legacyJobCount = database
+    .prepare("SELECT COUNT(*) AS count FROM processing_jobs")
+    .get().count;
+  const packageJobCount = database
+    .prepare("SELECT COUNT(*) AS count FROM package_jobs")
+    .get().count;
+  const legacyClipCount = database
+    .prepare("SELECT COUNT(*) AS count FROM clips")
+    .get().count;
+  const packageCount = database
+    .prepare("SELECT COUNT(*) AS count FROM clip_packages")
+    .get().count;
+  if (legacyJobCount !== packageJobCount || legacyClipCount !== packageCount) {
+    throw new Error("Legacy ledger migration row-count validation failed");
   }
 
-  database.exec("BEGIN IMMEDIATE");
-  try {
-    createGenericTables(database);
-    database.exec(`
-      INSERT INTO package_jobs (
-        id, video_id, package_version, status, heatmap_json, last_error,
-        created_at, updated_at
-      )
-      SELECT id, video_id, treatment_version,
-        CASE status WHEN 'rendered' THEN 'heatmap_ready' ELSE status END,
-        heatmap_json, last_error, created_at, updated_at
-      FROM processing_jobs;
-
-      INSERT INTO clip_packages (
-        id, package_job_id, rank, start_seconds, end_seconds, score, status,
-        last_error, created_at, updated_at
-      )
-      SELECT id, processing_job_id, rank, start_seconds, end_seconds, score,
-        CASE status
-          WHEN 'media_ready' THEN 'ready'
-          WHEN 'rendered' THEN 'ready'
-          ELSE status
-        END,
-        NULL, created_at, updated_at
-      FROM clips;
-
-      INSERT INTO treatment_runs (
-        clip_package_id, treatment_id, treatment_version, status,
-        artifact_relative_path, last_error, created_at, updated_at
-      )
-      SELECT id, 'audiogram-basic', '1', 'rendered', artifact_relative_path,
-        NULL, created_at, updated_at
-      FROM clips WHERE artifact_relative_path IS NOT NULL;
-    `);
-
-    const legacyJobCount = database
-      .prepare("SELECT COUNT(*) AS count FROM processing_jobs")
-      .get().count;
-    const packageJobCount = database
-      .prepare("SELECT COUNT(*) AS count FROM package_jobs")
-      .get().count;
-    const legacyClipCount = database
-      .prepare("SELECT COUNT(*) AS count FROM clips")
-      .get().count;
-    const packageCount = database
-      .prepare("SELECT COUNT(*) AS count FROM clip_packages")
-      .get().count;
-    if (
-      legacyJobCount !== packageJobCount ||
-      legacyClipCount !== packageCount
-    ) {
-      throw new Error("Legacy ledger migration row-count validation failed");
-    }
-
-    database.exec("DROP TABLE clips; DROP TABLE processing_jobs; COMMIT;");
-  } catch (error) {
-    database.exec("ROLLBACK");
-    throw error;
-  }
+  database.exec("DROP TABLE clips; DROP TABLE processing_jobs;");
 };
 
 const ensureClipAssetColumns = (database) => {
@@ -215,25 +315,82 @@ const ensureClipAssetColumns = (database) => {
   }
 };
 
+const validateSchemaVersion1 = (database) => {
+  for (const [table, requiredColumns] of Object.entries(
+    REQUIRED_SCHEMA_VERSION_1_COLUMNS,
+  )) {
+    if (!tableExists(database, table)) {
+      throw new Error(
+        `Invalid audiogram schema version 1: missing table ${table}`,
+      );
+    }
+    const presentColumns = new Set(
+      database
+        .prepare(`PRAGMA table_info(${table})`)
+        .all()
+        .map(({ name }) => name),
+    );
+    const missingColumns = requiredColumns.filter(
+      (column) => !presentColumns.has(column),
+    );
+    if (missingColumns.length > 0) {
+      throw new Error(
+        `Invalid audiogram schema version 1: table ${table} missing columns ` +
+          missingColumns.join(", "),
+      );
+    }
+  }
+};
+
+const migrateSchema = (database) => {
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const classification = classifyUnversionedSchema(database);
+    if (classification === "fresh") {
+      createGenericTables(database);
+    } else if (classification === "legacy") {
+      migrateLegacyTables(database);
+    } else {
+      ensureClipAssetColumns(database);
+    }
+
+    validateSchemaVersion1(database);
+    database.exec(`PRAGMA user_version = ${AUDIOGRAM_SCHEMA_VERSION}`);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
+};
+
 export const openAudiogramLedger = (
   path,
   { now = () => new Date().toISOString() } = {},
 ) => {
   const database = new DatabaseSync(path, { timeout: 5_000 });
-  database.exec(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
-    CREATE TABLE IF NOT EXISTS videos (
-      video_id TEXT PRIMARY KEY,
-      title TEXT NOT NULL,
-      source_url TEXT NOT NULL,
-      playlist_id TEXT,
-      first_seen_at TEXT NOT NULL,
-      last_seen_at TEXT NOT NULL
-    ) STRICT;
-  `);
-  migrateLegacyTables(database);
-  ensureClipAssetColumns(database);
+  try {
+    const schemaVersion = readSchemaVersion(database);
+    if (schemaVersion > AUDIOGRAM_SCHEMA_VERSION) {
+      throw new Error(
+        `Audiogram schema version ${schemaVersion} is newer than supported ` +
+          `version ${AUDIOGRAM_SCHEMA_VERSION}`,
+      );
+    }
+    if (schemaVersion < 0) {
+      throw new Error(`Unsupported audiogram schema version ${schemaVersion}`);
+    }
+
+    database.exec("PRAGMA foreign_keys = ON");
+    if (schemaVersion === 0) {
+      migrateSchema(database);
+    } else {
+      validateSchemaVersion1(database);
+    }
+    database.exec("PRAGMA journal_mode = WAL");
+  } catch (error) {
+    database.close();
+    throw error;
+  }
 
   const getVideoStatement = database.prepare(
     "SELECT * FROM videos WHERE video_id = ?",
@@ -398,6 +555,7 @@ export const openAudiogramLedger = (
     },
     getPackageJob: (videoId, packageVersion) =>
       mapPackageJob(getPackageJobStatement.get(videoId, packageVersion)),
+    getSchemaVersion: () => readSchemaVersion(database),
     getVideo: (videoId) => mapVideo(getVideoStatement.get(videoId)),
     listClipPackages: (jobId) =>
       database
