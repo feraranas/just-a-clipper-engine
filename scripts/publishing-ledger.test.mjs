@@ -62,6 +62,14 @@ test("updates a caption and approves an item with a schedule", async (t) => {
   assert.equal(approved.approvedArtifactHash, artifact.artifactHash);
 });
 
+test("allows a blank string caption and normalizes offset schedules to UTC", async (t) => {
+  const ledger = await createTestLedger(t);
+  const item = ledger.enqueueArtifact(artifact);
+  assert.equal(ledger.updateCaption(item.id, "").caption, "");
+  const approved = ledger.approveItem(item.id, "2026-09-20T18:00:00-06:00");
+  assert.equal(approved.scheduledAt, "2026-09-21T00:00:00.000Z");
+});
+
 test("rejects a queued item and preserves the rejection reason", async (t) => {
   const ledger = await createTestLedger(t);
   const item = ledger.enqueueArtifact(artifact);
@@ -174,4 +182,20 @@ test("records an unknown publish outcome with diagnostic details", async (t) => 
     errorCode: "TIMEOUT",
     errorMessage: "Publish request timed out",
   });
+});
+
+test("sanitizes structured unknown details and preserves the first failure", async (t) => {
+  const ledger = await createTestLedger(t);
+  const item = ledger.enqueueArtifact(artifact);
+  ledger.approveItem(item.id, "2026-09-20T11:00:00.000Z");
+  ledger.transitionItem(item.id, "approved", "uploading");
+  ledger.recordUnknownOutcome(item.id, {
+    phase: "media_publish",
+    errorCode: "TIMEOUT",
+    responseBody: "access_token=secret",
+  });
+  const unknown = ledger.getPublishingItem(item.id);
+  assert.equal(unknown.unknownDetails.errorCode, "TIMEOUT");
+  assert.match(unknown.unknownDetails.responseBody, /REDACTED/);
+  assert.doesNotMatch(JSON.stringify(unknown.unknownDetails), /secret/);
 });

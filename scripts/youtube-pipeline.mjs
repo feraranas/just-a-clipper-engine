@@ -7,6 +7,8 @@ import { join } from "node:path";
 import { google } from "googleapis";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { createPublishingLedger } from "./publishing-ledger.mjs";
+import { enqueueCompletedArtifact } from "./publishing-completion.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
 import { processClipPackages } from "./clip-processing-core.mjs";
 import {
@@ -35,6 +37,10 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
+const publishingAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
+const publishingLedgerPath =
+  process.env.INSTAGRAM_PUBLISHING_DB_PATH ??
+  join(appSupportDirectory, "instagram-publishing.sqlite");
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
 const packageVersion = resolvePackageVersion(process.env);
@@ -200,6 +206,9 @@ const videos = await collectPlaylistItems(async (pageToken) => {
 });
 
 const ledger = openAudiogramLedger(ledgerPath);
+const publishingLedger = publishingAccountId
+  ? createPublishingLedger(publishingLedgerPath)
+  : null;
 
 try {
   const pipeline = await syncAndAnalyzeInbox({
@@ -221,6 +230,22 @@ try {
         { clipPackage, treatment },
         { projectRoot: process.cwd() },
       ),
+    projectRoot: process.cwd(),
+    onArtifactComplete: publishingLedger
+      ? ({ artifactRelativePath, artifactHash, clipPackage, treatment }) =>
+          enqueueCompletedArtifact({
+            ledger: publishingLedger,
+            projectRoot: process.cwd(),
+            artifactRelativePath,
+            artifactHash,
+            accountId: publishingAccountId,
+            sourceVideoId: clipPackage.sourceVideoId,
+            clipPackageId: clipPackage.id,
+            treatmentId: treatment.id,
+            treatmentVersion: treatment.version,
+            title: clipPackage.title,
+          })
+      : undefined,
   });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",
@@ -251,4 +276,5 @@ try {
   }
 } finally {
   ledger.close();
+  publishingLedger?.close();
 }

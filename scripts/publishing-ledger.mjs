@@ -53,6 +53,8 @@ const mapItem = (row) =>
         mediaId: row.media_id,
         errorCode: row.error_code,
         errorMessage: row.error_message,
+        firstErrorCode: row.first_error_code,
+        firstErrorMessage: row.first_error_message,
         retryCount: row.retry_count,
         lastRetryAt: row.last_retry_at,
         publishedAt: row.published_at,
@@ -71,7 +73,25 @@ const requiredText = (value, name) => {
   return value;
 };
 
+const normalizeScheduledAt = (value) => {
+  requiredText(value, "scheduledAt");
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error("scheduledAt must be a valid timestamp");
+  return date.toISOString();
+};
+
 const optionalText = (value) => (value == null ? null : String(value));
+
+const sanitizeDetails = (details = {}) => {
+  const serialized = sanitizeErrorDiagnostic(JSON.stringify(details));
+  try {
+    const result = JSON.parse(serialized);
+    if (typeof details.errorCode === "string") result.errorCode = details.errorCode;
+    return result;
+  } catch {
+    return { message: serialized };
+  }
+};
 
 const createSchema = (database) => {
   database.exec(`
@@ -103,6 +123,8 @@ const createSchema = (database) => {
       media_id TEXT,
       error_code TEXT,
       error_message TEXT,
+      first_error_code TEXT,
+      first_error_message TEXT,
       retry_count INTEGER NOT NULL DEFAULT 0 CHECK (retry_count >= 0),
       last_retry_at TEXT,
       published_at TEXT,
@@ -212,6 +234,17 @@ export const createPublishingLedger = (
           values.push(value);
         }
       }
+      if (
+        normalized.error_code !== undefined &&
+        normalized.error_message !== undefined
+      ) {
+        assignments.push("first_error_code = COALESCE(first_error_code, ?)");
+        values.push(normalized.error_code);
+        assignments.push(
+          "first_error_message = COALESCE(first_error_message, ?)",
+        );
+        values.push(normalized.error_message);
+      }
       if (toState === "published" && normalized.published_at === undefined) {
         assignments.push("published_at = ?");
         values.push(now());
@@ -301,8 +334,8 @@ export const createPublishingLedger = (
     },
     getPublishingItem: getItem,
     updateCaption: (id, caption) => {
-      const value = String(caption);
-      if (value.trim() === "") throw new Error("caption must not be empty");
+      if (typeof caption !== "string") throw new Error("caption must be a string");
+      const value = caption;
       const item = getItem(id);
       if (!item) throw new Error(`Publishing item not found: ${id}`);
       if (!["queued", "approved"].includes(item.state)) {
@@ -321,7 +354,7 @@ export const createPublishingLedger = (
       if (item.state !== "queued") {
         throw new Error(`Cannot approve item in state: ${item.state}`);
       }
-      requiredText(scheduledAt, "scheduledAt");
+      const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
       return withImmediateTransaction(() => {
         const timestamp = now();
         database
@@ -332,7 +365,7 @@ export const createPublishingLedger = (
                 approved_artifact_hash = artifact_hash, updated_at = ?
             WHERE id = ? AND state = 'queued'
           `)
-          .run(scheduledAt, timestamp, timestamp, id);
+          .run(normalizedScheduledAt, timestamp, timestamp, id);
         return getItem(id);
       });
     },
@@ -349,9 +382,12 @@ export const createPublishingLedger = (
             UPDATE publishing_items
             SET state = 'rejected', approval_decision = 'rejected',
                 rejection_reason = ?, rejected_at = ?, updated_at = ?
-            WHERE id = ?
+            WHERE id = ? AND state IN ('queued', 'approved')
           `)
           .run(value, now(), now(), id);
+        if (database.prepare("SELECT changes() AS count").get().count !== 1) {
+          throw new Error(`Cannot reject item in state: ${getItem(id).state}`);
+        }
         return getItem(id);
       });
     },
@@ -381,9 +417,12 @@ export const createPublishingLedger = (
       if (!["uploading", "container_created", "processing"].includes(item.state)) {
         throw new Error(`Cannot record unknown outcome in state: ${item.state}`);
       }
+      const safeDetails = sanitizeDetails(details);
       return transition(id, item.state, "unknown", {
-        ...details,
-        unknownDetails: details,
+        containerId: details.containerId,
+        errorCode: details.errorCode,
+        errorMessage: details.errorMessage,
+        unknownDetails: safeDetails,
       });
     },
   };

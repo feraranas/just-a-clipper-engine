@@ -45,13 +45,20 @@ export const processClipPackages = async ({
         treatment,
       });
       if (onArtifactComplete) {
-        await onArtifactComplete({
-          artifactRelativePath,
-          artifactHash: await hashArtifact(projectRoot, artifactRelativePath),
-          run,
-          clipPackage,
-          treatment,
-        });
+        result.publishing ??= { queued: 0, failed: 0 };
+        try {
+          await onArtifactComplete({
+            artifactRelativePath,
+            artifactHash: await hashArtifact(projectRoot, artifactRelativePath),
+            run,
+            clipPackage,
+            treatment,
+          });
+          result.publishing.queued += 1;
+        } catch (error) {
+          result.publishing.failed += 1;
+          result.publishing.lastError = sanitizeErrorDiagnostic(error);
+        }
       }
       ledger.markTreatmentRunRendered(run.id, artifactRelativePath);
       result.treatments.rendered += 1;

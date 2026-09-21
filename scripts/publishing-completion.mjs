@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
-import { readFile, stat } from "node:fs/promises";
+import { createReadStream } from "node:fs";
+import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
 
 const projectRelative = (projectRoot, artifactRelativePath) => {
@@ -28,8 +29,15 @@ export const hashArtifact = async (projectRoot, artifactRelativePath) => {
   if (!details.isFile() || details.size === 0) {
     throw new Error("artifact must be a non-empty file");
   }
-  const content = await readFile(absolutePath);
-  return `sha256:${createHash("sha256").update(content).digest("hex")}`;
+  const canonicalRoot = await realpath(projectRoot);
+  const canonicalArtifact = await realpath(absolutePath);
+  const canonicalRelative = relative(canonicalRoot, canonicalArtifact);
+  if (canonicalRelative === ".." || canonicalRelative.startsWith(`..${sep}`)) {
+    throw new Error("artifact path must resolve inside the project repository");
+  }
+  const hash = createHash("sha256");
+  for await (const chunk of createReadStream(canonicalArtifact)) hash.update(chunk);
+  return `sha256:${hash.digest("hex")}`;
 };
 
 export const enqueueCompletedArtifact = async ({
