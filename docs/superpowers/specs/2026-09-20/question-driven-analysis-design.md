@@ -13,6 +13,8 @@ Every processed video produces two layers:
 
 The existing “best insights” selector remains available as a fallback recipe, but is no longer the default.
 
+Jev is the default evaluator/reranker for candidate evidence. The LLM may propose candidate spans and polished language, while Jev supplies typed relevance, purpose, completeness, insight, and evidence-support judgments. Deterministic code owns duration, containment, separation, deduplication, and treatment dispatch.
+
 ## Question framework
 
 The default recipe asks:

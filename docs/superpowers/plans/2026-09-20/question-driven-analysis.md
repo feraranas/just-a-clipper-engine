@@ -4,7 +4,7 @@
 
 **Goal:** Add a versioned, transcript-grounded question framework that becomes the default analysis layer while preserving the existing treatment registry.
 
-**Architecture:** Add a question-analysis recipe beside the current selector recipe. The provider returns validated answers and candidate evidence spans; the ledger stores analysis independently from clip packages; a deterministic projection turns approved candidates into existing ClipPackages and treatment runs.
+**Architecture:** Add a question-analysis recipe beside the current selector recipe. The LLM proposes candidate evidence spans and polished language; Jev evaluates candidates with typed Choice/Score/Noul judgments; the ledger stores analysis and Jev provenance independently from clip packages; deterministic code projects approved candidates into existing ClipPackages and treatment runs.
 
 **Tech Stack:** Node.js ESM, SQLite ledger, Zod/JSON Schema validation, ChatGPT OAuth provider, YouTube captions, Remotion treatment registry.
 
@@ -16,7 +16,7 @@
 - `audiogram-basic@1` remains the only V1 treatment.
 - Persist transcript and analysis before treatment acquisition.
 - Every answer and clip candidate must cite canonical transcript cue IDs.
-- Analysis recipe and question IDs must be hashed and versioned.
+- Analysis recipe, question IDs, and Jev judgment definitions must be hashed and versioned.
 - No PR6 cross-process lease, retry, scheduler, or recovery work.
 
 ---
@@ -71,7 +71,24 @@
 - [ ] **Step 4: Run** all ledger tests and verify PASS.
 - [ ] **Step 5: Commit** `feat: persist question analysis provenance`.
 
-### Task 4: Project grounded answers into ClipPackages
+### Task 4: Add Jev candidate evaluation and reranking
+
+**Files:**
+- Create: `scripts/jev-client.mjs`
+- Create: `scripts/jev-analysis.mjs`
+- Test: `scripts/jev-analysis.test.mjs`
+
+**Interfaces:**
+- `evaluateCandidates({ transcript, questions, candidates, client })` returns typed judgments keyed by candidate and question.
+- `rankCandidates(judgments, weights)` returns deterministic, deduplicated candidates with confidence and review flags.
+
+- [ ] **Step 1: Write failing tests** for Choice purpose, Score dimensions, Noul gates, confidence thresholds, and no-match handling.
+- [ ] **Step 2: Run** `node --test scripts/jev-analysis.test.mjs` and confirm failure.
+- [ ] **Step 3: Implement** the TypeSafe client boundary and pure ranking/composite-scoring functions; keep credentials server-side and never send audio/video.
+- [ ] **Step 4: Run** focused tests and verify PASS.
+- [ ] **Step 5: Commit** `feat: rerank evidence with Jev judgments`.
+
+### Task 5: Project grounded answers into ClipPackages
 
 **Files:**
 - Modify: `scripts/clip-selection-contract.mjs`
@@ -89,7 +106,7 @@
 - [ ] **Step 4: Run** focused and existing selector tests.
 - [ ] **Step 5: Commit** `feat: project analysis answers into clip packages`.
 
-### Task 5: Make question analysis the default and preserve fallback mode
+### Task 6: Make question analysis the default and preserve fallback mode
 
 **Files:**
 - Modify: `scripts/youtube-pipeline-config.mjs`
@@ -108,7 +125,7 @@
 - [ ] **Step 4: Run** full unit suite, lint, and typecheck.
 - [ ] **Step 5: Commit** `feat: make question analysis the default V1 mode`.
 
-### Task 6: End-to-end fixture and live smoke validation
+### Task 7: End-to-end fixture and live smoke validation
 
 **Files:**
 - Modify: `scripts/clip-selector-smoke.mjs`
