@@ -115,15 +115,16 @@ test("rejects a fetch implementation that already followed a redirect", async ()
     code: "oauth_redirect_forbidden",
   });
 });
-test("caps every response before the consumer reads byte 262145", async () => {
+test("caps each endpoint at its configured response limit", async () => {
   for (const [url] of operations) {
+    const limit = url.pathname === "/oauth/token" ? 262_144 : 2 * 1024 * 1024;
     let cancelled = false;
     const fetch = createBoundedAllowlistedFetch({
       fetch: async () =>
         new Response(
           new ReadableStream({
             start(c) {
-              c.enqueue(new Uint8Array(262144));
+              c.enqueue(new Uint8Array(limit));
               c.enqueue(new Uint8Array(1));
             },
             cancel() {
