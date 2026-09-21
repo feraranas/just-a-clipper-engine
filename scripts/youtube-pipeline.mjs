@@ -10,6 +10,7 @@ import { openAudiogramLedger } from "./audiogram-ledger.mjs";
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { enqueueCompletedArtifact } from "./publishing-completion.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
+import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import { processClipPackages } from "./clip-processing-core.mjs";
 import {
   findPlaylistByTitle,
@@ -20,7 +21,7 @@ import { syncAndAnalyzeInbox } from "./youtube-inbox-pipeline-core.mjs";
 import { collectPlaylistItems } from "./youtube-playlist-core.mjs";
 import { renderTreatmentRun } from "./treatment-runner.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
-import { resolvePackageVersion } from "./youtube-pipeline-config.mjs";
+import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -43,25 +44,10 @@ const publishingLedgerPath =
   join(appSupportDirectory, "instagram-publishing.sqlite");
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
-const packageVersion = resolvePackageVersion(process.env);
-const maxClips = Number.parseInt(process.env.AUDIOGRAM_MAX_CLIPS ?? "1", 10);
-const minimumSeparationSeconds = Number.parseFloat(
-  process.env.AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS ?? "20",
-);
+const selectionConfig = resolveSelectionConfig(process.env);
+const selectionRecipe = buildSelectionRecipe(selectionConfig);
+const { packageVersion } = selectionConfig;
 const scope = "https://www.googleapis.com/auth/youtube.readonly";
-
-if (!Number.isInteger(maxClips) || maxClips < 1) {
-  throw new Error("AUDIOGRAM_MAX_CLIPS must be a positive integer");
-}
-
-if (
-  !Number.isFinite(minimumSeparationSeconds) ||
-  minimumSeparationSeconds < 0
-) {
-  throw new Error(
-    "AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS must be a non-negative number",
-  );
-}
 
 await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
 
@@ -205,7 +191,11 @@ const videos = await collectPlaylistItems(async (pageToken) => {
   return response.data;
 });
 
-const ledger = openAudiogramLedger(ledgerPath);
+const ledger = openAudiogramLedger(ledgerPath, {
+  selectionRecipe,
+  packageVersion,
+  legacyHeatmapRecipeMap: selectionConfig.legacyHeatmapRecipeMap,
+});
 const publishingLedger = publishingAccountId
   ? createPublishingLedger(publishingLedgerPath)
   : null;
@@ -213,16 +203,17 @@ const publishingLedger = publishingAccountId
 try {
   const pipeline = await syncAndAnalyzeInbox({
     ledger,
-    maxClips,
-    minimumSeparationSeconds,
     playlist,
-    packageVersion,
+    selectionConfig,
+    selectionRecipe,
     videos,
   });
   const processing = await processClipPackages({
     ledger,
     registry: treatmentRegistry,
     treatments: [{ id: "audiogram-basic", version: "1" }],
+    loadTranscriptForPackage: (packageId) =>
+      ledger.getTranscriptForPackage(packageId),
     acquireAssets: (clipPackage) =>
       acquireClipPackageAssets(clipPackage, { projectRoot: process.cwd() }),
     renderTreatment: ({ clipPackage, treatment }) =>

@@ -1,5 +1,5 @@
-import {execFile} from "node:child_process";
-import {promisify} from "node:util";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 
@@ -11,7 +11,7 @@ export const extractHeatmap = (metadata) =>
       value: marker.value,
     }))
     .filter(
-      ({startTime, endTime, value}) =>
+      ({ startTime, endTime, value }) =>
         Number.isFinite(startTime) &&
         Number.isFinite(endTime) &&
         Number.isFinite(value) &&
@@ -25,7 +25,9 @@ const isLocalPeak = (markers, index) => {
   const previous = markers[index - 1]?.value ?? Number.NEGATIVE_INFINITY;
   const next = markers[index + 1]?.value ?? Number.NEGATIVE_INFINITY;
 
-  return value >= previous && value >= next && (value > previous || value > next);
+  return (
+    value >= previous && value >= next && (value > previous || value > next)
+  );
 };
 
 const isIndependent = (candidate, selected, minimumSeparationSeconds) =>
@@ -37,7 +39,7 @@ const isIndependent = (candidate, selected, minimumSeparationSeconds) =>
 
 export const selectTopHeatmapClips = (
   heatmap,
-  {maxClips = 1, minimumSeparationSeconds = 20} = {},
+  { maxClips = 1, minimumSeparationSeconds = 20 } = {},
 ) => {
   if (maxClips < 1) {
     return [];
@@ -45,7 +47,8 @@ export const selectTopHeatmapClips = (
 
   const localPeaks = heatmap.filter((_, index) => isLocalPeak(heatmap, index));
   const candidates = (localPeaks.length > 0 ? localPeaks : heatmap).toSorted(
-    (left, right) => right.value - left.value || left.startTime - right.startTime,
+    (left, right) =>
+      right.value - left.value || left.startTime - right.startTime,
   );
   const selected = [];
 
@@ -71,9 +74,9 @@ export const selectTopHeatmapClips = (
 
 export const fetchYtDlpMetadata = async (
   url,
-  {run = execFileAsync, executable = "yt-dlp"} = {},
+  { run = execFileAsync, executable = "yt-dlp" } = {},
 ) => {
-  const {stdout} = await run(
+  const { stdout } = await run(
     executable,
     [
       "--no-warnings",
@@ -83,9 +86,8 @@ export const fetchYtDlpMetadata = async (
       "--",
       url,
     ],
-    {encoding: "utf8", maxBuffer: 64 * 1024 * 1024},
+    { encoding: "utf8", maxBuffer: 64 * 1024 * 1024 },
   );
 
   return JSON.parse(stdout);
 };
-

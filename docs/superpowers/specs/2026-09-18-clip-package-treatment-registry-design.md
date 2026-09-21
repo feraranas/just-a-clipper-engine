@@ -390,3 +390,70 @@ genuinely independent treatments are being added.
 3. Implement the plan inline using test-driven development in a separate PR.
 4. Run one independent final review before merging the implementation PR.
 5. Add each future treatment through its own focused PR.
+
+## 2026-09-19 persistence-correctness amendment
+
+This amendment records the stabilization implemented after the original V1
+design. The earlier sections remain the historical design and implementation
+record.
+
+### Explicit SQLite schema version 1
+
+The generic ledger is now explicitly schema version `1`, recorded in
+`PRAGMA user_version`. Opening a version-zero database classifies its work-table
+shape inside `BEGIN IMMEDIATE` as fresh, legacy-only, or a complete known generic
+schema. Legacy rows keep the mappings described above. A known historical
+generic ledger is adopted in place and receives only the formerly optional
+`clip_assets.provenance` and `clip_assets.metadata_json` columns when missing.
+
+Migration validates required tables and columns before setting
+`user_version = 1` and committing. Failure rolls back the transaction and leaves
+the version unstamped. Mixed, partial, malformed, and newer-than-supported
+schemas fail closed. An already-versioned schema is validated on open without
+repair DDL.
+
+### Versioned treatment artifact identity
+
+New treatment outputs include the package version after the video ID:
+
+```text
+out/treatments/<treatment-id>/<treatment-version>/<video-id>/<package-version>/
+|- clip-<rank>.props.json
+`- clip-<rank>.mp4
+```
+
+This prevents two package-generation versions for the same source, treatment,
+and rank from sharing an artifact identity. Historical database values and files,
+including artifacts under the earlier unversioned layout, remain valid and are
+not rewritten or moved automatically.
+
+### Atomic ClipPackage publication and recovery
+
+Package acquisition no longer writes directly into the final directory. For a
+package such as `video-1/v1/clip-2`, all work is confined to a unique sibling:
+
+```text
+public/generated/video-1/v1/
+|- .clip-2.staging-<uuid>/
+`- clip-2/
+```
+
+The staged package is validated as a whole before publication: manifest schema
+and package identity, exact asset descriptors, non-empty regular asset files,
+parseable non-empty captions, and expected duration must all agree. Existing
+managed ancestor symlinks and non-directories are rejected before acquisition.
+The complete sibling directory is then published with one same-filesystem
+rename, and returned asset records always use canonical final paths.
+
+If publication succeeds but the process stops before SQLite records the package
+as ready, a later run validates and reuses the matching final package without
+running acquisition again. A concurrent cooperating publisher's matching winner
+is handled the same way. Any invalid or conflicting pre-existing final package
+causes a bounded failure and is never overwritten or deleted. Cleanup is limited
+to the exact staging directory created by the current acquisition call.
+
+These guarantees assume cooperating local publishers and ordinary filesystem
+path stability. Node's path-based APIs cannot eliminate a time-of-check to
+time-of-use race against an actively malicious local process, and a
+non-cooperating process that creates an empty final directory during promotion
+is outside this pipeline's supported trust model.

@@ -1,17 +1,17 @@
-import {randomBytes} from "node:crypto";
-import {readFile, writeFile} from "node:fs/promises";
-import {createServer} from "node:http";
-import {homedir} from "node:os";
-import {join} from "node:path";
+import { randomBytes } from "node:crypto";
+import { readFile, writeFile } from "node:fs/promises";
+import { createServer } from "node:http";
+import { homedir } from "node:os";
+import { join } from "node:path";
 
-import {google} from "googleapis";
+import { google } from "googleapis";
 
 import {
   findPlaylistByTitle,
   mergeOAuthTokens,
   parseInstalledClient,
 } from "./youtube-auth-core.mjs";
-import {collectPlaylistItems} from "./youtube-playlist-core.mjs";
+import { collectPlaylistItems } from "./youtube-playlist-core.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -25,11 +25,12 @@ const clientPath =
 const tokenPath =
   process.env.AUDIOGRAM_GOOGLE_TOKEN_PATH ??
   join(appSupportDirectory, "google-oauth-token.json");
-const playlistTitle = process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
+const playlistTitle =
+  process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
 const scope = "https://www.googleapis.com/auth/youtube.readonly";
 
 const clientConfig = JSON.parse(await readFile(clientPath, "utf8"));
-const {clientId, clientSecret} = parseInstalledClient(clientConfig);
+const { clientId, clientSecret } = parseInstalledClient(clientConfig);
 
 let oauth2Client;
 let storedTokens;
@@ -71,19 +72,29 @@ if (storedTokens) {
           throw new Error("Google OAuth callback did not include a code");
         }
 
-        const {tokens} = await oauth2Client.getToken(code);
+        const { tokens } = await oauth2Client.getToken(code);
         storedTokens = mergeOAuthTokens({}, tokens);
-        await writeFile(tokenPath, `${JSON.stringify(storedTokens, null, 2)}\n`, {
-          mode: 0o600,
-        });
+        await writeFile(
+          tokenPath,
+          `${JSON.stringify(storedTokens, null, 2)}\n`,
+          {
+            mode: 0o600,
+          },
+        );
         oauth2Client.setCredentials(storedTokens);
 
-        response.writeHead(200, {"Content-Type": "text/plain; charset=utf-8"});
-        response.end("Audiogram Inbox authorization complete. You can close this tab.");
+        response.writeHead(200, {
+          "Content-Type": "text/plain; charset=utf-8",
+        });
+        response.end(
+          "Audiogram Inbox authorization complete. You can close this tab.",
+        );
         server.close();
         resolve();
       } catch (error) {
-        response.writeHead(400, {"Content-Type": "text/plain; charset=utf-8"});
+        response.writeHead(400, {
+          "Content-Type": "text/plain; charset=utf-8",
+        });
         response.end(`Authorization failed: ${error.message}`);
         server.close();
         reject(error);
@@ -94,7 +105,11 @@ if (storedTokens) {
     server.listen(0, "127.0.0.1", () => {
       const address = server.address();
       const redirectUri = `http://127.0.0.1:${address.port}/oauth2callback`;
-      oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
+      oauth2Client = new google.auth.OAuth2(
+        clientId,
+        clientSecret,
+        redirectUri,
+      );
 
       const authorizationUrl = oauth2Client.generateAuthUrl({
         access_type: "offline",
@@ -116,7 +131,7 @@ oauth2Client.on("tokens", async (tokens) => {
   });
 });
 
-const youtube = google.youtube({version: "v3", auth: oauth2Client});
+const youtube = google.youtube({ version: "v3", auth: oauth2Client });
 const playlist = await findPlaylistByTitle(async (pageToken) => {
   const response = await youtube.playlists.list({
     maxResults: 50,
@@ -154,4 +169,4 @@ const videos = await collectPlaylistItems(async (pageToken) => {
   return response.data;
 });
 
-console.log(JSON.stringify({playlist, videos}, null, 2));
+console.log(JSON.stringify({ playlist, videos }, null, 2));

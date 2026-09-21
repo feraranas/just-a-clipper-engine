@@ -30,7 +30,7 @@ export const findPlaylistByTitle = async (listPage, title) => {
     const match = page?.items?.find((item) => item.snippet?.title === title);
 
     if (match) {
-      return {id: match.id, title: match.snippet.title};
+      return { id: match.id, title: match.snippet.title };
     }
 
     pageToken = page?.nextPageToken;

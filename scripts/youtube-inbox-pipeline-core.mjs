@@ -4,19 +4,29 @@ import {
   selectTopHeatmapClips,
 } from "./youtube-heatmap-core.mjs";
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
+import { buildTranscriptJsonSchema } from "./clip-selection-contract.mjs";
+import { createStructuredGenerationProvider } from "./structured-generation-provider.mjs";
+import {
+  buildTranscriptPrompt,
+  deriveClipSelections,
+} from "./transcript-selector.mjs";
+import { fetchYoutubeTranscript } from "./youtube-transcript-core.mjs";
 
 export const syncAndAnalyzeInbox = async ({
   ledger,
   playlist,
   videos,
-  packageVersion,
-  maxClips = 1,
-  minimumSeparationSeconds = 20,
+  selectionConfig,
+  selectionRecipe,
   fetchMetadata = fetchYtDlpMetadata,
+  fetchTranscript = fetchYoutubeTranscript,
+  createProvider = createStructuredGenerationProvider,
 }) => {
+  const { packageVersion, selectorId } = selectionConfig;
   const sync = ledger.syncPlaylistVideos({
     playlistId: playlist.id,
     packageVersion,
+    selectionRecipe,
     videos,
   });
   const currentVideoIds = new Set(videos.map(({ videoId }) => videoId));
@@ -28,21 +38,56 @@ export const syncAndAnalyzeInbox = async ({
         currentVideoIds.has(job.videoId),
     );
   const analyzed = [];
+  let provider;
 
   for (const job of pendingJobs) {
     try {
-      const metadata = await fetchMetadata(job.sourceUrl);
-      const heatmap = extractHeatmap(metadata);
-      const packages = selectTopHeatmapClips(heatmap, {
-        maxClips,
-        minimumSeparationSeconds,
-      });
+      let packages;
+      if (selectorId === "youtube-heatmap") {
+        const metadata = await fetchMetadata(job.sourceUrl);
+        const heatmap = extractHeatmap(metadata);
+        packages = selectTopHeatmapClips(heatmap, {
+          maxClips: selectionConfig.maxClips,
+          minimumSeparationSeconds: selectionConfig.minimumSeparationMs / 1_000,
+        });
 
-      ledger.recordHeatmapSelection({ jobId: job.id, heatmap, packages });
+        ledger.recordHeatmapSelection({
+          jobId: job.id,
+          heatmap,
+          packages,
+          selectionRecipe,
+        });
+      } else if (selectorId === "transcript-llm") {
+        const transcript = await fetchTranscript(job.sourceUrl);
+        provider ??= createProvider(selectionConfig);
+        const prompt = buildTranscriptPrompt(transcript);
+        const generated = await provider.generateStructured({
+          instructions: prompt.instructions,
+          input: prompt.input,
+          jsonSchema: buildTranscriptJsonSchema(
+            selectionConfig.desiredClipCount,
+          ),
+        });
+        packages = deriveClipSelections(
+          generated.parsed,
+          transcript,
+          selectionRecipe.recipe,
+        );
+        ledger.recordTranscriptSelection({
+          jobId: job.id,
+          transcript,
+          result: generated.parsed,
+          packages,
+          provenance: generated.provenance,
+          selectionRecipe,
+        });
+      } else {
+        throw new Error("Unsupported clip selector or version");
+      }
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
-        status: packages.length > 0 ? "heatmap_ready" : "no_heatmap",
+        status: packages.length > 0 ? "selection_ready" : "no_selection",
         packages,
       });
     } catch (error) {
