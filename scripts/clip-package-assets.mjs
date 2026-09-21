@@ -42,6 +42,7 @@ export const buildPartialAudioArgs = ({
   "--no-playlist",
   "--download-sections",
   `*${startSeconds}-${endSeconds}`,
+  "--force-keyframes-at-cuts",
   "--extract-audio",
   "--audio-format",
   "wav",
