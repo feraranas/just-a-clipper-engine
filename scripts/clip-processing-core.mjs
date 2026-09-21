@@ -1,9 +1,13 @@
+import { hashArtifact } from "./publishing-completion.mjs";
+
 export const processClipPackages = async ({
   ledger,
   registry,
   treatments,
   acquireAssets,
   renderTreatment,
+  onArtifactComplete,
+  projectRoot = process.cwd(),
 }) => {
   const result = {
     packages: { ready: 0, failed: 0 },
@@ -40,6 +44,15 @@ export const processClipPackages = async ({
         clipPackage,
         treatment,
       });
+      if (onArtifactComplete) {
+        await onArtifactComplete({
+          artifactRelativePath,
+          artifactHash: await hashArtifact(projectRoot, artifactRelativePath),
+          run,
+          clipPackage,
+          treatment,
+        });
+      }
       ledger.markTreatmentRunRendered(run.id, artifactRelativePath);
       result.treatments.rendered += 1;
     } catch (error) {
