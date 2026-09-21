@@ -106,9 +106,18 @@ export const deriveClipSelections = (parsed, transcript, recipe) => {
       end.cue.endMs + limits.trailingPaddingMs,
     );
     const durationMs = endMs - startMs;
-    if (durationMs < limits.minimumClipMs || durationMs > limits.maximumClipMs)
-      throw new Error("Derived clip duration is outside the configured limits");
-    return { ...clip, startMs, endMs };
+    const overflowMs = Math.max(0, durationMs - limits.maximumClipMs);
+    const trimmedStartMs = startMs + Math.floor(overflowMs / 2);
+    const trimmedEndMs = endMs - Math.ceil(overflowMs / 2);
+    const normalizedDurationMs = trimmedEndMs - trimmedStartMs;
+    if (
+      normalizedDurationMs < limits.minimumClipMs ||
+      normalizedDurationMs > limits.maximumClipMs
+    )
+      throw new Error(
+        `Derived clip duration ${durationMs}ms is outside the configured limits ${limits.minimumClipMs}-${limits.maximumClipMs}ms`,
+      );
+    return { ...clip, startMs: trimmedStartMs, endMs: trimmedEndMs };
   });
 
   const chronological = [...results].sort(

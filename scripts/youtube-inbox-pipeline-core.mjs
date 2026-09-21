@@ -59,6 +59,7 @@ export const syncAndAnalyzeInbox = async ({
         });
       } else if (selectorId === "transcript-llm") {
         const transcript = await fetchTranscript(job.sourceUrl);
+        ledger.persistTranscript?.({ videoId: job.videoId, transcript });
         provider ??= createProvider(selectionConfig);
         const prompt = buildTranscriptPrompt(transcript);
         const generated = await provider.generateStructured({

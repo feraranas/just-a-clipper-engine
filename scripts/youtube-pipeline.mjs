@@ -36,6 +36,7 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
+const projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
 const selectionConfig = resolveSelectionConfig(process.env);
@@ -184,6 +185,10 @@ const videos = await collectPlaylistItems(async (pageToken) => {
 
   return response.data;
 });
+const requestedVideoId = process.env.AUDIOGRAM_VIDEO_ID;
+const selectedVideos = requestedVideoId
+  ? videos.filter(({ videoId }) => videoId === requestedVideoId)
+  : videos;
 
 const ledger = openAudiogramLedger(ledgerPath, {
   selectionRecipe,
@@ -197,7 +202,7 @@ try {
     playlist,
     selectionConfig,
     selectionRecipe,
-    videos,
+    videos: selectedVideos,
   });
   const processing = await processClipPackages({
     ledger,
@@ -206,12 +211,9 @@ try {
     loadTranscriptForPackage: (packageId) =>
       ledger.getTranscriptForPackage(packageId),
     acquireAssets: (clipPackage) =>
-      acquireClipPackageAssets(clipPackage, { projectRoot: process.cwd() }),
+      acquireClipPackageAssets(clipPackage, { projectRoot }),
     renderTreatment: ({ clipPackage, treatment }) =>
-      renderTreatmentRun(
-        { clipPackage, treatment },
-        { projectRoot: process.cwd() },
-      ),
+      renderTreatmentRun({ clipPackage, treatment }, { projectRoot }),
   });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",
@@ -224,7 +226,7 @@ try {
         packageVersion,
         treatments: ["audiogram-basic@1"],
         ledgerPath,
-        videosFound: videos.length,
+        videosFound: selectedVideos.length,
         ...pipeline,
         processing,
       },

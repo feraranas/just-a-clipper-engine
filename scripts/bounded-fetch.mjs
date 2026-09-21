@@ -17,18 +17,33 @@ const operationFor = (input) => {
     url.pathname === "/oauth/token" &&
     !url.search
   )
-    return { url, ms: 30_000, code: "oauth_refresh_timeout" };
+    return {
+      url,
+      ms: 30_000,
+      code: "oauth_refresh_timeout",
+      maxBytes: 262_144,
+    };
   if (
     url.origin === "https://chatgpt.com" &&
     url.pathname === "/backend-api/codex/models"
   )
-    return { url, ms: 30_000, code: "oauth_catalog_timeout" };
+    return {
+      url,
+      ms: 30_000,
+      code: "oauth_catalog_timeout",
+      maxBytes: 2 * 1024 * 1024,
+    };
   if (
     url.origin === "https://chatgpt.com" &&
     url.pathname === "/backend-api/codex/responses" &&
     !url.search
   )
-    return { url, ms: 120_000, code: "oauth_responses_timeout" };
+    return {
+      url,
+      ms: 120_000,
+      code: "oauth_responses_timeout",
+      maxBytes: 2 * 1024 * 1024,
+    };
   throw fail("oauth_url_forbidden");
 };
 
@@ -145,7 +160,7 @@ export const createBoundedAllowlistedFetch = ({
               return;
             }
             bytes += value.byteLength;
-            if (bytes > 262_144) {
+            if (bytes > operation.maxBytes) {
               stop(fail("oauth_response_too_large"));
               return;
             }
