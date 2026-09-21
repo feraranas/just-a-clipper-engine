@@ -2,7 +2,7 @@ import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 import { google } from "googleapis";
 
@@ -36,7 +36,9 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
-const projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
+const projectRoot = resolve(
+  process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
+);
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
 const selectionConfig = resolveSelectionConfig(process.env);
@@ -214,6 +216,7 @@ try {
       acquireClipPackageAssets(clipPackage, { projectRoot }),
     renderTreatment: ({ clipPackage, treatment }) =>
       renderTreatmentRun({ clipPackage, treatment }, { projectRoot }),
+    videoId: requestedVideoId,
   });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",

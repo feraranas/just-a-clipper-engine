@@ -17,7 +17,7 @@ export const TRANSCRIPT_LIMITS = deepFreeze({
   leadingPaddingMs: 1500,
   trailingPaddingMs: 750,
   maximumTranscriptUtf8Bytes: 524288,
-  maximumNetworkResponseBytes: 262144,
+  maximumNetworkResponseBytes: 2 * 1024 * 1024,
   maximumOutputTextUtf8Bytes: 24576,
   officialMaximumOutputTokens: 4096,
 });

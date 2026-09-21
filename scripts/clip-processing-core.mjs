@@ -7,6 +7,7 @@ export const processClipPackages = async ({
   loadTranscriptForPackage,
   acquireAssets,
   renderTreatment,
+  videoId,
 }) => {
   const result = {
     packages: { ready: 0, failed: 0 },
@@ -14,7 +15,10 @@ export const processClipPackages = async ({
   };
   const transcriptsById = new Map();
 
-  for (const clipPackage of ledger.listSelectedPackages()) {
+  const matchesVideo = (item) => !videoId || item.videoId === videoId;
+  for (const clipPackage of ledger
+    .listSelectedPackages()
+    .filter(matchesVideo)) {
     try {
       const loadedTranscript = await loadTranscriptForPackage(clipPackage.id);
       let transcript = null;
@@ -34,7 +38,7 @@ export const processClipPackages = async ({
     }
   }
 
-  for (const clipPackage of ledger.listReadyPackages()) {
+  for (const clipPackage of ledger.listReadyPackages().filter(matchesVideo)) {
     for (const { id, version } of treatments) {
       registry.get(id, version);
       ledger.ensureTreatmentRun({
@@ -45,7 +49,9 @@ export const processClipPackages = async ({
     }
   }
 
-  for (const run of ledger.listPendingTreatmentRuns()) {
+  for (const run of ledger
+    .listPendingTreatmentRuns()
+    .filter((item) => !videoId || item.videoId === videoId)) {
     try {
       const treatment = registry.get(run.treatmentId, run.treatmentVersion);
       const clipPackage = ledger.getClipPackage(run.clipPackageId);
