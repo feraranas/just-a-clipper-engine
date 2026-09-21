@@ -1,0 +1,13 @@
+#!/bin/sh
+set -eu
+
+echo "Running pre-push verification..."
+npm run lint
+for test_file in scripts/*.test.mjs; do
+  case "$test_file" in
+    scripts/publishing-server.test.mjs) continue ;;
+  esac
+  node --test "$test_file"
+done
+git diff --check
+echo "Pre-push verification passed."
