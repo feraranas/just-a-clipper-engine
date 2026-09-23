@@ -4,6 +4,7 @@ import test from "node:test";
 import {
   QUESTION_ANALYSIS_VERSION,
   QUESTION_DEFINITIONS,
+  JUDGMENT_DEFINITIONS,
   buildQuestionAnalysisJsonSchema,
   buildQuestionAnalysisRecipe,
 } from "./question-analysis-contract.mjs";
@@ -29,6 +30,16 @@ test("defines stable framework questions with typed judgment primitives", () => 
     assert.ok(question.instructions);
     assert.ok(question.criteria);
   }
+  assert.deepEqual(Object.keys(JUDGMENT_DEFINITIONS.scores), [
+    "relevance",
+    "insight",
+    "selfContainedness",
+  ]);
+  assert.deepEqual(Object.keys(JUDGMENT_DEFINITIONS.nouls), [
+    "completeThought",
+    "containsSponsorOrCta",
+    "citationSupported",
+  ]);
 });
 
 test("builds a strict analysis schema and a reproducible hashed recipe", () => {
@@ -37,6 +48,15 @@ test("builds a strict analysis schema and a reproducible hashed recipe", () => {
   assert.equal(schema.additionalProperties, false);
   assert.deepEqual(schema.required, ["answers", "candidates"]);
   assert.equal(schema.properties.answers.items.additionalProperties, false);
+  assert.deepEqual(schema.properties.answers.items.required, [
+    "questionId",
+    "answer",
+    "evidenceCueIds",
+    "startMs",
+    "endMs",
+    "evidenceQuality",
+    "epistemicStatus",
+  ]);
   assert.equal(schema.properties.candidates.items.additionalProperties, false);
 
   const recipe = buildQuestionAnalysisRecipe();
@@ -44,4 +64,8 @@ test("builds a strict analysis schema and a reproducible hashed recipe", () => {
   assert.match(recipe.sha256, /^[a-f0-9]{64}$/);
   assert.equal(recipe.questions.length, QUESTION_DEFINITIONS.length);
   assert.deepEqual(recipe, buildQuestionAnalysisRecipe());
+  assert.notEqual(
+    recipe.sha256,
+    buildQuestionAnalysisRecipe({ model: "jev-1.12" }).sha256,
+  );
 });

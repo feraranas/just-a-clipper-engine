@@ -1,6 +1,8 @@
 import { deepFreeze, sha256Canonical } from "./canonical-json.mjs";
 
 export const QUESTION_ANALYSIS_VERSION = "question-analysis-v1";
+export const QUESTION_PROMPT_VERSION = "question-analysis-prompt-v1";
+export const QUESTION_ANALYSIS_MODEL = "jev-latest";
 
 const question = (id, instructions, criteria) =>
   deepFreeze({ id, type: "choice", instructions, criteria });
@@ -75,6 +77,33 @@ export const QUESTION_DEFINITIONS = deepFreeze([
   ),
 ]);
 
+export const JUDGMENT_DEFINITIONS = deepFreeze({
+  scores: {
+    relevance: {
+      type: "score",
+      levels: ["irrelevant", "related", "directly answers", "excellent answer"],
+    },
+    insight: {
+      type: "score",
+      levels: ["routine", "useful", "non-obvious", "highly distinctive"],
+    },
+    selfContainedness: {
+      type: "score",
+      levels: [
+        "unintelligible alone",
+        "needs context",
+        "mostly self-contained",
+        "fully self-contained",
+      ],
+    },
+  },
+  nouls: {
+    completeThought: { type: "noul" },
+    containsSponsorOrCta: { type: "noul" },
+    citationSupported: { type: "noul" },
+  },
+});
+
 const strictObject = (properties) => ({
   type: "object",
   properties,
@@ -94,10 +123,14 @@ export const buildQuestionAnalysisJsonSchema = () =>
       answers: {
         type: "array",
         items: strictObject({
-          questionId: { type: "string", pattern: "^[a-z][a-z0-9_]+$" },
+          questionId: {
+            type: "string",
+            enum: QUESTION_DEFINITIONS.map(({ id }) => id),
+          },
           answer: { type: "string", minLength: 1, maxLength: 600 },
-          candidateId: { type: "string", pattern: "^candidate-[a-z0-9-]+$" },
           evidenceCueIds: cueIds,
+          startMs: { type: "number", minimum: 0 },
+          endMs: { type: "number", exclusiveMinimum: 0 },
           evidenceQuality: {
             type: "string",
             enum: ["strong", "mixed", "weak"],
@@ -118,15 +151,18 @@ export const buildQuestionAnalysisJsonSchema = () =>
     }),
   );
 
-export const buildQuestionAnalysisRecipe = () => {
+export const buildQuestionAnalysisRecipe = (config = {}) => {
   const recipe = {
     version: QUESTION_ANALYSIS_VERSION,
+    promptVersion: config.promptVersion ?? QUESTION_PROMPT_VERSION,
+    providerId: config.providerId ?? "typesafe",
+    model: config.model ?? QUESTION_ANALYSIS_MODEL,
     questions: QUESTION_DEFINITIONS,
+    judgments: JUDGMENT_DEFINITIONS,
     outputSchema: buildQuestionAnalysisJsonSchema(),
   };
   return deepFreeze({ ...recipe, sha256: sha256Canonical(recipe) });
 };
 
-export const QUESTION_ANALYSIS_RECIPE_SHA256 = sha256Canonical(
-  buildQuestionAnalysisRecipe(),
-);
+export const QUESTION_ANALYSIS_RECIPE_SHA256 =
+  buildQuestionAnalysisRecipe().sha256;
