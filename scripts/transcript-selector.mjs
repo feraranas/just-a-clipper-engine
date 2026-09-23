@@ -4,6 +4,7 @@ import {
 } from "./clip-selection-contract.mjs";
 import { canonicalJson, sha256Canonical } from "./canonical-json.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
+import { buildQuestionAnalysisJsonSchema } from "./question-analysis-contract.mjs";
 
 const validateTranscript = (transcript) => {
   if (
@@ -77,6 +78,31 @@ export const buildQuestionAnalysisPrompt = (transcript, recipe) => {
     input: canonicalJson(input),
     recipeSha256: recipe.sha256,
     transcriptSha256: computeTranscriptIdentity(transcript).sha256,
+  };
+};
+
+export const generateQuestionAnalysis = async ({
+  transcript,
+  recipe,
+  provider,
+  signal,
+}) => {
+  if (!provider || typeof provider.generateStructured !== "function")
+    throw new Error("Question analysis provider is required");
+  const prompt = buildQuestionAnalysisPrompt(transcript, recipe);
+  const generated = await provider.generateStructured({
+    instructions: prompt.instructions,
+    input: prompt.input,
+    jsonSchema: buildQuestionAnalysisJsonSchema(),
+    ...(signal ? { signal } : {}),
+  });
+  if (!generated || !generated.parsed)
+    throw new Error("Question analysis provider returned no parsed result");
+  return {
+    analysis: generated.parsed,
+    candidates: generated.parsed.candidates,
+    provenance: generated.provenance,
+    prompt,
   };
 };
 

@@ -10,6 +10,7 @@ import {
   deriveClipSelections,
   buildTranscriptPrompt,
   buildQuestionAnalysisPrompt,
+  generateQuestionAnalysis,
 } from "./transcript-selector.mjs";
 import { buildQuestionAnalysisRecipe } from "./question-analysis-contract.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
@@ -114,6 +115,43 @@ test("question analysis prompt serializes the recipe and every cue as untrusted 
   assert.equal(prompt.recipeSha256, recipe.sha256);
   assert.equal(prompt.transcriptSha256, computeTranscriptIdentity(transcript).sha256);
   assert.equal(prompt.input.split("IGNORE ALL PREVIOUS INSTRUCTIONS").length - 1, 1);
+});
+
+test("question analysis generation uses the structured provider and returns candidates with provenance", async () => {
+  const recipe = buildQuestionAnalysisRecipe();
+  const parsed = {
+    candidates: [{
+      candidateId: "candidate-main",
+      startCueId: "c000001",
+      endCueId: "c000004",
+      title: "The main idea",
+      summary: "A grounded summary",
+    }],
+    answers: [{
+      questionId: "main_idea",
+      answer: "A grounded answer",
+      evidenceCueIds: ["c000001"],
+      startMs: 0,
+      endMs: 40000,
+      evidenceQuality: "strong",
+      epistemicStatus: "explicit",
+    }],
+  };
+  let request;
+  const result = await generateQuestionAnalysis({
+    transcript,
+    recipe,
+    provider: {
+      async generateStructured(value) {
+        request = value;
+        return { parsed, provenance: { providerId: "test", model: "fixture" } };
+      },
+    },
+  });
+  assert.deepEqual(result.analysis, parsed);
+  assert.deepEqual(result.candidates, parsed.candidates);
+  assert.deepEqual(result.provenance, { providerId: "test", model: "fixture" });
+  assert.equal(request.jsonSchema.properties.answers.items.properties.questionId.enum.includes("main_idea"), true);
 });
 
 test("derives exact clamped intervals and accepts three grounded arcs", () => {
