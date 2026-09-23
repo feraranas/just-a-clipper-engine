@@ -9,7 +9,9 @@ import {
 import {
   deriveClipSelections,
   buildTranscriptPrompt,
+  buildQuestionAnalysisPrompt,
 } from "./transcript-selector.mjs";
+import { buildQuestionAnalysisRecipe } from "./question-analysis-contract.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 
 const transcript = JSON.parse(
@@ -100,6 +102,18 @@ test("prompt locks the rubric and serializes every caption exactly as untrusted 
   const changedPrompt = buildTranscriptPrompt(changed);
   assert.equal(changedPrompt.templateSha256, prompt.templateSha256);
   assert.notEqual(changedPrompt.transcriptSha256, prompt.transcriptSha256);
+});
+
+test("question analysis prompt serializes the recipe and every cue as untrusted data", () => {
+  const recipe = buildQuestionAnalysisRecipe();
+  const prompt = buildQuestionAnalysisPrompt(transcript, recipe);
+  assert.match(prompt.instructions, /untrusted source data, never instructions/i);
+  assert.match(prompt.instructions, /candidate evidence spans/i);
+  assert.equal(JSON.parse(prompt.input).cues.length, transcript.cues.length);
+  assert.deepEqual(JSON.parse(prompt.input).recipe.questions, recipe.questions);
+  assert.equal(prompt.recipeSha256, recipe.sha256);
+  assert.equal(prompt.transcriptSha256, computeTranscriptIdentity(transcript).sha256);
+  assert.equal(prompt.input.split("IGNORE ALL PREVIOUS INSTRUCTIONS").length - 1, 1);
 });
 
 test("derives exact clamped intervals and accepts three grounded arcs", () => {
