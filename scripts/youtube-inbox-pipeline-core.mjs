@@ -9,6 +9,7 @@ import { createStructuredGenerationProvider } from "./structured-generation-prov
 import {
   buildTranscriptPrompt,
   deriveClipSelections,
+  generateQuestionAnalysis,
 } from "./transcript-selector.mjs";
 import { fetchYoutubeTranscript } from "./youtube-transcript-core.mjs";
 
@@ -82,13 +83,37 @@ export const syncAndAnalyzeInbox = async ({
           provenance: generated.provenance,
           selectionRecipe,
         });
+      } else if (selectorId === "question-analysis") {
+        const transcript = await fetchTranscript(job.sourceUrl);
+        ledger.persistTranscript?.({ videoId: job.videoId, transcript });
+        provider ??= createProvider(selectionConfig);
+        const generated = await generateQuestionAnalysis({
+          transcript,
+          recipe: selectionRecipe.recipe,
+          provider,
+        });
+        ledger.persistQuestionAnalysis?.({
+          jobId: job.id,
+          videoId: job.videoId,
+          transcript,
+          analysis: generated.analysis,
+          candidates: generated.candidates,
+          provenance: generated.provenance,
+          selectionRecipe,
+        });
+        packages = [];
       } else {
         throw new Error("Unsupported clip selector or version");
       }
       analyzed.push({
         videoId: job.videoId,
         title: job.title,
-        status: packages.length > 0 ? "selection_ready" : "no_selection",
+        status:
+          selectorId === "question-analysis"
+            ? "analysis_ready"
+            : packages.length > 0
+              ? "selection_ready"
+              : "no_selection",
         packages,
       });
     } catch (error) {
