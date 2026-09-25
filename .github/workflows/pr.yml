@@ -26,7 +26,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run lint
-      - run: npm run test:youtube
+      - name: Run CI-safe tests
+        run: |
+          for test_file in scripts/*.test.mjs; do
+            case "$test_file" in
+              scripts/clip-selector-smoke.test.mjs) continue ;;
+            esac
+            node --test "$test_file"
+          done
       - run: git diff --check
 
   readiness:

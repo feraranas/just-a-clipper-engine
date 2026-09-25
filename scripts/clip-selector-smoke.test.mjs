@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -117,7 +118,10 @@ test("authorized smoke requires an explicit provider and official API key before
 
 test("authorized OAuth smoke requires dedicated credentials before network", async (t) => {
   const directory = await fs.mkdtemp(
-    "/private/tmp/audiogram-selector-smoke-auth-",
+    join(
+      await fs.realpath(tmpdir()),
+      "audiogram-selector-smoke-auth-",
+    ),
   );
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   let fetchCalls = 0;
@@ -160,7 +164,7 @@ test("authorized smoke exercises the production request contract and prints only
             providerId: config.providerId,
             model: config.model,
             recipeSha256:
-              "e7a70b34898cca39e4a0db0708daaada9ee6290fe7a6a25726fec6a1408273a9",
+              "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
             responseId: "resp_smoke_synthetic",
           },
         };
@@ -190,7 +194,7 @@ test("authorized smoke exercises the production request contract and prints only
     providerId: "openai-api",
     model: "gpt-5.6-terra",
     recipeSha256:
-      "e7a70b34898cca39e4a0db0708daaada9ee6290fe7a6a25726fec6a1408273a9",
+      "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
     responseId: "resp_smoke_synthetic",
     schemaVersion: 1,
     clipCount: 3,

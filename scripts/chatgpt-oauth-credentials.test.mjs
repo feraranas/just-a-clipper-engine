@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 import {
@@ -26,7 +27,9 @@ const valid = (extra = {}) => ({
   ...extra,
 });
 const fixture = async (t) => {
-  const dir = await fs.mkdtemp("/private/tmp/audiogram-credentials-test-");
+  const dir = await fs.mkdtemp(
+    join(await fs.realpath(tmpdir()), "audiogram-credentials-test-"),
+  );
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   await fs.mkdir(join(dir, "project"));
   return {

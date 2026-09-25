@@ -1,11 +1,14 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
 import { runDedicatedChatGptLogin } from "./chatgpt-oauth-login.mjs";
 
 const fixture = async (t) => {
-  const dir = await fs.mkdtemp("/private/tmp/audiogram-login-test-");
+  const dir = await fs.mkdtemp(
+    join(await fs.realpath(tmpdir()), "audiogram-login-test-"),
+  );
   t.after(() => fs.rm(dir, { recursive: true, force: true }));
   await fs.mkdir(join(dir, "project"));
   return {
