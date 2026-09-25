@@ -106,9 +106,38 @@ export const deriveClipSelections = (parsed, transcript, recipe) => {
       end.cue.endMs + limits.trailingPaddingMs,
     );
     const durationMs = endMs - startMs;
-    if (durationMs < limits.minimumClipMs || durationMs > limits.maximumClipMs)
-      throw new Error("Derived clip duration is outside the configured limits");
-    return { ...clip, startMs, endMs };
+    const overflowMs = Math.max(0, durationMs - limits.maximumClipMs);
+    const evidenceStartMs = context.cue.startMs;
+    const evidenceEndMs = payoff.cue.endMs;
+    const evidenceDurationMs = evidenceEndMs - evidenceStartMs;
+    const lowerStartMs = Math.max(
+      startMs,
+      evidenceEndMs - limits.maximumClipMs,
+    );
+    const upperStartMs = Math.min(
+      evidenceStartMs,
+      endMs - limits.maximumClipMs,
+    );
+    const trimmedStartMs =
+      overflowMs === 0
+        ? startMs
+        : lowerStartMs <= upperStartMs
+          ? Math.round((lowerStartMs + upperStartMs) / 2)
+          : startMs;
+    const trimmedEndMs =
+      overflowMs === 0 ? endMs : trimmedStartMs + limits.maximumClipMs;
+    const normalizedDurationMs = trimmedEndMs - trimmedStartMs;
+    if (
+      normalizedDurationMs < limits.minimumClipMs ||
+      normalizedDurationMs > limits.maximumClipMs ||
+      evidenceDurationMs > limits.maximumClipMs ||
+      evidenceStartMs < trimmedStartMs ||
+      evidenceEndMs > trimmedEndMs
+    )
+      throw new Error(
+        `Derived clip duration ${durationMs}ms is outside the configured limits ${limits.minimumClipMs}-${limits.maximumClipMs}ms`,
+      );
+    return { ...clip, startMs: trimmedStartMs, endMs: trimmedEndMs };
   });
 
   const chronological = [...results].sort(

@@ -196,6 +196,7 @@ test("partial audio arguments request only the selected time range", () => {
     ["--download-sections", "*12.5-42.25"],
   );
   assert.ok(args.includes("--extract-audio"));
+  assert.ok(args.includes("--force-keyframes-at-cuts"));
   assert.deepEqual(
     args.slice(
       args.indexOf("--audio-format"),

@@ -1229,6 +1229,49 @@ export const openAudiogramLedger = (
     }
   };
 
+  const persistTranscript = ({ videoId, transcript }) => {
+    if (
+      !isPlainObject(transcript) ||
+      !["youtube_creator", "youtube_auto"].includes(transcript.source) ||
+      typeof transcript.language !== "string" ||
+      !transcript.language ||
+      !Array.isArray(transcript.cues) ||
+      transcript.cues.length === 0
+    )
+      throw new Error("Invalid transcript envelope");
+    const identity = computeTranscriptIdentity(transcript);
+    if (
+      transcript.sha256 !== identity.sha256 ||
+      transcript.canonicalUtf8Bytes !== identity.canonicalUtf8Bytes
+    )
+      throw new Error(
+        "Transcript identity or sha256 does not match its content",
+      );
+    const timestamp = now();
+    database
+      .prepare(
+        `INSERT INTO transcripts (
+          video_id, source, language, content_sha256, cues_json, cue_count,
+          canonical_utf8_bytes, created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(video_id, source, language, content_sha256) DO UPDATE SET
+          cues_json = excluded.cues_json, cue_count = excluded.cue_count,
+          canonical_utf8_bytes = excluded.canonical_utf8_bytes,
+          updated_at = excluded.updated_at`,
+      )
+      .run(
+        videoId,
+        transcript.source,
+        transcript.language,
+        identity.sha256,
+        canonicalJson(transcript.cues),
+        transcript.cues.length,
+        identity.canonicalUtf8Bytes,
+        timestamp,
+        timestamp,
+      );
+  };
+
   const recordTranscriptSelection = ({
     jobId,
     transcript,
@@ -1610,6 +1653,7 @@ export const openAudiogramLedger = (
         .run(artifactRelativePath, now(), runId);
     },
     recordHeatmapSelection,
+    persistTranscript,
     recordTranscriptSelection,
     syncPlaylistVideos,
   };
