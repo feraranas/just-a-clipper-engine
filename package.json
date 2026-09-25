@@ -41,6 +41,7 @@
     "build": "remotion bundle",
     "upgrade": "remotion upgrade",
     "lint": "eslint src && tsc",
+    "pr:readiness": "node scripts/pr-readiness.mjs",
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
     "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
     "test:selector:live": "node scripts/clip-selector-smoke.mjs",

@@ -7,6 +7,8 @@ import { isAbsolute, join, resolve } from "node:path";
 import { google } from "googleapis";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { createPublishingLedger } from "./publishing-ledger.mjs";
+import { enqueueCompletedArtifact } from "./publishing-completion.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
 import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import { processClipPackages } from "./clip-processing-core.mjs";
@@ -36,6 +38,10 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
+const publishingAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
+const publishingLedgerPath =
+  process.env.INSTAGRAM_PUBLISHING_DB_PATH ??
+  join(appSupportDirectory, "instagram-publishing.sqlite");
 const projectRoot = resolve(
   process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
 );
@@ -197,6 +203,9 @@ const ledger = openAudiogramLedger(ledgerPath, {
   packageVersion,
   legacyHeatmapRecipeMap: selectionConfig.legacyHeatmapRecipeMap,
 });
+const publishingLedger = publishingAccountId
+  ? createPublishingLedger(publishingLedgerPath)
+  : null;
 
 try {
   const pipeline = await syncAndAnalyzeInbox({
@@ -213,10 +222,29 @@ try {
     loadTranscriptForPackage: (packageId) =>
       ledger.getTranscriptForPackage(packageId),
     acquireAssets: (clipPackage) =>
-      acquireClipPackageAssets(clipPackage, { projectRoot }),
-    renderTreatment: ({ clipPackage, treatment }) =>
-      renderTreatmentRun({ clipPackage, treatment }, { projectRoot }),
-    videoId: requestedVideoId,
+       acquireClipPackageAssets(clipPackage, { projectRoot }),
+      renderTreatment: ({ clipPackage, treatment }) =>
+      renderTreatmentRun(
+        { clipPackage, treatment },
+        { projectRoot },
+      ),
+    projectRoot,
+    onArtifactComplete: publishingLedger
+      ? ({ artifactRelativePath, artifactHash, clipPackage, treatment }) =>
+          enqueueCompletedArtifact({
+            ledger: publishingLedger,
+            projectRoot,
+            artifactRelativePath,
+            artifactHash,
+            accountId: publishingAccountId,
+            sourceVideoId: clipPackage.sourceVideoId,
+            clipPackageId: clipPackage.id,
+            treatmentId: treatment.id,
+            treatmentVersion: treatment.version,
+            title: clipPackage.title,
+          })
+      : undefined,
+      videoId: requestedVideoId,
   });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",
@@ -247,4 +275,5 @@ try {
   }
 } finally {
   ledger.close();
+  publishingLedger?.close();
 }

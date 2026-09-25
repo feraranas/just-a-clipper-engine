@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as fs from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
 
@@ -82,7 +83,9 @@ const jsonResponse = (body = officialResponse, status = 200) =>
   });
 
 const oauthFixture = async (t) => {
-  const directory = await fs.mkdtemp("/private/tmp/audiogram-provider-oauth-");
+  const directory = await fs.mkdtemp(
+    join(await fs.realpath(tmpdir()), "audiogram-provider-oauth-"),
+  );
   t.after(() => fs.rm(directory, { recursive: true, force: true }));
   const projectRoot = join(directory, "project");
   const authFile = join(directory, "credentials", "auth.json");
@@ -189,7 +192,7 @@ test("uses the real SDK with one locked official request and returns sanitized p
     model: "gpt-5.6-terra",
     responseId: "resp_test_123",
     recipeSha256:
-      "e7a70b34898cca39e4a0db0708daaada9ee6290fe7a6a25726fec6a1408273a9",
+      "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
     usage: {
       input_tokens: 120,
       output_tokens: 340,
@@ -477,7 +480,7 @@ test("captures immutable recipe validation values at provider creation", async (
   assert.equal(result.parsed.clips.length, 3);
   assert.equal(
     result.provenance.recipeSha256,
-    "e7a70b34898cca39e4a0db0708daaada9ee6290fe7a6a25726fec6a1408273a9",
+    "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
   );
 });
 

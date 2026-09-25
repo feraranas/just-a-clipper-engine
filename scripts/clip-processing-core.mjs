@@ -1,3 +1,4 @@
+import { hashArtifact } from "./publishing-completion.mjs";
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
 export const processClipPackages = async ({
@@ -7,6 +8,8 @@ export const processClipPackages = async ({
   loadTranscriptForPackage,
   acquireAssets,
   renderTreatment,
+  onArtifactComplete,
+  projectRoot = process.cwd(),
   videoId,
 }) => {
   const result = {
@@ -59,6 +62,22 @@ export const processClipPackages = async ({
         clipPackage,
         treatment,
       });
+      if (onArtifactComplete) {
+        result.publishing ??= { queued: 0, failed: 0 };
+        try {
+          await onArtifactComplete({
+            artifactRelativePath,
+            artifactHash: await hashArtifact(projectRoot, artifactRelativePath),
+            run,
+            clipPackage,
+            treatment,
+          });
+          result.publishing.queued += 1;
+        } catch (error) {
+          result.publishing.failed += 1;
+          result.publishing.lastError = sanitizeErrorDiagnostic(error);
+        }
+      }
       ledger.markTreatmentRunRendered(run.id, artifactRelativePath);
       result.treatments.rendered += 1;
     } catch (error) {
