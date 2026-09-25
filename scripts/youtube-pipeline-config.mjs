@@ -11,7 +11,9 @@ export const resolvePackageVersion = (environment) =>
   environment.AUDIOGRAM_TREATMENT_VERSION ??
   (environment.AUDIOGRAM_CLIP_SELECTOR === "transcript-llm"
     ? "transcript-llm-v1"
-    : "v1");
+    : environment.AUDIOGRAM_CLIP_SELECTOR === "question-analysis"
+      ? "question-analysis-v1"
+      : "v1");
 
 const integer = (value, name, min = 1, max = Number.MAX_SAFE_INTEGER) => {
   if (
@@ -110,7 +112,10 @@ export const resolveSelectionConfig = (environment = {}) => {
   return deepFreeze({
     ...common,
     providerId,
-    model: SELECTOR_MODEL,
+    model:
+      selector.id === "question-analysis"
+        ? environment.AUDIOGRAM_QUESTION_ANALYSIS_MODEL ?? "gpt-5.6-terra"
+        : SELECTOR_MODEL,
     codexVersion: OAUTH_CODEX_VERSION,
     desiredClipCount: integer(
       environment.AUDIOGRAM_TRANSCRIPT_CLIP_COUNT ?? "3",

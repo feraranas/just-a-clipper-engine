@@ -5,6 +5,12 @@ import {
   deepFreeze,
 } from "./canonical-json.mjs";
 import { selectorRegistry } from "./clip-selector-registry.mjs";
+import {
+  buildQuestionAnalysisJsonSchema,
+  QUESTION_ANALYSIS_VERSION,
+  QUESTION_PROMPT_VERSION,
+  QUESTION_ANALYSIS_MODEL,
+} from "./question-analysis-contract.mjs";
 
 export const SELECTOR_MODEL = "gpt-5.6-terra";
 export const OAUTH_CODEX_VERSION = "0.144.1";
@@ -188,6 +194,30 @@ export const buildSelectionRecipe = (config) => {
       prompt: null,
       outputSchema: { version: 1, sha256: HEATMAP_SCHEMA_SHA256 },
       parameters: { maxClips, minimumSeparationMs },
+    };
+  } else if (selector.id === "question-analysis") {
+    if (!['openai-api', 'chatgpt-oauth'].includes(config.providerId))
+      throw new Error("Question analysis recipe requires an explicit provider");
+    const schema = config.outputSchema ?? buildQuestionAnalysisJsonSchema();
+    recipe = {
+      recipeVersion: 1,
+      selector,
+      provider: {
+        id: config.providerId,
+        model: config.model ?? QUESTION_ANALYSIS_MODEL,
+        ...(config.providerId === "chatgpt-oauth"
+          ? { codexVersion: config.codexVersion ?? OAUTH_CODEX_VERSION }
+          : {}),
+      },
+      prompt: {
+        version: config.promptVersion ?? QUESTION_PROMPT_VERSION,
+        sha256: sha256Canonical(config.prompt ?? QUESTION_ANALYSIS_VERSION),
+      },
+      outputSchema: {
+        version: config.outputSchemaVersion ?? 1,
+        sha256: sha256Canonical(schema),
+      },
+      analysisVersion: QUESTION_ANALYSIS_VERSION,
     };
   } else {
     if (!["openai-api", "chatgpt-oauth"].includes(config.providerId))

@@ -1,4 +1,4 @@
-const selectors = ["youtube-heatmap", "transcript-llm"].map((id) =>
+const selectors = ["youtube-heatmap", "transcript-llm", "question-analysis"].map((id) =>
   Object.freeze({ id, version: "1" }),
 );
 

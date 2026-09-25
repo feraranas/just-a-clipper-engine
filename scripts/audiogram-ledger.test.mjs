@@ -309,6 +309,8 @@ test("fresh database schema version 2 creates provenance tables and JSON constra
       .all()
       .map(({ name }) => name),
     [
+      "analyses",
+      "analysis_answers",
       "clip_assets",
       "clip_packages",
       "package_jobs",

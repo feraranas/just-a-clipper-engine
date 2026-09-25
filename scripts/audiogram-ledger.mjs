@@ -741,6 +741,34 @@ const createSelectionRunsTable = (database) => {
   `);
 };
 
+const createQuestionAnalysisTables = (database) => {
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS analyses (
+      id INTEGER PRIMARY KEY,
+      video_id TEXT NOT NULL REFERENCES videos(video_id) ON DELETE CASCADE,
+      package_job_id INTEGER NOT NULL UNIQUE REFERENCES package_jobs(id) ON DELETE CASCADE,
+      transcript_id INTEGER NOT NULL REFERENCES transcripts(id) ON DELETE RESTRICT,
+      recipe_sha256 TEXT NOT NULL,
+      provenance_json TEXT NOT NULL CHECK(json_valid(provenance_json)),
+      analysis_json TEXT NOT NULL CHECK(json_valid(analysis_json)),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS analysis_answers (
+      id INTEGER PRIMARY KEY,
+      analysis_id INTEGER NOT NULL REFERENCES analyses(id) ON DELETE CASCADE,
+      question_id TEXT NOT NULL,
+      answer TEXT NOT NULL,
+      evidence_cue_ids_json TEXT NOT NULL CHECK(json_valid(evidence_cue_ids_json)),
+      start_ms INTEGER NOT NULL,
+      end_ms INTEGER NOT NULL,
+      evidence_quality TEXT NOT NULL,
+      epistemic_status TEXT NOT NULL,
+      UNIQUE(analysis_id, question_id)
+    ) STRICT;
+  `);
+};
+
 const recipeForLegacyJob = ({
   row,
   hasClips,
@@ -987,6 +1015,7 @@ export const openAudiogramLedger = (
       database.exec("PRAGMA foreign_keys = ON");
     }
     database.exec("PRAGMA journal_mode = WAL");
+    createQuestionAnalysisTables(database);
   } catch (error) {
     database.close();
     throw error;
@@ -1270,6 +1299,102 @@ export const openAudiogramLedger = (
         timestamp,
         timestamp,
       );
+  };
+
+  const persistQuestionAnalysis = ({
+    jobId,
+    videoId,
+    transcript,
+    analysis,
+    candidates = [],
+    provenance = {},
+    selectionRecipe,
+  }) => {
+    if (!selectionRecipe?.sha256 || !analysis || !Array.isArray(analysis.answers))
+      throw new Error("Invalid question analysis payload");
+    const identity = computeTranscriptIdentity(transcript);
+    const transcriptRow = database
+      .prepare(
+        "SELECT id FROM transcripts WHERE video_id = ? AND content_sha256 = ?",
+      )
+      .get(videoId, identity.sha256);
+    if (!transcriptRow) throw new Error("Question analysis transcript is not persisted");
+    const timestamp = now();
+    database.exec("BEGIN IMMEDIATE");
+    try {
+      database
+        .prepare(
+          `INSERT INTO analyses
+           (video_id, package_job_id, transcript_id, recipe_sha256, provenance_json,
+            analysis_json, created_at, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(package_job_id) DO UPDATE SET
+             transcript_id=excluded.transcript_id, recipe_sha256=excluded.recipe_sha256,
+             provenance_json=excluded.provenance_json, analysis_json=excluded.analysis_json,
+             updated_at=excluded.updated_at`,
+        )
+        .run(
+          videoId,
+          jobId,
+          transcriptRow.id,
+          selectionRecipe.sha256,
+          canonicalJson({ ...provenance, candidates }),
+          canonicalJson(analysis),
+          timestamp,
+          timestamp,
+        );
+      const row = database
+        .prepare("SELECT id FROM analyses WHERE package_job_id = ?")
+        .get(jobId);
+      database.prepare("DELETE FROM analysis_answers WHERE analysis_id = ?").run(row.id);
+      for (const answer of analysis.answers)
+        database
+          .prepare(
+            `INSERT INTO analysis_answers
+             (analysis_id, question_id, answer, evidence_cue_ids_json, start_ms,
+              end_ms, evidence_quality, epistemic_status)
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+          )
+          .run(
+            row.id,
+            answer.questionId,
+            answer.answer,
+            canonicalJson(answer.evidenceCueIds),
+            answer.startMs,
+            answer.endMs,
+            answer.evidenceQuality,
+            answer.epistemicStatus,
+          );
+      database.exec("COMMIT");
+      return { id: row.id };
+    } catch (error) {
+      database.exec("ROLLBACK");
+      throw error;
+    }
+  };
+
+  const getQuestionAnalysis = (jobId) => {
+    const row = database.prepare("SELECT * FROM analyses WHERE package_job_id = ?").get(jobId);
+    if (!row) return null;
+    return {
+      id: row.id,
+      videoId: row.video_id,
+      recipeSha256: row.recipe_sha256,
+      provenance: JSON.parse(row.provenance_json),
+      analysis: JSON.parse(row.analysis_json),
+      answers: database
+        .prepare("SELECT * FROM analysis_answers WHERE analysis_id = ? ORDER BY id")
+        .all(row.id)
+        .map((answer) => ({
+          questionId: answer.question_id,
+          answer: answer.answer,
+          evidenceCueIds: JSON.parse(answer.evidence_cue_ids_json),
+          startMs: answer.start_ms,
+          endMs: answer.end_ms,
+          evidenceQuality: answer.evidence_quality,
+          epistemicStatus: answer.epistemic_status,
+        })),
+    };
   };
 
   const recordTranscriptSelection = ({
@@ -1655,6 +1780,8 @@ export const openAudiogramLedger = (
     recordHeatmapSelection,
     persistTranscript,
     recordTranscriptSelection,
+    persistQuestionAnalysis,
+    getQuestionAnalysis,
     syncPlaylistVideos,
   };
 };
