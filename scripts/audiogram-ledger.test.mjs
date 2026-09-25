@@ -1548,3 +1548,55 @@ test("completed selections cannot be re-recorded over ready or failed package st
     "download failed",
   );
 });
+
+test("question analysis persists timestamped answers idempotently", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "audiogram-analysis-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const analysisRecipe = buildSelectionRecipe({
+    selectorId: "question-analysis",
+    providerId: "openai-api",
+  });
+  const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"), {
+    selectionRecipe: analysisRecipe,
+  });
+  t.after(() => ledger.close());
+  ledger.syncPlaylistVideos({
+    playlistId: "playlist-analysis",
+    packageVersion: "question-analysis-v1",
+    selectionRecipe: analysisRecipe,
+    videos: [{
+      videoId: "analysis-video",
+      title: "Analysis video",
+      url: "https://youtu.be/analysis-video",
+    }],
+  });
+  const job = ledger.getPackageJob("analysis-video", "question-analysis-v1");
+  const groundedTranscript = { ...transcript, videoId: undefined };
+  ledger.persistTranscript({ videoId: "analysis-video", transcript: groundedTranscript });
+  const analysis = {
+    candidates: [{ candidateId: "candidate-main", startCueId: "c000001", endCueId: "c000004", title: "Main", summary: "Grounded" }],
+    answers: [{ questionId: "main_idea", answer: "The main idea", evidenceCueIds: ["c000001"], startMs: 0, endMs: 40000, evidenceQuality: "strong", epistemicStatus: "explicit" }],
+  };
+  ledger.persistQuestionAnalysis({
+    jobId: job.id,
+    videoId: "analysis-video",
+    transcript: groundedTranscript,
+    analysis,
+    candidates: analysis.candidates,
+    provenance: { providerId: "openai-api", model: "fixture" },
+    selectionRecipe: analysisRecipe,
+  });
+  ledger.persistQuestionAnalysis({
+    jobId: job.id,
+    videoId: "analysis-video",
+    transcript: groundedTranscript,
+    analysis,
+    candidates: analysis.candidates,
+    provenance: { providerId: "openai-api", model: "fixture" },
+    selectionRecipe: analysisRecipe,
+  });
+  const stored = ledger.getQuestionAnalysis(job.id);
+  assert.equal(stored.answers.length, 1);
+  assert.equal(stored.answers[0].startMs, 0);
+  assert.deepEqual(stored.analysis, analysis);
+});
