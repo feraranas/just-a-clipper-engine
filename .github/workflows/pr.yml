@@ -25,6 +25,7 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      - run: npm run verify:feature-docs
       - run: npm run lint
       - name: Run CI-safe tests
         run: |
