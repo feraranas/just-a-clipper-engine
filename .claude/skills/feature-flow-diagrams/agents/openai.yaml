@@ -1,0 +1,4 @@
+interface:
+  display_name: "Feature Flow Diagrams"
+  short_description: "Document new features with Mermaid system flows"
+  default_prompt: "Create the feature flow diagram and implementation summary for this repository change."
