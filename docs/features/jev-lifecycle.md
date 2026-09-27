@@ -55,3 +55,40 @@ flowchart LR
 ```
 
 The composed operation returns raw judgments and ranked candidates so policy or display changes can reuse judgments without rerunning Jev.
+
+## 5. Injectable HTTP transport
+
+```mermaid
+sequenceDiagram
+  Pipeline->>JevClient: judgeCandidates(state)
+  JevClient->>HTTPS: POST transcript, questions, candidates
+  HTTPS-->>JevClient: judgments object
+  JevClient-->>Pipeline: validated judgments
+```
+
+The HTTP adapter requires an HTTPS endpoint and explicit API key, uses an abort timeout, sends JSON only, and validates that the response contains a judgments object. Tests inject `fetchImpl`; production code supplies the real transport without coupling ranking logic to HTTP.
+
+## 6. Question-analysis adapter
+
+```mermaid
+flowchart TD
+  Transcript[Timestamped transcript] --> Provider[Question analysis provider]
+  Recipe[Question recipe] --> Provider
+  Provider --> Candidates[Grounded candidate spans]
+  Candidates --> Jev[Jev evaluation]
+  Jev --> Result[Raw judgments + ranked candidates]
+```
+
+`runQuestionAnalysis()` owns the handoff from structured candidate generation to Jev. It returns provider provenance together with the reusable judgments and ranked output.
+
+## 7. ClipPackage projection
+
+```mermaid
+flowchart TD
+  Ranked[Ranked candidates] --> Validate[Grounding, confidence, safety, duration]
+  Validate -->|blocked, low confidence, invalid span| Reject[Reject or review]
+  Validate -->|valid 30-90s span| Package[ClipPackage-shaped output]
+  Package --> Treatment[Future Remotion treatment]
+```
+
+Projection preserves `analysisQuestionId`, timestamps, score, confidence, review state, title, and summary. Duplicate candidate IDs are suppressed and invalid or unsafe candidates never reach treatment.
