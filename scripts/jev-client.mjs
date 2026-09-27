@@ -8,6 +8,7 @@ export const createHttpJevClient = ({
   apiKey,
   fetchImpl = fetch,
   timeoutMs = 30_000,
+  model = "jev-latest",
 }) => {
   if (typeof endpoint !== "string" || !/^https:\/\//.test(endpoint))
     throw new Error("Jev endpoint must be an HTTPS URL");
@@ -25,14 +26,18 @@ export const createHttpJevClient = ({
             authorization: `Bearer ${apiKey}`,
             "content-type": "application/json",
           },
-          body: JSON.stringify({ transcript, questions, candidates }),
+          body: JSON.stringify({
+            state: { transcript, candidates },
+            model,
+            questions,
+          }),
           signal: controller.signal,
         });
         if (!response.ok) throw new Error(`Jev request failed with HTTP ${response.status}`);
         const payload = await response.json();
-        if (!payload || typeof payload.judgments !== "object" || Array.isArray(payload.judgments))
-          throw new Error("Jev response did not contain judgments");
-        return payload.judgments;
+        if (!payload || typeof payload.answers !== "object" || Array.isArray(payload.answers))
+          throw new Error("Jev response did not contain answers");
+        return payload.answers;
       } finally {
         clearTimeout(timer);
       }

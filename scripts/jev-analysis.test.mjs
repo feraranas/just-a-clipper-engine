@@ -31,7 +31,7 @@ test("HTTP Jev client sends bounded authenticated JSON and returns judgments", a
     apiKey: "secret",
     fetchImpl: async (url, init) => {
       request = { url, init };
-      return { ok: true, async json() { return { judgments: { candidate: { confidence: 1 } } }; } };
+      return { ok: true, async json() { return { answers: { candidate: { confidence: 1 } } }; } };
     },
   });
   const judgments = await client.judgeCandidates({ transcript: {}, questions: [], candidates: [] });
