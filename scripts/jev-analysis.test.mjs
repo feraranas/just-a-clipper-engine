@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { evaluateCandidates, rankCandidates } from "./jev-analysis.mjs";
+import { evaluateAndRankCandidates, evaluateCandidates, rankCandidates } from "./jev-analysis.mjs";
 import { createJevClient } from "./jev-client.mjs";
 
 test("ranks candidates deterministically", () => {
@@ -22,4 +22,24 @@ test("evaluation delegates to the Jev boundary", async () => {
 test("evaluation skips Jev when there are no candidates", async () => {
   const client = createJevClient({ judgeCandidates: async () => { throw new Error("must not call"); } });
   assert.deepEqual(await evaluateCandidates({ transcript: {}, questions: [], candidates: [], client }), {});
+});
+
+test("combined lifecycle returns reusable judgments and ranked candidates", async () => {
+  const result = await evaluateAndRankCandidates({
+    transcript: { cues: [] },
+    questions: [],
+    candidates: [{ candidateId: "candidate" }],
+    client: createJevClient({
+      judgeCandidates: async () => ({
+        candidate: {
+          scores: { relevance: 1, insight: 1, selfContainedness: 1 },
+          nouls: {},
+          confidence: 0.9,
+        },
+      }),
+    }),
+  });
+  assert.equal(result.candidateCount, 1);
+  assert.equal(result.judgments.candidate.confidence, 0.9);
+  assert.equal(result.ranked[0].candidateId, "candidate");
 });

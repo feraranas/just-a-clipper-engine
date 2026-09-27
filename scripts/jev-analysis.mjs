@@ -20,3 +20,18 @@ export const evaluateCandidates = async ({ transcript, questions, candidates, cl
   if (!judgments || typeof judgments !== "object") throw new Error("Jev client returned invalid judgments");
   return judgments;
 };
+
+export const evaluateAndRankCandidates = async ({
+  transcript,
+  questions,
+  candidates,
+  client,
+  weights,
+}) => {
+  const judgments = await evaluateCandidates({ transcript, questions, candidates, client });
+  return {
+    judgments,
+    ranked: rankCandidates(judgments, weights),
+    candidateCount: candidates.length,
+  };
+};
