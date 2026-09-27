@@ -1,6 +1,7 @@
 import { buildQuestionAnalysisJsonSchema } from "./question-analysis-contract.mjs";
 import { evaluateAndRankCandidates } from "./jev-analysis.mjs";
 import { persistJevEvaluation } from "./jev-ledger.mjs";
+import { projectRankedCandidates } from "./jev-projection.mjs";
 
 export const runQuestionAnalysis = async ({
   transcript,
@@ -10,6 +11,8 @@ export const runQuestionAnalysis = async ({
   ledger,
   analysisId,
   timestamp,
+  questionId,
+  projectionOptions,
   signal,
 }) => {
   if (!provider || typeof provider.generateStructured !== "function")
@@ -34,6 +37,12 @@ export const runQuestionAnalysis = async ({
     analysis,
     provenance: generated.provenance,
     ...evaluation,
+    packages: projectRankedCandidates({
+      ranked: evaluation.ranked,
+      candidates: analysis.candidates,
+      questionId,
+      ...projectionOptions,
+    }),
   };
   if (ledger) {
     persistJevEvaluation(ledger, {
