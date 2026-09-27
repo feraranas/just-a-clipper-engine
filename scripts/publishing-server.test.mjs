@@ -19,10 +19,16 @@ const fixture = {
 const setup = async (t) => {
   const root = await mkdtemp(join(tmpdir(), "publishing-server-"));
   await mkdir(join(root, "out/reels"), { recursive: true });
+  await mkdir(join(root, "publishing"), { recursive: true });
+  await writeFile(join(root, "publishing/index.html"), "<main>approval queue</main>");
   await writeFile(join(root, fixture.artifactRelativePath), "fixture mp4");
   const ledger = createPublishingLedger(join(root, "publishing.sqlite"));
   const item = ledger.enqueueArtifact(fixture);
-  const server = createPublishingServer({ projectRoot: root, ledger });
+  const server = createPublishingServer({
+    projectRoot: root,
+    ledger,
+    publicRoot: join(root, "publishing"),
+  });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
   t.after(() => {
@@ -51,6 +57,10 @@ const call = (baseUrl, method, path, body) =>
 
 test("lists queue items and persists a caption update", async (t) => {
   const { item, baseUrl } = await setup(t);
+  const page = await call(baseUrl, "GET", "/");
+  assert.equal(page.status, 200);
+  assert.match(page.headers["content-type"], /text\/html/);
+
   const queue = await call(baseUrl, "GET", "/api/items");
   assert.equal(queue.status, 200);
   assert.equal(queue.body.items[0].id, item.id);
@@ -58,6 +68,27 @@ test("lists queue items and persists a caption update", async (t) => {
   const updated = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, { caption: "Edited caption" });
   assert.equal(updated.status, 200);
   assert.equal(updated.body.item.caption, "Edited caption");
+});
+
+test("returns JSON errors for invalid approval and rejection requests", async (t) => {
+  const { item, baseUrl } = await setup(t);
+  const missingSchedule = await call(
+    baseUrl,
+    "POST",
+    `/api/items/${item.id}/approve`,
+    {},
+  );
+  assert.equal(missingSchedule.status, 400);
+  assert.equal(typeof missingSchedule.body.error, "string");
+
+  const missingReason = await call(
+    baseUrl,
+    "POST",
+    `/api/items/${item.id}/reject`,
+    {},
+  );
+  assert.equal(missingReason.status, 400);
+  assert.equal(typeof missingReason.body.error, "string");
 });
 
 test("approves and rejects through state-aware routes", async (t) => {

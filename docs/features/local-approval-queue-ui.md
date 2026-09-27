@@ -1,8 +1,8 @@
 ---
 feature: local-approval-queue-ui
-status: DESIGN
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Local approval queue UI
@@ -134,5 +134,17 @@ rendering UI.
 
 ## Implementation reconciliation and deviations
 
-Not yet implemented. This section will be updated after implementation and
-tests compare the actual behavior with this design.
+Implemented in `public/publishing/index.html`,
+`public/publishing/styles.css`, and `public/publishing/app.mjs`. The browser
+uses the existing publishing API and reloads server state after every
+successful mutation; it does not optimistically mark items approved or
+rejected. Server contract coverage now verifies static page serving, queue
+payloads, MP4 previews, invalid transition errors, and preview path
+traversal.
+
+Intentional deviations from the design: the first slice includes no browser
+automation runner, so UI behavior is covered through pure client contract
+tests plus server integration tests. Retry and publishing-worker controls
+remain out of scope. The feature-document verifier named in the plan is not
+present in the repository, so metadata and required sections were checked
+manually during reconciliation.
