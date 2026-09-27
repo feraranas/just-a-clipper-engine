@@ -2,6 +2,7 @@
 set -eu
 
 echo "Running pre-push verification..."
+npm run verify:feature-docs
 npm run lint
 for test_file in scripts/*.test.mjs; do
   case "$test_file" in
