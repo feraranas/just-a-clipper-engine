@@ -21,6 +21,8 @@ const setup = async (t) => {
   await mkdir(join(root, "out/reels"), { recursive: true });
   await mkdir(join(root, "publishing"), { recursive: true });
   await writeFile(join(root, "publishing/index.html"), "<main>approval queue</main>");
+  await writeFile(join(root, "publishing/app.mjs"), "export const ready = true;");
+  await writeFile(join(root, "publishing/styles.css"), "body { color: red; }");
   await writeFile(join(root, fixture.artifactRelativePath), "fixture mp4");
   const ledger = createPublishingLedger(join(root, "publishing.sqlite"));
   const item = ledger.enqueueArtifact(fixture);
@@ -60,6 +62,12 @@ test("lists queue items and persists a caption update", async (t) => {
   const page = await call(baseUrl, "GET", "/");
   assert.equal(page.status, 200);
   assert.match(page.headers["content-type"], /text\/html/);
+  const module = await call(baseUrl, "GET", "/app.mjs");
+  assert.equal(module.status, 200);
+  assert.match(module.headers["content-type"], /javascript/);
+  const styles = await call(baseUrl, "GET", "/styles.css");
+  assert.equal(styles.status, 200);
+  assert.match(styles.headers["content-type"], /text\/css/);
 
   const queue = await call(baseUrl, "GET", "/api/items");
   assert.equal(queue.status, 200);
