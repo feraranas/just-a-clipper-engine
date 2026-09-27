@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { evaluateAndRankCandidates, evaluateCandidates, rankCandidates } from "./jev-analysis.mjs";
-import { createJevClient } from "./jev-client.mjs";
+import { createHttpJevClient, createJevClient } from "./jev-client.mjs";
 
 test("ranks candidates deterministically", () => {
   const ranked = rankCandidates({ b: { scores: { relevance: 1, insight: .5, selfContainedness: 1 }, confidence: .8, nouls: {} }, a: { scores: { relevance: 1, insight: .5, selfContainedness: 1 }, confidence: .8, nouls: {} } });
@@ -22,6 +22,22 @@ test("evaluation delegates to the Jev boundary", async () => {
 test("evaluation skips Jev when there are no candidates", async () => {
   const client = createJevClient({ judgeCandidates: async () => { throw new Error("must not call"); } });
   assert.deepEqual(await evaluateCandidates({ transcript: {}, questions: [], candidates: [], client }), {});
+});
+
+test("HTTP Jev client sends bounded authenticated JSON and returns judgments", async () => {
+  let request;
+  const client = createHttpJevClient({
+    endpoint: "https://typesafe.example/judge",
+    apiKey: "secret",
+    fetchImpl: async (url, init) => {
+      request = { url, init };
+      return { ok: true, async json() { return { judgments: { candidate: { confidence: 1 } } }; } };
+    },
+  });
+  const judgments = await client.judgeCandidates({ transcript: {}, questions: [], candidates: [] });
+  assert.equal(request.url, "https://typesafe.example/judge");
+  assert.equal(request.init.headers.authorization, "Bearer secret");
+  assert.deepEqual(judgments, { candidate: { confidence: 1 } });
 });
 
 test("combined lifecycle returns reusable judgments and ranked candidates", async () => {
