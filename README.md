@@ -24,6 +24,17 @@ npm ci
 npm run youtube:inbox
 ```
 
+To re-authorize YouTube after an expired or revoked Google token:
+
+```console
+npm run youtube:login
+```
+
+Open the printed URL, complete Google authorization, then rerun
+`npm run youtube:inbox`. The command replaces the token only after a successful
+callback and stores it at `AUDIOGRAM_GOOGLE_TOKEN_PATH` or the default
+application-support path.
+
 On first authorization, open the printed Google OAuth URL. The pipeline looks
 for a private playlist named `Audiogram Inbox` by default.
 
