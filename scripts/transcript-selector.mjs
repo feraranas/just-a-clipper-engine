@@ -126,18 +126,23 @@ export const deriveClipSelections = (parsed, transcript, recipe) => {
           : startMs;
     const trimmedEndMs =
       overflowMs === 0 ? endMs : trimmedStartMs + limits.maximumClipMs;
-    const normalizedDurationMs = trimmedEndMs - trimmedStartMs;
+    const candidateStartMs = evidenceDurationMs > limits.maximumClipMs
+      ? startMs
+      : trimmedStartMs;
+    const candidateEndMs = evidenceDurationMs > limits.maximumClipMs
+      ? Math.min(transcriptEndMs, candidateStartMs + limits.maximumClipMs)
+      : trimmedEndMs;
+    const normalizedDurationMs = candidateEndMs - candidateStartMs;
     if (
       normalizedDurationMs < limits.minimumClipMs ||
       normalizedDurationMs > limits.maximumClipMs ||
-      evidenceDurationMs > limits.maximumClipMs ||
-      evidenceStartMs < trimmedStartMs ||
-      evidenceEndMs > trimmedEndMs
+      (evidenceDurationMs <= limits.maximumClipMs &&
+        (evidenceStartMs < candidateStartMs || evidenceEndMs > candidateEndMs))
     )
       throw new Error(
         `Derived clip duration ${durationMs}ms is outside the configured limits ${limits.minimumClipMs}-${limits.maximumClipMs}ms`,
       );
-    return { ...clip, startMs: trimmedStartMs, endMs: trimmedEndMs };
+    return { ...clip, startMs: candidateStartMs, endMs: candidateEndMs };
   });
 
   const chronological = [...results].sort(
