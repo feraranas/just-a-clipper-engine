@@ -1,6 +1,6 @@
 import { parseSrt } from "@remotion/captions";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, readdir, rm } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -13,6 +13,15 @@ import {
 
 const execFileAsync = promisify(execFile);
 const maxCanonicalUtf8Bytes = 524_288;
+
+const formatSrtTime = (milliseconds) => {
+  const totalMs = Math.max(0, Math.round(milliseconds));
+  const hours = Math.floor(totalMs / 3_600_000);
+  const minutes = Math.floor((totalMs % 3_600_000) / 60_000);
+  const seconds = Math.floor((totalMs % 60_000) / 1_000);
+  const millis = totalMs % 1_000;
+  return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0") + "," + String(millis).padStart(3, "0");
+};
 
 const defaultRunCommand = (command, args) =>
   execFileAsync(command, args, { maxBuffer: 10 * 1024 * 1024 });
@@ -138,10 +147,31 @@ export const fetchYoutubeTranscript = async (
     }
     const track = selectEnglishCaptionTrack(metadata);
     const outputTemplate = join(temporaryDirectory, "caption.%(ext)s");
-    await runCommand(
-      "yt-dlp",
-      captionArgs({ sourceUrl, outputTemplate, track }),
-    );
+    try {
+      await runCommand(
+        "yt-dlp",
+        captionArgs({ sourceUrl, outputTemplate, track }),
+      );
+    } catch (downloadError) {
+      const field = track.source === "youtube_creator" ? "subtitles" : "automatic_captions";
+      const trackEntries = Object.entries(metadata?.[field] ?? {});
+      const exactTrack = trackEntries.find(([language]) => language === "en-orig") ?? trackEntries.find(([language]) => language === track.language);
+      const captionUrl = exactTrack?.[1]?.[0]?.url;
+      if (!captionUrl) throw downloadError;
+      const response = await fetch(captionUrl);
+      if (!response.ok) throw downloadError;
+      const json = await response.json();
+      const fallbackSrt = (json.events ?? [])
+        .filter((event) => Array.isArray(event.segs) && Number.isFinite(event.tStartMs))
+        .map((event, index) => {
+          const startMs = event.tStartMs;
+          const endMs = startMs + (event.dDurationMs ?? 1_000);
+          const text = event.segs.map((segment) => segment.utf8 ?? "").join("").trim();
+          return (index + 1) + "\n" + formatSrtTime(startMs) + " --> " + formatSrtTime(endMs) + "\n" + text + "\n";
+        })
+        .join("\n");
+      await writeFile(join(temporaryDirectory, "caption.srt"), fallbackSrt);
+    }
     const srtFiles = (await readdir(temporaryDirectory))
       .filter((fileName) => fileName.endsWith(".srt"))
       .sort();

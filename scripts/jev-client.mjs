@@ -20,6 +20,11 @@ export const createHttpJevClient = ({
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
+        const candidateWindows = Array.isArray(candidates) ? candidates.map((candidate) => ({ startMs: candidate.startMs - 30_000, endMs: candidate.endMs + 30_000 })) : [];
+        const boundedCues = Array.isArray(transcript?.cues) && candidateWindows.length > 0
+          ? transcript.cues.filter((cue) => candidateWindows.some((window) => cue.endMs > window.startMs && cue.startMs < window.endMs)).slice(0, 1_200)
+          : transcript?.cues;
+        const boundedTranscript = transcript && Array.isArray(transcript.cues) ? { ...transcript, cues: boundedCues } : transcript;
         const response = await fetchImpl(endpoint, {
           method: "POST",
           headers: {
@@ -27,7 +32,7 @@ export const createHttpJevClient = ({
             "content-type": "application/json",
           },
           body: JSON.stringify({
-            state: { transcript, candidates },
+            state: { transcript: boundedTranscript, candidates },
             model,
             questions: Array.isArray(questions)
               ? Object.fromEntries(questions.map((question) => [question.id, question]))
