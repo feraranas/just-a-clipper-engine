@@ -1,3 +1,10 @@
+---
+feature: Jev transcript production integration
+design-reviewed: true
+implementation-reconciled: true
+status: COMPLETE
+---
+
 # Jev lifecycle feature flows
 
 ## 1. Client boundary
