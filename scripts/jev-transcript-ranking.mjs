@@ -19,15 +19,20 @@ const questionMapFor = (candidates) => Object.fromEntries(candidates.flatMap((ca
   }]),
 ]));
 
-const answerValue = (answer) => Number.isFinite(Number(answer?.score)) ? Number(answer.score) : 0;
+const answerValue = (answer) => Number.isFinite(Number(answer?.score)) ? Number(answer.score) / 4 : 0;
 const answerNoul = (answer) => Number(answer?.noul) >= 0.5;
 const normalizeAnswers = (answers, candidates) => Object.fromEntries(candidates.map((candidate) => {
   const prefix = `${candidate.candidateId}.`;
   const answer = (name) => answers?.[`${prefix}${name}`];
-  const confidence = Math.min(...[...dimensions, ...nouls].map((name) => Number(answer(name)?.confidence ?? 0)));
+  const confidenceValues = [...dimensions, ...nouls]
+    .map((name) => Number(answer(name)?.confidence))
+    .filter(Number.isFinite);
+  const confidence = confidenceValues.length > 0
+    ? confidenceValues.reduce((sum, value) => sum + value, 0) / confidenceValues.length
+    : 0;
   return [candidate.candidateId, {
     scores: Object.fromEntries(dimensions.map((name) => [name, answerValue(answer(name))])),
-    nouls: Object.fromEntries(nouls.map((name) => [name, name === "containsSponsorOrCta" ? answerNoul(answer(name)) : !answerNoul(answer(name))])),
+    nouls: Object.fromEntries(nouls.map((name) => [name, answerNoul(answer(name))])),
     confidence: Number.isFinite(confidence) ? confidence : 0,
   }];
 }));
@@ -60,7 +65,7 @@ export const rankTranscriptPackagesWithJev = async ({
   const byId = new Map(packages.map((clip, index) => [`candidate-${index + 1}`, clip]));
   return evaluation.ranked.flatMap((ranked) => {
     const clip = byId.get(ranked.candidateId);
-    return clip && !ranked.blocked && ranked.confidence >= 0.6
+    return clip && !ranked.blocked
       ? [{ ...clip, score: ranked.score, jevConfidence: ranked.confidence }]
       : [];
   });
