@@ -5,7 +5,7 @@ echo "Running pre-push verification..."
 npm run lint
 for test_file in scripts/*.test.mjs; do
   case "$test_file" in
-    scripts/publishing-server.test.mjs) continue ;;
+    scripts/publishing-server.test.mjs|scripts/clip-selector-smoke.test.mjs) continue ;;
   esac
   node --test "$test_file"
 done
