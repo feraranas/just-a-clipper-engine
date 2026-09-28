@@ -1,5 +1,37 @@
 import { evaluateAndRankCandidates } from "./jev-analysis.mjs";
 
+const dimensions = ["relevance", "insight", "selfContainedness"];
+const nouls = ["completeThought", "containsSponsorOrCta", "citationSupported"];
+
+const questionMapFor = (candidates) => Object.fromEntries(candidates.flatMap((candidate) => [
+  ...dimensions.map((dimension) => [`${candidate.candidateId}.${dimension}`, {
+    type: "score",
+    instructions: `Rate the candidate's ${dimension} for a publishable short clip from 0 to 1.`,
+    criteria: ["0", "0.25", "0.5", "0.75", "1"],
+  }]),
+  ...nouls.map((noul) => [`${candidate.candidateId}.${noul}`, {
+    type: "noul",
+    instructions: noul === "containsSponsorOrCta"
+      ? "Does this candidate contain sponsor copy or a call to action?"
+      : noul === "completeThought"
+        ? "Does this candidate express a complete thought?"
+        : "Is this candidate supported by the supplied transcript?",
+  }]),
+]));
+
+const answerValue = (answer) => Number.isFinite(Number(answer?.score)) ? Number(answer.score) : 0;
+const answerNoul = (answer) => Number(answer?.noul) >= 0.5;
+const normalizeAnswers = (answers, candidates) => Object.fromEntries(candidates.map((candidate) => {
+  const prefix = `${candidate.candidateId}.`;
+  const answer = (name) => answers?.[`${prefix}${name}`];
+  const confidence = Math.min(...[...dimensions, ...nouls].map((name) => Number(answer(name)?.confidence ?? 0)));
+  return [candidate.candidateId, {
+    scores: Object.fromEntries(dimensions.map((name) => [name, answerValue(answer(name))])),
+    nouls: Object.fromEntries(nouls.map((name) => [name, name === "containsSponsorOrCta" ? answerNoul(answer(name)) : !answerNoul(answer(name))])),
+    confidence: Number.isFinite(confidence) ? confidence : 0,
+  }];
+}));
+
 export const rankTranscriptPackagesWithJev = async ({
   transcript,
   packages,
@@ -16,9 +48,14 @@ export const rankTranscriptPackagesWithJev = async ({
   }));
   const evaluation = await evaluateAndRankCandidates({
     transcript,
-    questions,
+    questions: questionMapFor(candidates),
     candidates,
-    client: jevClient,
+    client: {
+      async judgeCandidates(request) {
+        const answers = await jevClient.judgeCandidates(request);
+        return normalizeAnswers(answers, candidates);
+      },
+    },
   });
   const byId = new Map(packages.map((clip, index) => [`candidate-${index + 1}`, clip]));
   return evaluation.ranked.flatMap((ranked) => {

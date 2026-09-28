@@ -15,8 +15,18 @@ test("Jev reranks transcript-derived packages and filters blocked candidates", a
       async judgeCandidates({ candidates }) {
         assert.equal(candidates.length, 2);
         return {
-          "candidate-1": { scores: { relevance: 1, insight: 1, selfContainedness: 1 }, nouls: {}, confidence: 0.9 },
-          "candidate-2": { scores: { relevance: 4, insight: 4, selfContainedness: 4 }, nouls: { containsSponsorOrCta: true }, confidence: 0.99 },
+          "candidate-1.relevance": { score: 1, confidence: 0.9 },
+          "candidate-1.insight": { score: 1, confidence: 0.9 },
+          "candidate-1.selfContainedness": { score: 1, confidence: 0.9 },
+          "candidate-1.completeThought": { noul: 0, confidence: 0.9 },
+          "candidate-1.containsSponsorOrCta": { noul: 0, confidence: 0.9 },
+          "candidate-1.citationSupported": { noul: 0, confidence: 0.9 },
+          "candidate-2.relevance": { score: 1, confidence: 0.99 },
+          "candidate-2.insight": { score: 1, confidence: 0.99 },
+          "candidate-2.selfContainedness": { score: 1, confidence: 0.99 },
+          "candidate-2.completeThought": { noul: 0, confidence: 0.99 },
+          "candidate-2.containsSponsorOrCta": { noul: 1, confidence: 0.99 },
+          "candidate-2.citationSupported": { noul: 0, confidence: 0.99 },
         };
       },
     },
