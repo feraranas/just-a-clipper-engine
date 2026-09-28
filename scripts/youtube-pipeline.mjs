@@ -8,6 +8,10 @@ import { google } from "googleapis";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
 import { createPublishingLedger } from "./publishing-ledger.mjs";
+import {
+  resolvePublishingAccountId,
+  resolvePublishingLedgerPath,
+} from "./publishing-config.mjs";
 import { enqueueCompletedArtifact } from "./publishing-completion.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
 import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
@@ -38,10 +42,8 @@ const tokenPath =
 const ledgerPath =
   process.env.AUDIOGRAM_DB_PATH ??
   join(appSupportDirectory, "audiograms.sqlite");
-const publishingAccountId = process.env.INSTAGRAM_ACCOUNT_ID;
-const publishingLedgerPath =
-  process.env.INSTAGRAM_PUBLISHING_DB_PATH ??
-  join(appSupportDirectory, "instagram-publishing.sqlite");
+const publishingAccountId = resolvePublishingAccountId(process.env);
+const publishingLedgerPath = resolvePublishingLedgerPath(process.env);
 const projectRoot = resolve(
   process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
 );
@@ -203,9 +205,7 @@ const ledger = openAudiogramLedger(ledgerPath, {
   packageVersion,
   legacyHeatmapRecipeMap: selectionConfig.legacyHeatmapRecipeMap,
 });
-const publishingLedger = publishingAccountId
-  ? createPublishingLedger(publishingLedgerPath)
-  : null;
+const publishingLedger = createPublishingLedger(publishingLedgerPath);
 
 try {
   const pipeline = await syncAndAnalyzeInbox({

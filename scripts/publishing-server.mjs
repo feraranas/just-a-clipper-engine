@@ -1,7 +1,9 @@
 import { createServer } from "node:http";
 import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
-import { extname, join, relative, resolve, sep } from "node:path";
+import { extname, relative, resolve, sep } from "node:path";
+
+import { resolvePublishingLedgerPath } from "./publishing-config.mjs";
 
 const json = (response, status, payload) => {
   const body = JSON.stringify(payload);
@@ -97,7 +99,9 @@ export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, pu
 
 if (process.argv[1] && resolve(process.argv[1]) === resolve(new URL(import.meta.url).pathname)) {
   const { createPublishingLedger } = await import("./publishing-ledger.mjs");
-  const ledger = createPublishingLedger(process.env.PUBLISHING_DB ?? "publishing.sqlite");
+  const ledger = createPublishingLedger(
+    process.env.PUBLISHING_DB ?? resolvePublishingLedgerPath(process.env),
+  );
   const server = createPublishingServer({ ledger, projectRoot: process.cwd() });
   server.listen(Number(process.env.PORT ?? 8787), "127.0.0.1", () => console.log("Publishing server listening"));
 }

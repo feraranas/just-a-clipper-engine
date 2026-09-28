@@ -134,6 +134,12 @@ Both directories are ignored by Git. OAuth credentials and the SQLite ledger
 live in `~/Library/Application Support/Audiogram Inbox/` and must not be
 committed.
 
+The local approval queue uses the shared ledger at
+`~/Library/Application Support/Audiogram Inbox/instagram-publishing.sqlite`.
+Run `node scripts/publishing-server.mjs` and open `http://127.0.0.1:8787/` to
+review rendered artifacts. Local queueing uses the account ID `local-approval`
+unless `INSTAGRAM_ACCOUNT_ID` is explicitly configured.
+
 The default workflow downloads only the selected audio interval. It never
 silently falls back to downloading the full video. V1 uses YouTube creator or
 automatic captions only; local Whisper is planned for V2.
