@@ -11,6 +11,8 @@ import {
   deriveClipSelections,
 } from "./transcript-selector.mjs";
 import { fetchYoutubeTranscript } from "./youtube-transcript-core.mjs";
+import { rankTranscriptPackagesWithJev } from "./jev-transcript-ranking.mjs";
+import { QUESTION_DEFINITIONS } from "./question-analysis-contract.mjs";
 
 export const syncAndAnalyzeInbox = async ({
   ledger,
@@ -21,6 +23,7 @@ export const syncAndAnalyzeInbox = async ({
   fetchMetadata = fetchYtDlpMetadata,
   fetchTranscript = fetchYoutubeTranscript,
   createProvider = createStructuredGenerationProvider,
+  jevClient,
 }) => {
   const { packageVersion, selectorId } = selectionConfig;
   const sync = ledger.syncPlaylistVideos({
@@ -74,6 +77,14 @@ export const syncAndAnalyzeInbox = async ({
           transcript,
           selectionRecipe.recipe,
         );
+        if (jevClient) {
+          packages = await rankTranscriptPackagesWithJev({
+            transcript,
+            packages,
+            questions: QUESTION_DEFINITIONS,
+            jevClient,
+          });
+        }
         ledger.recordTranscriptSelection({
           jobId: job.id,
           transcript,
