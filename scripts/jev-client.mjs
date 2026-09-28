@@ -29,7 +29,9 @@ export const createHttpJevClient = ({
           body: JSON.stringify({
             state: { transcript, candidates },
             model,
-            questions,
+            questions: Array.isArray(questions)
+              ? Object.fromEntries(questions.map((question) => [question.id, question]))
+              : questions,
           }),
           signal: controller.signal,
         });
