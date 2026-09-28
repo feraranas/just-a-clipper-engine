@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Publishing approval queue</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <script type="module" src="/app.mjs"></script>
+  </head>
+  <body>
+    <main class="page-shell">
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Local publishing desk</p>
+          <h1>Review before publishing</h1>
+          <p class="intro">Every Reel stays here until you explicitly approve it.</p>
+        </div>
+        <button id="refresh-queue" type="button">Refresh queue</button>
+      </header>
+      <p id="queue-message" class="queue-message" role="status">Loading queue…</p>
+      <section id="queue-list" class="queue-list" aria-live="polite"></section>
+    </main>
+  </body>
+</html>

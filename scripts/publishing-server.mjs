@@ -15,6 +15,22 @@ const readJson = async (request) => {
   return body ? JSON.parse(body) : {};
 };
 
+const contentType = (path) => {
+  switch (extname(path).toLowerCase()) {
+    case ".html":
+      return "text/html; charset=utf-8";
+    case ".js":
+    case ".mjs":
+      return "text/javascript; charset=utf-8";
+    case ".css":
+      return "text/css; charset=utf-8";
+    case ".json":
+      return "application/json; charset=utf-8";
+    default:
+      return "application/octet-stream";
+  }
+};
+
 const safeArtifact = (projectRoot, artifactRelativePath) => {
   if (typeof artifactRelativePath !== "string" || artifactRelativePath.trim() === "") throw new Error("artifact path is required");
   const root = resolve(projectRoot);
@@ -69,7 +85,7 @@ export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, pu
         const path = resolve(publicRoot, file);
         if (!path.startsWith(resolve(publicRoot) + sep)) return json(response, 404, { error: "Not found" });
         const body = await readFile(path);
-        response.writeHead(200, { "content-type": extname(path) === ".html" ? "text/html; charset=utf-8" : "application/octet-stream" });
+        response.writeHead(200, { "content-type": contentType(path) });
         return response.end(body);
       }
       return json(response, 404, { error: "Route not found" });
