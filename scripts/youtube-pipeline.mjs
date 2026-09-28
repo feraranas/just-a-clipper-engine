@@ -26,6 +26,7 @@ import { collectPlaylistItems } from "./youtube-playlist-core.mjs";
 import { renderTreatmentRun } from "./treatment-runner.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
 import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
+import { createHttpJevClient } from "./jev-client.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -53,6 +54,14 @@ const selectionConfig = resolveSelectionConfig(process.env);
 const selectionRecipe = buildSelectionRecipe(selectionConfig);
 const { packageVersion } = selectionConfig;
 const scope = "https://www.googleapis.com/auth/youtube.readonly";
+const hasJevEndpoint = Boolean(process.env.TYPESAFE_JEV_ENDPOINT);
+const hasJevApiKey = Boolean(process.env.TYPESAFE_JEV_API_KEY);
+if (hasJevEndpoint !== hasJevApiKey) {
+  throw new Error("TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together");
+}
+const jevClient = hasJevEndpoint
+  ? createHttpJevClient({ endpoint: process.env.TYPESAFE_JEV_ENDPOINT, apiKey: process.env.TYPESAFE_JEV_API_KEY })
+  : undefined;
 
 await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
 
@@ -214,6 +223,7 @@ try {
     selectionConfig,
     selectionRecipe,
     videos: selectedVideos,
+    jevClient,
   });
   const processing = await processClipPackages({
     ledger,

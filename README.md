@@ -24,6 +24,18 @@ npm ci
 npm run youtube:inbox
 ```
 
+To evaluate transcript-derived candidates with Jev, provide both Typesafe
+settings. This is opt-in; omitting them leaves the existing transcript
+selector behavior unchanged:
+
+```console
+AUDIOGRAM_CLIP_SELECTOR=transcript-llm \
+AUDIOGRAM_LLM_PROVIDER=chatgpt-oauth \
+TYPESAFE_JEV_ENDPOINT=https://your-typesafe-endpoint.example/v1/judge \
+TYPESAFE_JEV_API_KEY=... \
+npm run youtube:inbox
+```
+
 To re-authorize YouTube after an expired or revoked Google token:
 
 ```console
