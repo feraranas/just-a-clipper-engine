@@ -18,6 +18,10 @@
         <button id="refresh-queue" type="button">Refresh queue</button>
       </header>
       <p id="queue-message" class="queue-message" role="status">Loading queue…</p>
+      <section class="activity-panel">
+        <div class="activity-heading"><h2>Pipeline activity</h2><button id="refresh-logs" type="button">Refresh activity</button></div>
+        <ol id="pipeline-log-list" class="pipeline-log-list" aria-live="polite"><li>Loading activity…</li></ol>
+      </section>
       <section id="queue-list" class="queue-list" aria-live="polite"></section>
     </main>
   </body>

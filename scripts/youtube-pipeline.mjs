@@ -27,6 +27,8 @@ import { renderTreatmentRun } from "./treatment-runner.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
 import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
 import { createHttpJevClient } from "./jev-client.mjs";
+import { createPipelineLogger } from "./pipeline-logger.mjs";
+import { resolvePipelineLogPath } from "./publishing-config.mjs";
 
 const appSupportDirectory = join(
   homedir(),
@@ -45,6 +47,8 @@ const ledgerPath =
   join(appSupportDirectory, "audiograms.sqlite");
 const publishingAccountId = resolvePublishingAccountId(process.env);
 const publishingLedgerPath = resolvePublishingLedgerPath(process.env);
+const pipelineLogger = createPipelineLogger({ logPath: resolvePipelineLogPath(process.env) });
+const runId = randomBytes(12).toString("hex");
 const projectRoot = resolve(
   process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
 );
@@ -217,6 +221,8 @@ const ledger = openAudiogramLedger(ledgerPath, {
 const publishingLedger = createPublishingLedger(publishingLedgerPath);
 
 try {
+  const syncStartedAt = Date.now();
+  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "started", videoId: requestedVideoId, packageVersion });
   const pipeline = await syncAndAnalyzeInbox({
     ledger,
     playlist,
@@ -225,6 +231,9 @@ try {
     videos: selectedVideos,
     jevClient,
   });
+  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - syncStartedAt });
+  const renderStartedAt = Date.now();
+  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "started", videoId: requestedVideoId, packageVersion });
   const processing = await processClipPackages({
     ledger,
     registry: treatmentRegistry,
@@ -256,6 +265,7 @@ try {
       : undefined,
       videoId: requestedVideoId,
   });
+  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - renderStartedAt });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",
   );

@@ -16,6 +16,10 @@ export const resolvePublishingAccountId = (environment = process.env) =>
     ? environment.INSTAGRAM_ACCOUNT_ID
     : defaultPublishingAccountId;
 
+export const resolvePipelineLogPath = (environment = process.env) =>
+  environment.AUDIOGRAM_PIPELINE_LOG_PATH ??
+  join(appSupportDirectory, "pipeline.jsonl");
+
 export const resolvePublishingLedgerPath = (environment = process.env) =>
   environment.INSTAGRAM_PUBLISHING_DB_PATH ??
   join(appSupportDirectory, "instagram-publishing.sqlite");

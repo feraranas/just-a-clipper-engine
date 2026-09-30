@@ -5,6 +5,7 @@ import {
   approveItem,
   buildPreviewUrl,
   formatItemMetadata,
+  loadLogs,
   loadQueue,
   mutationRequest,
   normalizeQueuePayload,
@@ -63,6 +64,14 @@ test("loads and normalizes queue items from the existing API", async () => {
     return Response.json({ items: [{ id: "one" }] });
   });
   assert.deepEqual(items, [{ id: "one" }]);
+});
+
+test("loads bounded pipeline logs from the local API", async () => {
+  const events = await loadLogs(async (url) => {
+    assert.equal(url, "/api/logs?limit=50");
+    return Response.json({ events: [{ stage: "jev", status: "completed" }] });
+  });
+  assert.deepEqual(events, [{ stage: "jev", status: "completed" }]);
 });
 
 test("approval sends an ISO schedule to the existing approve route", async () => {

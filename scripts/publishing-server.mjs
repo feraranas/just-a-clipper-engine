@@ -3,7 +3,8 @@ import { createReadStream } from "node:fs";
 import { readFile, stat } from "node:fs/promises";
 import { extname, relative, resolve, sep } from "node:path";
 
-import { resolvePublishingLedgerPath } from "./publishing-config.mjs";
+import { readPipelineEvents } from "./pipeline-logger.mjs";
+import { resolvePipelineLogPath, resolvePublishingLedgerPath } from "./publishing-config.mjs";
 
 const json = (response, status, payload) => {
   const body = JSON.stringify(payload);
@@ -45,13 +46,18 @@ const safeArtifact = (projectRoot, artifactRelativePath) => {
 
 const errorStatus = (error) => /not found/i.test(error.message) ? 404 : /state|transition|unknown|retry|approve|caption/i.test(error.message) ? 409 : 400;
 
-export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, publicRoot = join(projectRoot, "public/publishing") }) => {
+export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, publicRoot = join(projectRoot, "public/publishing"), pipelineLogPath = resolvePipelineLogPath(process.env) }) => {
   if (!ledger) throw new Error("ledger is required");
   return createServer(async (request, response) => {
     try {
       const url = new URL(request.url, "http://localhost");
       const parts = url.pathname.split("/").filter(Boolean);
       if (request.method === "GET" && url.pathname === "/api/items") return json(response, 200, { items: ledger.getQueue() });
+      if (request.method === "GET" && url.pathname === "/api/logs") {
+        const rawLimit = Number(url.searchParams.get("limit") ?? 100);
+        const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 1000) : 100;
+        return json(response, 200, { events: await readPipelineEvents(pipelineLogPath, { limit }) });
+      }
       if (parts[0] === "api" && parts[1] === "items" && parts[2]) {
         const id = parts[2];
         if (request.method === "GET" && parts.length === 3) {

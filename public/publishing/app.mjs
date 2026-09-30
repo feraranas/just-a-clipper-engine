@@ -52,6 +52,13 @@ export const loadQueue = async (fetchImpl) => {
   return normalizeQueuePayload(await parseResponse(response));
 };
 
+export const loadLogs = async (fetchImpl, limit = 50) => {
+  const response = await fetchImpl("/api/logs?limit=" + limit);
+  const payload = await parseResponse(response);
+  if (!payload || !Array.isArray(payload.events)) throw new Error("Invalid logs payload");
+  return payload.events;
+};
+
 export const saveCaption = (fetchImpl, itemId, caption) =>
   mutationRequest(fetchImpl, itemPath(itemId, "caption"), { caption });
 
@@ -167,7 +174,9 @@ export const initializePublishingPage = (root = document) => {
   const list = root.querySelector("#queue-list");
   const message = root.querySelector("#queue-message");
   const refresh = root.querySelector("#refresh-queue");
-  if (!list || !message || !refresh) return;
+  const refreshLogs = root.querySelector("#refresh-logs");
+  const logList = root.querySelector("#pipeline-log-list");
+  if (!list || !message || !refresh || !refreshLogs || !logList) return;
   const setMessage = (text, kind = "") => {
     message.textContent = text;
     message.className = `queue-message ${kind}`.trim();
@@ -188,8 +197,18 @@ export const initializePublishingPage = (root = document) => {
       setMessage(error.message, "error");
     }
   };
+  const reloadLogs = async () => {
+    try {
+      const events = await loadLogs(fetch);
+      logList.replaceChildren(...events.map((event) => element("li", { textContent: [event.timestamp || "", event.stage || "unknown", "-", event.status || "unknown"].join(" ") })));
+    } catch (error) {
+      logList.replaceChildren(element("li", { textContent: error.message }));
+    }
+  };
   refresh.addEventListener("click", reload);
+  refreshLogs.addEventListener("click", reloadLogs);
   reload();
+  reloadLogs();
 };
 
 if (typeof document !== "undefined") {
