@@ -13,7 +13,7 @@ export const RemotionRoot: React.FC = () => {
         id="AudiogramBasic"
         component={AudiogramBasic}
         width={1080}
-        height={1080}
+        height={1920}
         schema={audiogramSchema}
         defaultProps={{
           // audio settings
