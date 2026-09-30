@@ -19,6 +19,10 @@ h1 { margin: 0; font-size: clamp(2rem, 5vw, 3.8rem); letter-spacing: -0.04em; }
 .queue-message { min-height: 1.5rem; color: #aab2c1; }
 .queue-message.error { color: #ff9f9f; }
 .queue-message.success { color: #9ff0bd; }
+.activity-panel { margin: 2rem 0; border: 1px solid #343c4d; border-radius: 1rem; padding: 1rem; background: rgba(25, 30, 41, 0.72); }
+.activity-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; }
+.activity-heading h2 { margin: 0; font-size: 1.1rem; }
+.pipeline-log-list { display: grid; gap: 0.4rem; margin: 1rem 0 0; padding-left: 1.4rem; color: #aab2c1; font: 0.8rem ui-monospace, SFMono-Regular, Menlo, monospace; }
 .queue-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr)); gap: 1rem; }
 .queue-card { overflow: hidden; border: 1px solid #343c4d; border-radius: 1rem; background: rgba(25, 30, 41, 0.92); box-shadow: 0 1rem 3rem rgba(0, 0, 0, 0.2); }
 .queue-card-heading, .queue-details, .queue-controls { padding: 1rem; }
