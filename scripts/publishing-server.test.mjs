@@ -57,6 +57,10 @@ const call = (baseUrl, method, path, body) =>
     else req.end();
   });
 
+test("creates a server when publicRoot uses its default path", () => {
+  assert.doesNotThrow(() => createPublishingServer({ ledger: {} }));
+});
+
 test("lists queue items and persists a caption update", async (t) => {
   const { item, baseUrl } = await setup(t);
   const page = await call(baseUrl, "GET", "/");
