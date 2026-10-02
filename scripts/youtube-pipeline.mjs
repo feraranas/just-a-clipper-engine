@@ -27,7 +27,7 @@ import { renderTreatmentRun } from "./treatment-runner.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
 import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
 import { createHttpJevClient } from "./jev-client.mjs";
-import { createPipelineLogger } from "./pipeline-logger.mjs";
+import { createPipelineLogger, runLoggedStage } from "./pipeline-logger.mjs";
 import { resolvePipelineLogPath } from "./publishing-config.mjs";
 
 const appSupportDirectory = join(
@@ -66,6 +66,20 @@ if (hasJevEndpoint !== hasJevApiKey) {
 const jevClient = hasJevEndpoint
   ? createHttpJevClient({ endpoint: process.env.TYPESAFE_JEV_ENDPOINT, apiKey: process.env.TYPESAFE_JEV_API_KEY })
   : undefined;
+
+const pipelineFailureFields = (diagnostic) => {
+  if (typeof diagnostic !== "string") return {};
+  try {
+    const parsed = JSON.parse(diagnostic);
+    if (parsed && typeof parsed === "object") {
+      return {
+        errorCode: parsed.code,
+        errorMessage: parsed.code,
+      };
+    }
+  } catch {}
+  return { errorMessage: diagnostic };
+};
 
 await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
 
@@ -221,51 +235,78 @@ const ledger = openAudiogramLedger(ledgerPath, {
 const publishingLedger = createPublishingLedger(publishingLedgerPath);
 
 try {
-  const syncStartedAt = Date.now();
-  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "started", videoId: requestedVideoId, packageVersion });
-  const pipeline = await syncAndAnalyzeInbox({
-    ledger,
-    playlist,
-    selectionConfig,
-    selectionRecipe,
-    videos: selectedVideos,
-    jevClient,
+  const pipeline = await runLoggedStage({
+    logger: pipelineLogger,
+    runId,
+    stage: "transcript-sync",
+    videoId: requestedVideoId,
+    packageVersion,
+    operation: () => syncAndAnalyzeInbox({
+      ledger,
+      playlist,
+      selectionConfig,
+      selectionRecipe,
+      videos: selectedVideos,
+      jevClient,
+    }),
+    hasFailures: (result) => result.analyzed.some(({ status }) => status === "failed"),
+    failureFields: (result) => {
+      const failedVideo = result.analyzed.find(({ status }) => status === "failed");
+      return failedVideo
+        ? { videoId: failedVideo.videoId, ...pipelineFailureFields(failedVideo.error) }
+        : {};
+    },
   });
-  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - syncStartedAt });
-  const renderStartedAt = Date.now();
-  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "started", videoId: requestedVideoId, packageVersion });
-  const processing = await processClipPackages({
-    ledger,
-    registry: treatmentRegistry,
-    treatments: [{ id: "audiogram-basic", version: "1" }],
-    loadTranscriptForPackage: (packageId) =>
-      ledger.getTranscriptForPackage(packageId),
-    acquireAssets: (clipPackage) =>
-       acquireClipPackageAssets(clipPackage, { projectRoot }),
+  for (const failedVideo of pipeline.analyzed.filter(({ status }) => status === "failed")) {
+    await pipelineLogger.event({
+      runId,
+      stage: "transcript-sync",
+      status: "failed",
+      videoId: failedVideo.videoId,
+      packageVersion,
+      ...pipelineFailureFields(failedVideo.error),
+    });
+  }
+  const processing = await runLoggedStage({
+    logger: pipelineLogger,
+    runId,
+    stage: "render-and-queue",
+    videoId: requestedVideoId,
+    packageVersion,
+    operation: () => processClipPackages({
+      ledger,
+      registry: treatmentRegistry,
+      treatments: [{ id: "audiogram-basic", version: "1" }],
+      loadTranscriptForPackage: (packageId) =>
+        ledger.getTranscriptForPackage(packageId),
+      acquireAssets: (clipPackage) =>
+        acquireClipPackageAssets(clipPackage, { projectRoot }),
       renderTreatment: ({ clipPackage, treatment }) =>
-      renderTreatmentRun(
-        { clipPackage, treatment },
-        { projectRoot },
-      ),
-    projectRoot,
-    onArtifactComplete: publishingLedger
-      ? ({ artifactRelativePath, artifactHash, clipPackage, treatment }) =>
-          enqueueCompletedArtifact({
-            ledger: publishingLedger,
-            projectRoot,
-            artifactRelativePath,
-            artifactHash,
-            accountId: publishingAccountId,
-            sourceVideoId: clipPackage.sourceVideoId,
-            clipPackageId: clipPackage.id,
-            treatmentId: treatment.id,
-            treatmentVersion: treatment.version,
-            title: clipPackage.title,
-          })
-      : undefined,
+        renderTreatmentRun(
+          { clipPackage, treatment },
+          { projectRoot },
+        ),
+      projectRoot,
+      onArtifactComplete: publishingLedger
+        ? ({ artifactRelativePath, artifactHash, clipPackage, treatment }) =>
+            enqueueCompletedArtifact({
+              ledger: publishingLedger,
+              projectRoot,
+              artifactRelativePath,
+              artifactHash,
+              accountId: publishingAccountId,
+              sourceVideoId: clipPackage.sourceVideoId,
+              clipPackageId: clipPackage.id,
+              treatmentId: treatment.id,
+              treatmentVersion: treatment.version,
+              title: clipPackage.title,
+            })
+        : undefined,
       videoId: requestedVideoId,
+    }),
+    hasFailures: (result) =>
+      result.packages.failed > 0 || result.treatments.failed > 0,
   });
-  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - renderStartedAt });
   const analysisFailures = pipeline.analyzed.filter(
     ({ status }) => status === "failed",
   );
