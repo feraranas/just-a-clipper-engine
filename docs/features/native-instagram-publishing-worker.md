@@ -9,9 +9,8 @@ implementation-reconciled: false
 
 ## Scope and review status
 
-The seven-point first slice was approved in conversation, with live Meta
-testing explicitly authorized. This written design awaits review before the
-implementation plan. It supersedes the R2 transport portion of the September
+The seven-point first slice, written design and implementation plan were approved
+in conversation, with live Meta testing explicitly authorized. It supersedes the R2 transport portion of the September
 20 publishing design, not the existing human approval boundary.
 
 Work only in `codex/native-instagram-publishing`. Do not modify the original
@@ -71,6 +70,9 @@ stateDiagram-v2
   container_created --> failed: Definitive upload failure
   processing --> failed: Definitive rejection or processing error
   processing --> unknown: Publish outcome uncertain
+  uploading --> unknown: Create outcome uncertain
+  container_created --> unknown: Container already published without media ID
+  failed --> queued: Explicit safe retry requires reapproval
 ```
 
 ## Human approval and external-side-effect boundaries
@@ -142,9 +144,28 @@ UI, automatic service installation and other social networks.
 
 ## Implementation reconciliation and deviations
 
-Not implemented. Reconcile source, deterministic tests and real Meta results
-before marking COMPLETE. The feature-doc completion gate is expected to reject
-DESIGN status until that work is finished.
+Implemented in `publishing-ledger.mjs`, `publishing-execution.mjs`,
+`instagram-client.mjs`, `publishing-worker.mjs` and `publishing-run.mjs`.
+Deterministic tests cover approval invalidation, additive migration, account/item
+claims, safe retries, transactional terminal writes, interrupted ownership,
+streaming contracts, artifact tampering and crashes around external writes.
+
+The ledger and attempts are updated in one execution-owned SQLite transaction.
+An exclusive directory lock uses a PID/UUID owner file with mtime heartbeat; there
+is no time-based takeover. Polling/hashing are worker responsibilities, not client
+transport responsibilities. Hashing uses explicit reads and the same descriptor
+as streaming, with metadata/hash checks before and after upload.
+
+Conservative deviation: every unsuccessful publication response stays unknown,
+even a provider rejection, rather than classifying some publication errors as
+safe to retry. This may require more operator intervention but avoids duplicates.
+The CLI is opt-in with explicit absolute DB/root, item and `--live`; account-check
+mode performs only reads and never opens a ledger.
+
+Real Meta validation and per-item live approval remain outstanding. No live API
+write has occurred. Keep DESIGN / implementation-reconciled false until the
+approved live clip is published and inspected, including a duplicate-prevention
+rerun. The feature-doc gate is expected to reject this incomplete feature.
 
 ## API references
 
