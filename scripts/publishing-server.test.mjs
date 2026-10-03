@@ -16,6 +16,24 @@ const fixture = {
   accountId: "instagram-test",
 };
 
+test("server resolves the default public directory", () => {
+  const server = createPublishingServer({ projectRoot: process.cwd(), ledger: {} });
+  server.close();
+});
+
+test("caption edits revoke approval and safe retries return to review through the API", async (t) => {
+  const { item, baseUrl, ledger } = await setup(t);
+  ledger.approveItem(item.id, "2026-09-20T11:00:00Z");
+  const changed = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, { caption: "New caption" });
+  assert.equal(changed.body.item.state, "queued");
+  assert.equal(changed.body.item.approvedCaption, null);
+  ledger.approveItem(item.id, "2026-09-20T11:00:00Z");
+  ledger.transitionItem(item.id, "approved", "failed", { safeToRetry: true });
+  const retry = await call(baseUrl, "POST", `/api/items/${item.id}/retry`, {});
+  assert.equal(retry.status, 200);
+  assert.equal(retry.body.item.state, "queued");
+});
+
 const setup = async (t) => {
   const root = await mkdtemp(join(tmpdir(), "publishing-server-"));
   await mkdir(join(root, "out/reels"), { recursive: true });

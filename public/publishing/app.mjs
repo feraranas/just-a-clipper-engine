@@ -64,6 +64,14 @@ export const loadLogs = async (fetchImpl, limit = 50, signal) => {
 export const saveCaption = (fetchImpl, itemId, caption) =>
   mutationRequest(fetchImpl, itemPath(itemId, "caption"), { caption });
 
+export const saveCaptionAndReload = async (fetchImpl, itemId, caption, reload, setMessage) => {
+  const result = await saveCaption(fetchImpl, itemId, caption);
+  await reload();
+  setMessage(result.item?.state === "queued"
+    ? "Caption saved. Review and approve before publishing."
+    : "Caption unchanged; approval preserved.", "success");
+};
+
 export const approveItem = (fetchImpl, itemId, scheduledAt) =>
   mutationRequest(fetchImpl, itemPath(itemId, "approve"), { scheduledAt });
 
@@ -141,19 +149,21 @@ const renderItem = (item, reload, setMessage) => {
     element("label", { textContent: "Schedule" }), schedule, approve,
     rejectionReason, reject,
   ]);
-  const run = async (action) => {
+  const run = async (action, handlesReload = false) => {
     for (const button of [save, approve, reject]) button.disabled = true;
     try {
       await action();
-      await reload();
-      setMessage("Queue updated", "success");
+      if (!handlesReload) {
+        await reload();
+        setMessage("Queue updated", "success");
+      }
     } catch (error) {
       setMessage(error.message, "error");
     } finally {
       for (const button of [save, approve, reject]) button.disabled = false;
     }
   };
-  save.addEventListener("click", () => run(() => saveCaption(fetch, item.id, caption.value)));
+  save.addEventListener("click", () => run(() => saveCaptionAndReload(fetch, item.id, caption.value, reload, setMessage), true));
   approve.addEventListener("click", () => {
     if (!schedule.value) {
       setMessage("Choose a schedule before approving", "error");

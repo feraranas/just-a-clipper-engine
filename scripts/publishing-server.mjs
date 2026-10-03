@@ -80,9 +80,7 @@ export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, pu
           else if (parts[3] === "approve" || parts[3] === "schedule") item = ledger.approveItem(id, body.scheduledAt);
           else if (parts[3] === "reject") item = ledger.rejectItem(id, body.reason);
           else if (parts[3] === "retry") {
-            const current = ledger.getPublishingItem(id);
-            if (!current || current.state !== "failed") throw new Error(`Cannot retry item in state: ${current?.state ?? "missing"}`);
-            item = ledger.transitionItem(id, "failed", "approved");
+            item = ledger.retryFailedItem(id);
           } else if (parts[3] === "verify-published") {
             throw new Error("Unknown outcomes require explicit external verification");
           } else return json(response, 404, { error: "Route not found" });

@@ -11,7 +11,18 @@ import {
   normalizeQueuePayload,
   rejectItem,
   saveCaption,
+  saveCaptionAndReload,
 } from "./app.mjs";
+
+test("caption saving reloads persisted state before prompting reapproval", async () => {
+  const events = [];
+  await saveCaptionAndReload(async () => {
+    events.push("save");
+    return Response.json({ item: { state: "queued" } });
+  }, "one", "new", async () => events.push("reload"), (message) => events.push(message));
+  assert.deepEqual(events.slice(0, 2), ["save", "reload"]);
+  assert.match(events[2], /approv/i);
+});
 
 test("encodes item IDs when building preview URLs", () => {
   assert.equal(buildPreviewUrl("item/one"), "/api/items/item%2Fone/preview");

@@ -3,6 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 
@@ -27,6 +28,94 @@ const artifact = {
   caption: "A caption",
   accountId: "instagram-account-1",
 };
+
+test("changed approved captions clear every approval field; unchanged captions preserve approval", async (t) => {
+  const ledger = await createTestLedger(t);
+  const { id } = ledger.enqueueArtifact(artifact);
+  const approved = ledger.approveItem(id, "2026-09-20T11:00:00.000Z");
+  assert.equal(approved.approvedCaption, "A caption");
+  assert.deepEqual(ledger.updateCaption(id, "A caption"), approved);
+  const changed = ledger.updateCaption(id, "changed");
+  assert.equal(changed.state, "queued");
+  for (const key of ["approvedAt", "approvedArtifactHash", "approvedCaption", "approvalDecision", "scheduledAt"]) assert.equal(changed[key], null);
+  assert.equal(ledger.claimDueApprovedItem("2026-09-20T12:00:00.000Z"), null);
+});
+
+test("claims require the specified account, item and an explicit caption snapshot including blank captions", async (t) => {
+  const ledger = await createTestLedger(t);
+  const { id } = ledger.enqueueArtifact({ ...artifact, caption: "" });
+  assert.equal(ledger.approveItem(id, "2026-09-20T11:00:00Z").approvedCaption, "");
+  assert.equal(ledger.claimDueApprovedItem("2026-09-20T12:00:00Z", { accountId: "other", itemId: id }), null);
+  assert.equal(ledger.claimDueApprovedItem("2026-09-20T12:00:00Z", { accountId: artifact.accountId, itemId: "other" }), null);
+  assert.equal(ledger.claimDueApprovedItem("2026-09-20T12:00:00Z", { accountId: artifact.accountId, itemId: id }).id, id);
+});
+
+test("two connections serialize caption invalidation against claiming in either order", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "publishing-race-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "queue.sqlite");
+  const first = createPublishingLedger(path);
+  const second = createPublishingLedger(path);
+  t.after(() => first.close());
+  t.after(() => second.close());
+  const { id } = first.enqueueArtifact(artifact);
+  first.approveItem(id, "2026-09-20T11:00:00Z");
+  second.updateCaption(id, "changed");
+  assert.equal(first.claimDueApprovedItem("2026-09-20T12:00:00Z"), null);
+  second.approveItem(id, "2026-09-20T11:00:00Z");
+  first.claimDueApprovedItem("2026-09-20T12:00:00Z");
+  assert.throws(() => second.updateCaption(id, "changed again"), /state/);
+  assert.equal(first.getPublishingItem(id).caption, "changed");
+});
+
+test("safe retries require fresh approval and clear stale execution identifiers", async (t) => {
+  const ledger = await createTestLedger(t);
+  const { id } = ledger.enqueueArtifact(artifact);
+  ledger.approveItem(id, "2026-09-20T11:00:00Z");
+  ledger.claimDueApprovedItem("2026-09-20T12:00:00Z");
+  ledger.transitionItem(id, "uploading", "failed", { safeToRetry: true, containerId: "old" });
+  assert.throws(() => ledger.transitionItem(id, "failed", "approved"), /Invalid transition/);
+  const retried = ledger.retryFailedItem(id);
+  assert.equal(retried.state, "queued");
+  assert.equal(retried.containerId, null);
+  assert.equal(retried.approvedCaption, null);
+  assert.equal(retried.safeToRetry, false);
+  assert.equal(retried.retryCount, 1);
+});
+
+test("unclassified failures and unknown outcomes cannot be retried", async (t) => {
+  const ledger = await createTestLedger(t);
+  const { id } = ledger.enqueueArtifact(artifact);
+  ledger.approveItem(id, "2026-09-20T11:00:00Z");
+  ledger.transitionItem(id, "approved", "failed");
+  assert.throws(() => ledger.retryFailedItem(id), /safe|retry/);
+  const other = ledger.enqueueArtifact({ ...artifact, artifactRelativePath: "other.mp4" });
+  ledger.approveItem(other.id, "2026-09-20T11:00:00Z");
+  ledger.claimDueApprovedItem("2026-09-20T12:00:00Z");
+  ledger.recordUnknownOutcome(other.id, { errorCode: "TIMEOUT" });
+  assert.throws(() => ledger.retryFailedItem(other.id), /safe|retry/);
+});
+
+test("legacy approval without caption snapshot is migrated back to review without losing artifacts", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "publishing-migration-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "queue.sqlite");
+  const initial = createPublishingLedger(path);
+  const { id } = initial.enqueueArtifact(artifact);
+  initial.approveItem(id, "2026-09-20T11:00:00Z");
+  initial.close();
+  const db = new DatabaseSync(path);
+  const columns = db.prepare("PRAGMA table_info(publishing_items)").all().map((c) => c.name);
+  if (columns.includes("approved_caption")) db.exec("ALTER TABLE publishing_items DROP COLUMN approved_caption");
+  if (columns.includes("safe_to_retry")) db.exec("ALTER TABLE publishing_items DROP COLUMN safe_to_retry");
+  db.close();
+  const migrated = createPublishingLedger(path);
+  t.after(() => migrated.close());
+  assert.equal(migrated.getPublishingItem(id).state, "queued");
+  assert.equal(migrated.getPublishingItem(id).artifactHash, artifact.artifactHash);
+  assert.equal(migrated.getPublishingItem(id).approvedAt, null);
+  assert.equal(migrated.claimDueApprovedItem("2026-09-20T12:00:00Z"), null);
+});
 
 test("enqueues an artifact and returns it in the queue", async (t) => {
   const ledger = await createTestLedger(t);
