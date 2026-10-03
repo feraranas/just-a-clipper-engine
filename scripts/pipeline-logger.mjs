@@ -2,6 +2,10 @@ import { appendFile, mkdir, open } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SafeDiagnosticError } from "./error-diagnostics.mjs";
 
+const maximumTailBytes = 8 * 1024 * 1024;
+const minimumTailBytes = 64 * 1024;
+const bytesPerRequestedEvent = 16 * 1024;
+
 const identifiers = [
   "runId",
   "stage",
@@ -77,8 +81,8 @@ export const readPipelineEvents = async (logPath, { limit = 100 } = {}) => {
     const { size } = await file.stat();
     const length = Math.min(
       size,
-      8 * 1024 * 1024,
-      Math.max(65536, limit * 16384),
+      maximumTailBytes,
+      Math.max(minimumTailBytes, limit * bytesPerRequestedEvent),
     );
     const offset = size - length;
     const buffer = Buffer.alloc(length);

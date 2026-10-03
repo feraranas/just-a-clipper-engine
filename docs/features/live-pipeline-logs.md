@@ -61,6 +61,10 @@ Changed: logger resilience, detailed stage events, automatic refresh and readabl
 
 ## Implementation reconciliation and deviations
 
+### PR #20 integration
+
+PR #20 is the merged baseline. Retain its fail-open writes, truthful terminal outcomes, bounded tail and malformed-record tolerance. PR #21 extends these with clip/count metadata, validation on reads and writes, asynchronous diagnostic rejection handling, short-read handling and interrupted-append recovery. It deliberately omits legacy free-form `errorMessage` fields in favor of safe error codes; friendly UI descriptions are derived from stage/status. Its per-video `video-analysis` failures replace the duplicate outer `transcript-sync` failure rows. The overall run can finish `partial` while failed steps retain `failed` status. PR #20 regression scenarios are retained in `pipeline-logger-regression.test.mjs`, with the free-form-message expectation updated to match the stricter privacy contract.
+
 Implemented and reconciled with `pipeline-logger.mjs`, both pipeline cores, the CLI orchestration, logs API and `public/publishing/activity.mjs`. The panel requests up to 500 events, polls two seconds after completion, aborts requests after ten seconds, pauses background-tab polling and retains the last successful snapshot on errors. Runs without a terminal event become unknown after ten minutes without progress; this is not a process-liveness check.
 
 Verification: 29 focused logger/core/browser-helper tests and seven isolated HTTP server tests pass. Browser inspection with synthetic logs confirms readable stage rows, failure styling and expandable metadata. No production pipeline was executed and no production ledger or log was modified. The older `pipeline-run-history.md` remains an unfinished separate proposal and prevents the repository-wide feature-doc gate from passing; this note satisfies the completed-note requirements.
