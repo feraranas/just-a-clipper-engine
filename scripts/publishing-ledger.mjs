@@ -23,7 +23,7 @@ const transitions = new Map([
   ["processing", new Set(["published", "failed", "unknown"])],
   ["published", new Set()],
   ["rejected", new Set()],
-  ["failed", new Set(["approved"])],
+  ["failed", new Set()],
   ["unknown", new Set()],
 ]);
 
@@ -34,6 +34,8 @@ const mapItem = (row) =>
         artifactRelativePath: row.artifact_relative_path,
         artifactHash: row.artifact_hash,
         approvedArtifactHash: row.approved_artifact_hash,
+        approvedCaption: row.approved_caption,
+        safeToRetry: row.safe_to_retry === 1,
         sourceVideoId: row.source_video_id,
         clipPackageId: row.clip_package_id,
         treatmentId: row.treatment_id,
@@ -139,6 +141,19 @@ const createSchema = (database) => {
     CREATE INDEX IF NOT EXISTS publishing_items_account_idx
       ON publishing_items(account_id, state);
   `);
+  database.exec("BEGIN IMMEDIATE");
+  try {
+    const columns = new Set(database.prepare("PRAGMA table_info(publishing_items)").all().map((c) => c.name));
+    if (!columns.has("approved_caption")) database.exec("ALTER TABLE publishing_items ADD COLUMN approved_caption TEXT");
+    if (!columns.has("safe_to_retry")) database.exec("ALTER TABLE publishing_items ADD COLUMN safe_to_retry INTEGER NOT NULL DEFAULT 0");
+    database.exec(`UPDATE publishing_items SET state = 'queued', approval_decision = NULL,
+      approved_at = NULL, approved_artifact_hash = NULL, scheduled_at = NULL
+      WHERE state = 'approved' AND approved_caption IS NULL`);
+    database.exec("COMMIT");
+  } catch (error) {
+    database.exec("ROLLBACK");
+    throw error;
+  }
 };
 
 const normalizePatch = (patch = {}) => {
@@ -154,11 +169,13 @@ const normalizePatch = (patch = {}) => {
     "lastRetryAt",
     "publishedAt",
     "unknownDetails",
+    "safeToRetry",
   ]);
   for (const key of Object.keys(patch)) {
     if (!allowed.has(key)) throw new Error(`Unsupported transition patch: ${key}`);
   }
   return {
+    safe_to_retry: patch.safeToRetry === undefined ? undefined : Number(patch.safeToRetry === true),
     artifact_hash: patch.artifactHash,
     media_host_key: patch.mediaHostKey,
     media_host_url: patch.mediaHostUrl,
@@ -333,7 +350,7 @@ export const createPublishingLedger = (
         .map(mapItem);
     },
     getPublishingItem: getItem,
-    updateCaption: (id, caption) => {
+    updateCaption: (id, caption) => withImmediateTransaction(() => {
       if (typeof caption !== "string") throw new Error("caption must be a string");
       const value = caption;
       const item = getItem(id);
@@ -341,34 +358,35 @@ export const createPublishingLedger = (
       if (!["queued", "approved"].includes(item.state)) {
         throw new Error(`Cannot update caption in state: ${item.state}`);
       }
+      if (item.caption === caption) return item;
       database
         .prepare(
-          "UPDATE publishing_items SET caption = ?, updated_at = ? WHERE id = ?",
+          `UPDATE publishing_items SET caption = ?, updated_at = ?, state = 'queued',
+           approval_decision = NULL, approved_at = NULL, approved_artifact_hash = NULL,
+           approved_caption = NULL, scheduled_at = NULL WHERE id = ?`,
         )
         .run(value, now(), id);
       return getItem(id);
-    },
-    approveItem: (id, scheduledAt) => {
+    }),
+    approveItem: (id, scheduledAt) => withImmediateTransaction(() => {
       const item = getItem(id);
       if (!item) throw new Error(`Publishing item not found: ${id}`);
       if (item.state !== "queued") {
         throw new Error(`Cannot approve item in state: ${item.state}`);
       }
       const normalizedScheduledAt = normalizeScheduledAt(scheduledAt);
-      return withImmediateTransaction(() => {
         const timestamp = now();
         database
           .prepare(`
             UPDATE publishing_items
             SET state = 'approved', approval_decision = 'approved',
                 scheduled_at = ?, approved_at = ?,
-                approved_artifact_hash = artifact_hash, updated_at = ?
+                approved_artifact_hash = artifact_hash, approved_caption = caption, updated_at = ?
             WHERE id = ? AND state = 'queued'
           `)
           .run(normalizedScheduledAt, timestamp, timestamp, id);
         return getItem(id);
-      });
-    },
+    }),
     rejectItem: (id, reason) => {
       const value = requiredText(reason, "reason");
       const item = getItem(id);
@@ -391,17 +409,20 @@ export const createPublishingLedger = (
         return getItem(id);
       });
     },
-    claimDueApprovedItem: (at) =>
+    claimDueApprovedItem: (at, { accountId = null, itemId = null } = {}) =>
       withImmediateTransaction(() => {
         const row = database
           .prepare(`
             SELECT id FROM publishing_items
             WHERE state = 'approved' AND scheduled_at IS NOT NULL
               AND scheduled_at <= ?
+              AND approval_decision = 'approved' AND approved_at IS NOT NULL
+              AND approved_caption = caption AND approved_artifact_hash = artifact_hash
+              AND (? IS NULL OR account_id = ?) AND (? IS NULL OR id = ?)
             ORDER BY scheduled_at, created_at, id
             LIMIT 1
           `)
-          .get(at);
+          .get(normalizeScheduledAt(at), accountId, accountId, itemId, itemId);
         if (!row) return null;
         database
           .prepare(
@@ -410,6 +431,16 @@ export const createPublishingLedger = (
           .run(now(), now(), row.id);
         return getItem(row.id);
       }),
+    retryFailedItem: (id) => withImmediateTransaction(() => {
+      const item = getItem(id);
+      if (!item || item.state !== "failed" || !item.safeToRetry) throw new Error("Cannot retry without a confirmed safe failure");
+      database.prepare(`UPDATE publishing_items SET state = 'queued', safe_to_retry = 0,
+        approval_decision = NULL, approved_at = NULL, approved_artifact_hash = NULL,
+        approved_caption = NULL, scheduled_at = NULL, container_id = NULL, media_id = NULL,
+        media_host_key = NULL, media_host_url = NULL, error_code = NULL, error_message = NULL,
+        unknown_details_json = NULL, published_at = NULL, updated_at = ? WHERE id = ?`).run(now(), id);
+      return getItem(id);
+    }),
     transitionItem: transition,
     recordUnknownOutcome: (id, details) => {
       const item = getItem(id);
