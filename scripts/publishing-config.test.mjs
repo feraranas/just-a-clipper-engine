@@ -5,7 +5,16 @@ import {
   defaultPublishingAccountId,
   resolvePublishingAccountId,
   resolvePublishingLedgerPath,
+  resolveInstagramConfig,
 } from "./publishing-config.mjs";
+
+test("native publishing fails closed without explicit valid credentials and target identity", () => {
+  assert.throws(() => resolveInstagramConfig({}), /required/);
+  const env = { INSTAGRAM_PAGE_ACCESS_TOKEN: "test-token", INSTAGRAM_ACCOUNT_ID: "2", INSTAGRAM_PAGE_ID: "1" };
+  assert.equal(resolveInstagramConfig(env).username, "theballooninquiries");
+  assert.equal(resolveInstagramConfig(env).version, "v26.0");
+  for (const patch of [{ INSTAGRAM_ACCOUNT_ID: "local-approval" }, { INSTAGRAM_PAGE_ID: "../x" }, { INSTAGRAM_GRAPH_VERSION: "bad" }, { INSTAGRAM_PAGE_ACCESS_TOKEN: "a\nb" }]) assert.throws(() => resolveInstagramConfig({ ...env, ...patch }));
+});
 
 test("local approval is the default publishing account", () => {
   assert.equal(resolvePublishingAccountId({}), defaultPublishingAccountId);
