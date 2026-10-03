@@ -54,6 +54,7 @@ export const createPublishingServer = ({ projectRoot = process.cwd(), ledger, pu
       const parts = url.pathname.split("/").filter(Boolean);
       if (request.method === "GET" && url.pathname === "/api/items") return json(response, 200, { items: ledger.getQueue() });
       if (request.method === "GET" && url.pathname === "/api/logs") {
+        response.setHeader("Cache-Control", "no-store");
         const rawLimit = Number(url.searchParams.get("limit") ?? 100);
         const limit = Number.isInteger(rawLimit) ? Math.min(Math.max(rawLimit, 1), 1000) : 100;
         return json(response, 200, { events: await readPipelineEvents(pipelineLogPath, { limit }) });

@@ -1,3 +1,5 @@
+import { initializeActivity } from "./activity.mjs";
+
 export const buildPreviewUrl = (itemId) => {
   if (typeof itemId !== "string" || itemId.trim() === "") {
     throw new Error("item ID is required");
@@ -52,8 +54,8 @@ export const loadQueue = async (fetchImpl) => {
   return normalizeQueuePayload(await parseResponse(response));
 };
 
-export const loadLogs = async (fetchImpl, limit = 50) => {
-  const response = await fetchImpl("/api/logs?limit=" + limit);
+export const loadLogs = async (fetchImpl, limit = 50, signal) => {
+  const response = await fetchImpl("/api/logs?limit=" + limit, { signal, cache: "no-store" });
   const payload = await parseResponse(response);
   if (!payload || !Array.isArray(payload.events)) throw new Error("Invalid logs payload");
   return payload.events;
@@ -174,9 +176,8 @@ export const initializePublishingPage = (root = document) => {
   const list = root.querySelector("#queue-list");
   const message = root.querySelector("#queue-message");
   const refresh = root.querySelector("#refresh-queue");
-  const refreshLogs = root.querySelector("#refresh-logs");
-  const logList = root.querySelector("#pipeline-log-list");
-  if (!list || !message || !refresh || !refreshLogs || !logList) return;
+  if (!list || !message || !refresh) return;
+  const disposeActivity = initializeActivity(root, (signal) => loadLogs(fetch, 500, signal));
   const setMessage = (text, kind = "") => {
     message.textContent = text;
     message.className = `queue-message ${kind}`.trim();
@@ -197,20 +198,19 @@ export const initializePublishingPage = (root = document) => {
       setMessage(error.message, "error");
     }
   };
-  const reloadLogs = async () => {
-    try {
-      const events = await loadLogs(fetch);
-      logList.replaceChildren(...events.map((event) => element("li", { textContent: [event.timestamp || "", event.stage || "unknown", "-", event.status || "unknown"].join(" ") })));
-    } catch (error) {
-      logList.replaceChildren(element("li", { textContent: error.message }));
-    }
-  };
   refresh.addEventListener("click", reload);
-  refreshLogs.addEventListener("click", reloadLogs);
   reload();
-  reloadLogs();
+  return () => {
+    disposeActivity();
+    refresh.removeEventListener("click", reload);
+  };
 };
 
 if (typeof document !== "undefined") {
-  document.addEventListener("DOMContentLoaded", () => initializePublishingPage());
+  let dispose;
+  document.addEventListener("DOMContentLoaded", () => { dispose = initializePublishingPage(); });
+  window.addEventListener("pagehide", () => dispose?.());
+  window.addEventListener("pageshow", (event) => {
+    if (event.persisted) dispose = initializePublishingPage();
+  });
 }

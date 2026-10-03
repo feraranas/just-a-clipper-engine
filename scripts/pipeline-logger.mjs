@@ -1,7 +1,8 @@
-import { appendFile, mkdir, readFile } from "node:fs/promises";
+import { appendFile, mkdir, open } from "node:fs/promises";
 import { dirname } from "node:path";
+import { SafeDiagnosticError } from "./error-diagnostics.mjs";
 
-const EVENT_FIELDS = [
+const identifiers = [
   "runId",
   "stage",
   "status",
@@ -9,47 +10,152 @@ const EVENT_FIELDS = [
   "packageVersion",
   "treatmentId",
   "itemId",
-  "durationMs",
+  "clipPackageId",
   "errorCode",
-  "errorMessage",
 ];
+const measurements = ["durationMs", "count"];
 
-const normalizeEvent = (event, timestamp) => Object.fromEntries([
-  ["timestamp", timestamp],
-  ...EVENT_FIELDS
-    .filter((field) => event[field] !== undefined)
-    .map((field) => [field, event[field]]),
-]);
-
-export const createPipelineLogger = ({ logPath, now = () => new Date().toISOString() }) => {
-  if (typeof logPath !== "string" || logPath.trim() === "") {
-    throw new Error("logPath is required");
+// Normalize reads and writes; never serialize arbitrary payloads or errors.
+export const normalizePipelineEvent = (input, timestamp) => {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const event = {};
+  if (typeof timestamp === "string") event.timestamp = timestamp.slice(0, 64);
+  for (const key of identifiers) {
+    const value = input[key];
+    if (
+      (typeof value === "string" && /^[a-zA-Z0-9_.:@/-]{1,128}$/.test(value)) ||
+      (Number.isSafeInteger(value) && value >= 0)
+    )
+      event[key] = value;
   }
+  for (const key of measurements) {
+    if (Number.isFinite(input[key]) && input[key] >= 0) event[key] = input[key];
+  }
+  return event.stage && event.status ? event : null;
+};
+
+export const createPipelineLogger = ({
+  logPath,
+  now = () => new Date().toISOString(),
+  onError,
+} = {}) => {
+  if (typeof logPath !== "string" || !logPath.trim())
+    throw new Error("logPath is required");
   return Object.freeze({
     event: async (input) => {
-      const normalized = normalizeEvent(input ?? {}, now());
-      await mkdir(dirname(logPath), { recursive: true, mode: 0o700 });
-      await appendFile(logPath, `${JSON.stringify(normalized)}\n`, { mode: 0o600 });
-      return normalized;
+      try {
+        const event = normalizePipelineEvent(input, now());
+        if (!event) return;
+        await mkdir(dirname(logPath), { recursive: true, mode: 0o700 });
+        // Isolate an earlier interrupted append from the new record.
+        await appendFile(logPath, "\n" + JSON.stringify(event) + "\n", {
+          mode: 0o600,
+        });
+        return event;
+      } catch (error) {
+        try {
+          await onError?.(error);
+        } catch {
+          /* Observability is best effort. */
+        }
+      }
     },
   });
 };
 
 export const readPipelineEvents = async (logPath, { limit = 100 } = {}) => {
-  if (!Number.isInteger(limit) || limit < 1 || limit > 1_000) {
+  if (!Number.isInteger(limit) || limit < 1 || limit > 1000)
     throw new Error("limit must be an integer between 1 and 1000");
-  }
-  let content;
+  let file;
   try {
-    content = await readFile(logPath, "utf8");
+    file = await open(logPath, "r");
   } catch (error) {
     if (error.code === "ENOENT") return [];
     throw error;
   }
-  return content
-    .split("\n")
-    .filter(Boolean)
-    .map((line) => JSON.parse(line))
-    .slice(-limit)
-    .reverse();
+  try {
+    const { size } = await file.stat();
+    const length = Math.min(
+      size,
+      8 * 1024 * 1024,
+      Math.max(65536, limit * 16384),
+    );
+    const offset = size - length;
+    const buffer = Buffer.alloc(length);
+    let read = 0;
+    while (read < length) {
+      const { bytesRead } = await file.read(
+        buffer,
+        read,
+        length - read,
+        offset + read,
+      );
+      if (!bytesRead) break;
+      read += bytesRead;
+    }
+    let content = buffer.subarray(0, read).toString("utf8");
+    if (offset > 0) {
+      const preceding = Buffer.alloc(1);
+      await file.read(preceding, 0, 1, offset - 1);
+      if (preceding[0] !== 10)
+        content = content.includes("\n")
+          ? content.slice(content.indexOf("\n") + 1)
+          : "";
+    }
+    const lines = content.split("\n");
+    const events = [];
+    for (
+      let index = lines.length - 1;
+      index >= 0 && events.length < limit;
+      index--
+    ) {
+      try {
+        const parsed = JSON.parse(lines[index]);
+        const event = normalizePipelineEvent(parsed, parsed?.timestamp);
+        if (event) events.push(event);
+      } catch {
+        /* Preserve valid records around damaged or incomplete lines. */
+      }
+    }
+    return events;
+  } finally {
+    await file.close();
+  }
+};
+
+export const emitPipelineEvent = async (onEvent, event) => {
+  try {
+    await onEvent?.(event);
+  } catch {
+    /* Never change the operation outcome. */
+  }
+};
+
+export const runLoggedStage = async ({
+  logger,
+  operation,
+  hasFailures = () => false,
+  failureStatus = "failed",
+  ...metadata
+}) => {
+  const startedAt = Date.now();
+  await emitPipelineEvent(logger?.event, { ...metadata, status: "started" });
+  try {
+    const result = await operation();
+    await emitPipelineEvent(logger?.event, {
+      ...metadata,
+      status: hasFailures(result) ? failureStatus : "completed",
+      durationMs: Date.now() - startedAt,
+    });
+    return result;
+  } catch (error) {
+    await emitPipelineEvent(logger?.event, {
+      ...metadata,
+      status: "failed",
+      durationMs: Date.now() - startedAt,
+      errorCode:
+        error instanceof SafeDiagnosticError ? error.code : "operation_failed",
+    });
+    throw error;
+  }
 };

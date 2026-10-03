@@ -30,6 +30,7 @@ const setup = async (t) => {
     projectRoot: root,
     ledger,
     publicRoot: join(root, "publishing"),
+    pipelineLogPath: join(root, "pipeline.jsonl"),
   });
   await new Promise((resolve) => server.listen(0, "127.0.0.1", resolve));
   const address = server.address();
@@ -37,7 +38,7 @@ const setup = async (t) => {
     server.close();
     ledger.close();
   });
-  return { item, ledger, baseUrl: `http://127.0.0.1:${address.port}` };
+  return { item, ledger, root, baseUrl: `http://127.0.0.1:${address.port}` };
 };
 
 const call = (baseUrl, method, path, body) =>
@@ -59,6 +60,21 @@ const call = (baseUrl, method, path, body) =>
 
 test("creates a server when publicRoot uses its default path", () => {
   assert.doesNotThrow(() => createPublishingServer({ ledger: {} }));
+});
+
+test("logs API tolerates damaged records and returns an uncached bounded window", async (t) => {
+  const { root, baseUrl } = await setup(t);
+  assert.deepEqual((await call(baseUrl, "GET", "/api/logs")).body, { events: [] });
+  await writeFile(join(root, "pipeline.jsonl"), [
+    JSON.stringify({ stage: "render", status: "started" }),
+    "broken",
+    JSON.stringify({ stage: "render", status: "failed", errorCode: "render_failed", message: "private" }),
+    '{"partial":',
+  ].join("\n"));
+  const response = await call(baseUrl, "GET", "/api/logs?limit=1");
+  assert.equal(response.status, 200);
+  assert.equal(response.headers["cache-control"], "no-store");
+  assert.deepEqual(response.body.events, [{ stage: "render", status: "failed", errorCode: "render_failed" }]);
 });
 
 test("lists queue items and persists a caption update", async (t) => {
