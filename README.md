@@ -1,9 +1,10 @@
 # Audiogram Inbox
 
 Audiogram Inbox turns strong moments from videos in a private playlist into
-reusable clip packages and rendered Remotion artifacts. YouTube Most Replayed
-heatmap selection remains the default; complete-transcript selection is an
-explicit opt-in.
+reusable clip packages and rendered Remotion artifacts. Complete-transcript
+`transcript-llm` selection is the default and requires an explicit provider;
+YouTube Most Replayed `youtube-heatmap` selection remains available as an
+explicit compatibility option.
 
 V1 registers one treatment, `audiogram-basic@1`, but discovery, package assets,
 the SQLite ledger, and the renderer are treatment-independent.
@@ -39,18 +40,20 @@ result (`complete`, `no_clips`, or `failed`) exits with status 0 so callers can
 read its JSON status; command-line usage errors exit with status 2. Required
 media tools remain Node.js 22, yt-dlp, FFmpeg, and ffprobe.
 
+Because transcript selection is the default, configure one of the providers
+described below before running the command. To use the compatibility selector,
+set `AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap` explicitly.
+
 For local ChatGPT Developer Mode testing, see
 [`plugins/audiogram-helper/README.md`](plugins/audiogram-helper/README.md) and
 start the loopback-only MCP service with `npm run audiogram:mcp`. Connect it
 through the Secure MCP Tunnel; this development bridge does not expose a
 public endpoint or publish rendered clips.
 
-To evaluate transcript-derived candidates with Jev, provide both Typesafe
-settings. This is opt-in; omitting them leaves the existing transcript
-selector behavior unchanged:
+Jev reranking is opt-in. Without both Typesafe settings, transcript-LLM ranks
+its generated candidates without Jev:
 
 ```console
-AUDIOGRAM_CLIP_SELECTOR=transcript-llm \
 AUDIOGRAM_LLM_PROVIDER=chatgpt-oauth \
 TYPESAFE_JEV_ENDPOINT=https://your-typesafe-endpoint.example/v1/judge \
 TYPESAFE_JEV_API_KEY=... \
@@ -80,7 +83,6 @@ provider's quota or create billing on another account.
 Use an official OpenAI API key:
 
 ```console
-AUDIOGRAM_CLIP_SELECTOR=transcript-llm \
 AUDIOGRAM_LLM_PROVIDER=openai-api \
 OPENAI_API_KEY=... \
 npm run youtube:inbox
@@ -91,10 +93,13 @@ adapter explicitly:
 
 ```console
 npm run chatgpt:login
-AUDIOGRAM_CLIP_SELECTOR=transcript-llm \
 AUDIOGRAM_LLM_PROVIDER=chatgpt-oauth \
 npm run youtube:inbox
 ```
+
+The selector can be omitted for both provider examples because
+`transcript-llm` is the default. Set `AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap`
+only when intentionally using the compatibility selector.
 
 The ChatGPT OAuth integration is unofficial and may break when the ChatGPT
 Codex backend changes. Login uses only the package's exported login function;

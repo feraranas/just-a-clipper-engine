@@ -23,7 +23,7 @@ YouTube playlist
       v
 OAuth importer -> SQLite package job -> selector recipe
                                       /             \
-                          heatmap (default)      transcript + one provider
+                       heatmap (explicit)     transcript + one provider (default)
                                       \             /
                                        ranked ClipPackage
                                   /       |        \
@@ -257,11 +257,11 @@ npm run dev
 | `AUDIOGRAM_GOOGLE_TOKEN_PATH`               | Application Support OAuth token  | Persisted refresh/access token         |
 | `AUDIOGRAM_DB_PATH`                         | Application Support SQLite file  | Ledger location                        |
 | `AUDIOGRAM_YOUTUBE_PLAYLIST`                | `Audiogram Inbox`                | Playlist title                         |
-| `AUDIOGRAM_PACKAGE_VERSION`                 | `v1`                             | Package-selection/acquisition identity |
+| `AUDIOGRAM_PACKAGE_VERSION`                 | `transcript-llm-v1`              | Package-selection/acquisition identity; heatmap uses `v1` |
 | `AUDIOGRAM_TREATMENT_VERSION`               | none                             | Legacy fallback for package version    |
-| `AUDIOGRAM_MAX_CLIPS`                       | `1`                              | Maximum independent peaks per video    |
-| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20`                             | Separation between selected peaks      |
-| `AUDIOGRAM_CLIP_SELECTOR`                   | `youtube-heatmap`                | `youtube-heatmap` or `transcript-llm`  |
+| `AUDIOGRAM_MAX_CLIPS`                       | `1`                              | Maximum heatmap peaks; heatmap only    |
+| `AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS` | `20`                             | Heatmap peak separation; heatmap only  |
+| `AUDIOGRAM_CLIP_SELECTOR`                   | `transcript-llm`                 | `transcript-llm` or explicit heatmap   |
 | `AUDIOGRAM_LLM_PROVIDER`                    | none                             | Required transcript provider           |
 | `OPENAI_API_KEY`                            | none                             | Required only for `openai-api`         |
 | `AUDIOGRAM_CHATGPT_AUTH_PATH`               | Application Support OAuth file   | Dedicated unofficial OAuth credentials |
