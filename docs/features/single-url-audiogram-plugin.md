@@ -9,11 +9,11 @@ status: DESIGN
 
 ## Purpose and scope
 
-Provide a local Codex plugin entry point that accepts one publicly accessible YouTube video URL and returns finished, locally rendered captioned MP4 clips through the Audiograms project.
+Provide a local ChatGPT Developer Mode plugin entry point that accepts one publicly accessible YouTube video URL and returns finished, locally rendered captioned MP4 clips through the Audiograms project. During development, ChatGPT reaches an MCP server bound to loopback through OpenAI Secure MCP Tunnel; the tunnel is not the production host.
 
 V1 reuses Audiograms' existing clip selection, package, and Remotion treatment behavior. The existing Most Replayed heatmap selection remains the default; transcript-based selection remains governed by the project's existing explicit configuration. The plugin reports the output artifact paths and processing status. It does not publish clips to a third party.
 
-The current production command starts from the user's private `Audiogram Inbox` playlist. V1 therefore needs a direct-URL intake path that feeds one source into the same pipeline core without requiring playlist membership. The plugin should call a stable project command contract rather than depend on internal module names. This is the adaptation boundary if Audiograms' internals evolve.
+The current production command starts from the user's private `Audiogram Inbox` playlist. V1 therefore needs a direct-URL intake path that feeds one source into the same pipeline core without requiring playlist membership. The Streamable HTTP MCP service calls a stable project command/runner contract rather than depending on internal module names. Keep tool names and job/result schemas portable so a future Cloud Run service can dispatch rendering to a Cloud Run Job and store artifacts in Cloud Storage without changing the ChatGPT-facing tools. Cloud deployment is not part of V1.
 
 V1 supports YouTube URLs only. Arbitrary media URLs, uploaded video files, manually supplied transcripts, and local speech-to-text are outside this design.
 
@@ -21,14 +21,20 @@ V1 supports YouTube URLs only. Arbitrary media URLs, uploaded video files, manua
 
 ```mermaid
 flowchart LR
-  User[User supplies YouTube URL] --> Plugin[Local Codex plugin]
-  Plugin --> Command[Stable Audiograms command contract]
+  User[User submits YouTube URL] --> ChatGPT[ChatGPT Developer Mode]
+  ChatGPT --> Tunnel[OpenAI Secure MCP Tunnel]
+  Tunnel --> MCP[Loopback Streamable HTTP MCP /mcp]
+  MCP --> Runner[Local runner adapter]
+  Runner --> Command[Stable Audiograms command contract]
   Command --> Validate[Validate URL and source metadata]
   Validate --> Select[Existing clip selection and transcript flow]
   Select --> Ledger[Audiograms local ledger]
   Select --> Render[Existing Remotion treatment]
   Render --> Files[Captioned MP4 artifacts]
-  Files --> Result[Plugin returns paths and status]
+  MCP --> Status[Create job and poll status tools]
+  Ledger --> Status
+  Files --> Status
+  Status --> Result[Truthful status and verified local paths]
 ```
 
 ## Lifecycle/state diagram
@@ -38,29 +44,34 @@ stateDiagram-v2
   [*] --> received
   received --> validating
   validating --> rejected: invalid or unsupported URL
-  validating --> selecting: supported YouTube source
-  selecting --> failed: metadata, transcript, or selection failure
-  selecting --> rendering: clip packages ready
-  rendering --> failed: render failure
-  rendering --> complete: rendered MP4 artifacts available
+  validating --> queued: supported YouTube source
+  queued --> running: local runner starts
+  running --> failed: metadata, transcript, selection, or render failure
+  running --> no_clips: no packages selected
+  running --> complete: verified rendered MP4 artifacts available
   rejected --> [*]
+  no_clips --> [*]
   failed --> [*]
   complete --> [*]
 ```
 
 ## Human approval and external-side-effect boundaries
 
-- The plugin may initiate local metadata/transcript acquisition, clip selection, and Remotion rendering after receiving the URL.
+- The user explicitly submits a URL to start local metadata/transcript acquisition, clip selection, and Remotion rendering.
+- ChatGPT connects to the developer's loopback-bound MCP service only through Secure MCP Tunnel. Project code does not create or store tunnel credentials, expose a public listener, or automate account configuration.
 - Rendered MP4s and ledger updates remain local to Audiograms.
 - The plugin does not upload, publish, or share clips. Any future publishing integration is a separate feature and must retain an explicit human approval step.
+- Local paths are reported as local paths only, never represented as public download links.
+- Future Cloud Run service/job dispatch and Cloud Storage are outside V1 and require a separate design/review.
 - URL validation must limit inputs to supported YouTube URL forms before invoking project processing.
 
 ## Failure and retry paths
 
 - Invalid or unsupported URLs fail before media processing and return a specific validation result.
 - Inaccessible media, unavailable captions, and source-tool failures return a failed job result without claiming output exists.
-- Selection failures and empty candidate results return an actionable status and do not enqueue nonexistent artifacts.
+- Selection failures and empty candidate results return an actionable terminal status and do not claim artifacts.
 - Rendering failures remain visible through the existing pipeline diagnostics; retry uses the existing ledger and idempotency behavior where applicable.
+- Status polling remains honest across MCP tool calls and service restarts according to the local runner's persisted ledger/job state; a launched process is not reported as a completed render.
 - The plugin reports success only when the project command confirms non-empty MP4 outputs and returns their project-relative paths.
 
 ## Invariants
@@ -70,13 +81,15 @@ stateDiagram-v2
 - The plugin integration depends on a documented command contract, not private internal module paths.
 - Every reported output is a locally rendered MP4 artifact produced by the Audiograms Remotion treatment.
 - No external publish or upload occurs as part of the flow.
+- MCP handlers depend on a transport-neutral runner/job interface; local mode needs no Google Cloud credentials or SDK.
+- Secure MCP Tunnel is a development connection only and does not constitute production hosting or public distribution.
 
 ## Changed and unchanged
 
-Changed: add a direct URL intake path and a local plugin bridge that invokes it and reports rendered outputs.
+Changed: add a direct URL intake path, a loopback Streamable HTTP MCP bridge connected through Secure MCP Tunnel, and create/status tools backed by a local runner.
 
 Unchanged: existing playlist ingestion, selection defaults, clip package format, Remotion treatment, local artifact storage, and publishing approval queue behavior.
 
 ## Implementation reconciliation and deviations
 
-Not implemented yet. Reconcile this section against the resulting command, plugin tools, persistence behavior, and tests before marking the feature complete.
+Not implemented yet. Reconcile this section against the resulting command, MCP tools, tunnel instructions, job persistence, artifact behavior, and tests before marking the feature complete. The Cloud Run runner/artifact-store adapter remains future work and is intentionally not claimed as implemented.
