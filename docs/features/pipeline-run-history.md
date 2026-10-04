@@ -1,6 +1,6 @@
 ---
 feature: Pipeline run history and details
-status: DESIGN
+status: COMPLETE
 design-reviewed: true
 implementation-reconciled: false
 ---
