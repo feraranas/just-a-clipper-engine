@@ -44,6 +44,7 @@
     "pr:readiness": "node scripts/pr-readiness.mjs",
     "verify:feature-docs": "node scripts/verify-feature-docs.mjs",
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
+    "audiogram:url": "node scripts/audiogram-url.mjs",
     "youtube:login": "node scripts/youtube-login.mjs",
     "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
     "test:selector:live": "node scripts/clip-selector-smoke.mjs",
