@@ -40,7 +40,7 @@
 - `plugins/audiogram-helper/server.mjs` and `.test.mjs` — Streamable HTTP `/mcp` service, two focused tools (`create_audiogram`, `get_audiogram_status`), local runner adapter, input/result validation, and artifact verification.
 - `plugins/audiogram-helper/README.md` — local prerequisites, loopback service startup, Secure MCP Tunnel/Developer Mode connection steps, and local-only limitations; no credentials.
 - `package.json`, `package-lock.json` — command aliases and only the SDK dependencies required by the chosen documented transport.
-- `scripts/AGENTS.md` — append the direct-URL command/contract guidance without rewriting historical notes.
+- `README.md` — document the direct-URL command and prerequisites without changing the existing playlist workflow.
 - `docs/features/single-url-audiogram-plugin.md` — maintain DESIGN diagrams and boundaries; reconcile after implementation.
 
 ## Interfaces
@@ -62,16 +62,16 @@ Accept standard `youtube.com/watch?v=...`, `youtu.be/...`, and YouTube `/shorts/
 ```js
 runSingleUrlPipeline({ url, projectRoot, environment, dependencies })
 // { contractVersion: 1, status: "complete" | "no_clips" | "failed",
-//   source: { videoId, title, url }, artifactPaths: string[], error? }
+//   source: { videoId, title, url } | null, artifactPaths: string[], error? }
 ```
 
-`node scripts/audiogram-url.mjs --url <youtube-url>` emits one JSON contract on stdout and diagnostics on stderr. It must not create a Google OAuth client or call playlist APIs. Existing local ledger/idempotency and Remotion paths remain authoritative. The runner adapter accepts the same versioned request/result shape that a future Cloud Run Job dispatcher can implement; only the adapter and artifact store may change for cloud deployment.
+`node scripts/audiogram-url.mjs --url <youtube-url>` emits one JSON contract on stdout for every valid invocation, including failed processing and no-clips outcomes; diagnostics go to stderr. Argument/usage errors emit no JSON and exit `2`. Structured terminal outcomes exit `0`, leaving status interpretation to the caller. The command must not create a Google OAuth client or call playlist APIs. Existing local ledger/idempotency and Remotion paths remain authoritative. The runner adapter accepts the same versioned request/result shape that a future Cloud Run Job dispatcher can implement; only the adapter and artifact store may change for cloud deployment.
 
 ### MCP HTTP tools and job lifecycle
 
 - `create_audiogram({ url })` validates the URL, starts local processing, and returns a versioned result with an opaque `jobId` and current status; it does not imply success before artifacts exist.
 - `get_audiogram_status({ jobId })` returns `queued`, `running`, `complete`, `no_clips`, or `failed`, with verified project-relative artifact paths only after completion.
-- Keep job identity/status behind a runner interface. Local implementation uses the existing local ledger plus a process adapter; do not make MCP handlers import pipeline internals. If repo inspection shows the ledger cannot faithfully represent the lifecycle, add the smallest local job record needed and test restart/failure behavior.
+- Keep job identity/status behind a runner interface. Local implementation uses a small SQLite job record plus a detached worker that invokes the stable CLI; do not make MCP handlers import pipeline internals. The worker records `running` and terminal states so a service restart does not fabricate or lose completion status. The local job store is replaceable by managed job metadata in the future cloud adapter.
 - The HTTP service listens only on `127.0.0.1`; `/mcp` uses Streamable HTTP. The README instructs the developer to expose it to ChatGPT only through the OpenAI Secure MCP Tunnel and to configure the tunnel in Developer Mode. Tunnel setup is user/account configuration and is not automated by project code.
 - Verify each completed artifact is a non-empty MP4 under `out/treatments/`. Never give a local filesystem path the semantics of a public download URL.
 
@@ -87,36 +87,36 @@ Keep tool names, request/result schema, and runner interface transport-neutral. 
 
 **Interfaces:** Provides the URL functions above using Node's `URL`; no dependency.
 
-- [ ] Write tests for watch, short, shorts, embed, and live forms; invalid host/path, malformed URL, missing ID, and ignored playlist parameters.
-- [ ] Run `node --test scripts/youtube-url-core.test.mjs`; expect failure because the module/functions are missing.
-- [ ] Implement normalization and coded errors, including metadata ID mismatch and unusable metadata.
-- [ ] Run the focused tests; expect all URL classes to pass.
-- [ ] Commit URL core and tests.
+- [x] Write tests for watch, short, shorts, embed, and live forms; invalid host/path, malformed URL, missing ID, and ignored playlist parameters.
+- [x] Run `node --test scripts/youtube-url-core.test.mjs`; observed the expected missing-module failure before implementation.
+- [x] Implement normalization and coded errors, including metadata ID mismatch and unusable metadata.
+- [x] Run the focused tests; all URL classes pass (5/5).
+- [x] Commit URL core and tests (`9f33cc4`).
 
 ### Task 2: Direct-URL Audiograms pipeline and command
 
-**Files:** Create `scripts/single-url-pipeline.mjs`, its tests, `scripts/audiogram-url.mjs`, its tests; modify `package.json` and append current guidance to `scripts/AGENTS.md`.
+**Files:** Create `scripts/single-url-pipeline.mjs`, its tests, `scripts/audiogram-url.mjs`, its tests; modify `package.json` and `README.md`.
 
 **Consumes:** URL core. **Produces:** `runSingleUrlPipeline` and the version-1 CLI contract.
 
-- [ ] Write injected-dependency tests asserting one video is submitted to the ledger, playlist OAuth is bypassed, selection/render is scoped to that video, local approval queue behavior is retained, and only renderer-confirmed artifacts are returned.
-- [ ] Run the focused tests and confirm the missing runner causes the expected failure.
-- [ ] Implement pipeline orchestration by reusing the existing selection, ledger, package, asset, and treatment modules; validate metadata identity before creating ledger work; surface no-clips and partial-render failure distinctly.
-- [ ] Write CLI tests for missing URL, unsupported flag, JSON stdout purity, result/exit status, and stderr diagnostics.
-- [ ] Implement the Node `parseArgs` wrapper and npm alias `audiogram:url`; document prerequisites and URL-only semantics.
-- [ ] Run `node --test scripts/youtube-url-core.test.mjs scripts/single-url-pipeline.test.mjs scripts/audiogram-url.test.mjs`.
-- [ ] Commit pipeline, command, tests, package metadata, and guidance.
+- [x] Write injected-dependency tests asserting one video is submitted to the ledger, playlist OAuth is bypassed, selection/render is scoped to that video, local approval queue behavior is retained, and only renderer-confirmed artifacts are returned.
+- [x] Run the focused tests and confirm the missing runner causes the expected failure.
+- [x] Implement pipeline orchestration by reusing the existing selection, ledger, package, asset, and treatment modules; validate metadata identity before creating ledger work; surface no-clips and partial-render failure distinctly.
+- [x] Write CLI tests for missing URL, unsupported flag, JSON stdout purity, result/exit status, and stderr diagnostics.
+- [x] Implement the Node `parseArgs` wrapper and npm alias `audiogram:url`; document prerequisites, URL-only semantics, JSON result contract, and exit behavior in the root README.
+- [x] Run `node --test scripts/youtube-url-core.test.mjs scripts/single-url-pipeline.test.mjs scripts/audiogram-url.test.mjs` (15/15 pass).
+- [x] Commit pipeline, command, tests, package metadata, and guidance (commit recorded in worktree history).
 
 ### Task 3: Local Streamable HTTP MCP service and runner interface
 
-**Files:** Create `plugins/audiogram-helper/server.mjs`, `server.test.mjs`, and `README.md`; modify package metadata only for the current SDK transport.
+**Files:** Create `plugins/audiogram-helper/server.mjs`, `server.test.mjs`, `job-store.mjs`, `job-worker.mjs`, and `README.md`; modify package metadata only for the current SDK transport.
 
 **Consumes:** Version-1 CLI result contract. **Produces:** loopback-only `/mcp`, `create_audiogram`, `get_audiogram_status`, and a local runner adapter implementing the shared job/status interface.
 
 - [ ] Write tests first for tool discovery, URL rejection, job start/status transitions, child-process error/nonzero exit, malformed result JSON, restart/failure honesty, and invalid/missing/empty/out-of-root artifacts.
 - [ ] Run `node --test plugins/audiogram-helper/server.test.mjs`; confirm expected missing implementation failure.
 - [ ] Implement the documented Streamable HTTP transport on loopback only, with clean request handling and orderly transport/process shutdown. Keep server handlers independent of Audiograms internals through the runner adapter.
-- [ ] Implement the local runner using argument-array process invocation (`shell: false`) and existing durable ledger/job identity; persist no OpenAI tunnel secrets. Return opaque job IDs and truthful states; do not make a long render look complete merely because it was launched.
+- [ ] Implement the local runner using argument-array process invocation (`shell: false`) and a local SQLite job record; persist no OpenAI tunnel secrets. Return opaque job IDs and truthful states; do not make a long render look complete merely because it was launched. The detached worker runs the CLI, parses its one JSON result, and commits the terminal state to the job record.
 - [ ] Add README startup and manual Developer Mode/Secure MCP Tunnel steps, including that the service remains bound to `127.0.0.1` and that the tunnel is a development bridge, not public hosting.
 - [ ] Do not add a public-distribution manifest or claim directory readiness: Developer Mode connects to the tunneled MCP service through ChatGPT's developer UI. Public packaging/submission is a separate task.
 - [ ] Run MCP unit tests and a local protocol handshake/tool-list test without fetching or rendering a live video; verify the server binds only to `127.0.0.1`.
@@ -137,4 +137,4 @@ Keep tool names, request/result schema, and runner interface transport-neutral. 
 - Spec coverage: URL-only scope, existing selection defaults, local ledger/render/output, no external publishing, stable contract, and future evolution seam are covered. This plan adds asynchronous job/status tools because video rendering can outlive a single conversational tool request and the same job interface maps cleanly to a future Cloud Run Job dispatcher.
 - Tunnel scope: project code does not create an account tunnel, retain its credentials, or expose a public listener; the user completes OpenAI Developer Mode connection following the README.
 - Cloud scope: no cloud resources or production endpoint are created; Cloud Run/Cloud Storage are a later runner/artifact adapter, not a dependency of local mode.
-- Execution scope: implementation remains unapproved until the user reviews this plan and chooses/affirms an execution method.
+- Execution scope: the user reviewed the plan and authorized inline implementation in the isolated worktree.

@@ -24,6 +24,21 @@ npm ci
 npm run youtube:inbox
 ```
 
+To process one publicly accessible YouTube video without adding it to the
+private playlist or using Google playlist OAuth, pass its URL directly:
+
+```console
+npm run audiogram:url -- --url 'https://www.youtube.com/watch?v=VIDEO_ID'
+```
+
+The direct-URL command keeps the configured selection behavior, records work
+in the local Audiograms ledger, renders through the existing Remotion treatment,
+and adds completed files to the local approval queue. It prints one versioned
+JSON result to stdout; tool diagnostics go to stderr. A structured terminal
+result (`complete`, `no_clips`, or `failed`) exits with status 0 so callers can
+read its JSON status; command-line usage errors exit with status 2. Required
+media tools remain Node.js 22, yt-dlp, FFmpeg, and ffprobe.
+
 To evaluate transcript-derived candidates with Jev, provide both Typesafe
 settings. This is opt-in; omitting them leaves the existing transcript
 selector behavior unchanged:
