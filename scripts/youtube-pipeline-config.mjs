@@ -9,7 +9,7 @@ import {
 export const resolvePackageVersion = (environment) =>
   environment.AUDIOGRAM_PACKAGE_VERSION ??
   environment.AUDIOGRAM_TREATMENT_VERSION ??
-  (environment.AUDIOGRAM_CLIP_SELECTOR === "transcript-llm"
+  ((environment.AUDIOGRAM_CLIP_SELECTOR ?? "transcript-llm") === "transcript-llm"
     ? "transcript-llm-v1"
     : "v1");
 
@@ -73,7 +73,7 @@ export const parseLegacyHeatmapRecipeMap = (value) => {
 
 export const resolveSelectionConfig = (environment = {}) => {
   const selector = selectorRegistry.get(
-    environment.AUDIOGRAM_CLIP_SELECTOR ?? "youtube-heatmap",
+    environment.AUDIOGRAM_CLIP_SELECTOR ?? "transcript-llm",
     "1",
   );
   const common = {

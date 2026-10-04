@@ -26,6 +26,7 @@ const createOptions = async (directory, { maxClips = 1, media = metadata } = {})
   const environment = {
     AUDIOGRAM_DB_PATH: join(databaseDirectory, "audiograms.sqlite"),
     INSTAGRAM_PUBLISHING_DB_PATH: join(databaseDirectory, "approval.sqlite"),
+    AUDIOGRAM_CLIP_SELECTOR: "youtube-heatmap",
     AUDIOGRAM_PACKAGE_VERSION: "url-plugin-v1",
     AUDIOGRAM_MAX_CLIPS: String(maxClips),
   };
