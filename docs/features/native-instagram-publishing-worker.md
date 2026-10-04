@@ -1,8 +1,8 @@
 ---
 feature: native-instagram-publishing-worker
-status: DESIGN
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Native Instagram publishing worker
@@ -13,10 +13,12 @@ The seven-point first slice, written design and implementation plan were approve
 in conversation, with live Meta testing explicitly authorized. It supersedes the R2 transport portion of the September
 20 publishing design, not the existing human approval boundary.
 
-Work only in `codex/native-instagram-publishing`. Do not modify the original
-checkout, its SQLite database, credentials, or uncommitted files. Development
-uses an explicitly selected isolated ledger and artifact root. Credentials
-must be provided explicitly, never silently discovered from another checkout.
+Code work stays in `codex/native-instagram-publishing`; preserve the original
+checkout's code, credentials and uncommitted files. For live validation the user
+explicitly replaced the isolated-data plan: use the existing App Support publishing
+database, existing artifact root, and pass the original checkout's `.env` path to
+Node without displaying, copying or modifying its contents. Deterministic tests
+continue to use temporary databases and fixtures.
 
 ## Architecture
 
@@ -118,7 +120,8 @@ queue approval; broad development authorization does not approve unknown media.
 - Existing published items are never selected again.
 - Container creation occurs near publication, not days ahead of schedule.
 - Token validity does not prove a Reel meets Meta's media requirements.
-- Main's files, queue records and untracked work remain untouched.
+- Main's code, credentials, artifacts and untracked work remain untouched; the
+  explicitly authorized existing publishing database records the real outcome.
 
 ## Validation
 
@@ -162,10 +165,23 @@ safe to retry. This may require more operator intervention but avoids duplicates
 The CLI is opt-in with explicit absolute DB/root, item and `--live`; account-check
 mode performs only reads and never opens a ledger.
 
-Real Meta validation and per-item live approval remain outstanding. No live API
-write has occurred. Keep DESIGN / implementation-reconciled false until the
-approved live clip is published and inspected, including a duplicate-prevention
-rerun. The feature-doc gate is expected to reject this incomplete feature.
+Live validation succeeded on 2026-10-04 UTC (October 3 local time): the user
+approved the selected hash and caption through the updated dashboard, the native
+worker published media `18473362021119016`, and Meta returned the exact caption
+and username. The Reel was visually inspected and browser playback confirmed.
+A second invocation returned the same media ID with one persisted attempt and
+one claim. See `docs/research/native-instagram-live-validation.md` for evidence.
+
+User-authorized data deviation: the test used the existing database and artifact,
+not an isolated live-test copy. The selected legacy placeholder account was
+explicitly changed to the real account and returned to queued before fresh UI
+approval. Port 8787 was restarted with feature-branch code and the original
+artifact root; original checkout source files were not edited. The token was
+loaded by Node from the user-approved env-file path, never displayed or copied.
+
+The one-shot slice is complete, not automatic scheduling: clicking Approve +
+schedule records authorization but does not start a worker or create a timer.
+An automatic dispatcher remains a separate design/implementation task.
 
 ## API references
 
