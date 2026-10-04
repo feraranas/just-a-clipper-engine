@@ -11,7 +11,7 @@ status: COMPLETE
 
 Provide a local ChatGPT Developer Mode plugin entry point that accepts one publicly accessible YouTube video URL and returns finished, locally rendered captioned MP4 clips through the Audiograms project. During development, ChatGPT reaches an MCP server bound to loopback through OpenAI Secure MCP Tunnel; the tunnel is not the production host.
 
-V1 reuses Audiograms' existing clip selection, package, and Remotion treatment behavior. The existing Most Replayed heatmap selection remains the default; transcript-based selection remains governed by the project's existing explicit configuration. The plugin reports the output artifact paths and processing status. It does not publish clips to a third party.
+V1 reuses Audiograms' existing clip selection, package, and Remotion treatment behavior. Transcript-based `transcript-llm` selection is the default and requires an explicit LLM provider configuration; the Most Replayed heatmap selector remains available only when explicitly selected. The plugin reports the output artifact paths and processing status. It does not publish clips to a third party.
 
 The current production command starts from the user's private `Audiogram Inbox` playlist. V1 therefore needs a direct-URL intake path that feeds one source into the same pipeline core without requiring playlist membership. The Streamable HTTP MCP service calls a stable project command/runner contract rather than depending on internal module names. Keep tool names and job/result schemas portable so a future Cloud Run service can dispatch rendering to a Cloud Run Job and store artifacts in Cloud Storage without changing the ChatGPT-facing tools. Cloud deployment is not part of V1.
 
@@ -88,7 +88,7 @@ stateDiagram-v2
 
 Changed: add a direct URL intake path, a loopback Streamable HTTP MCP bridge connected through Secure MCP Tunnel, and create/status tools backed by a local runner.
 
-Unchanged: existing playlist ingestion, selection defaults, clip package format, Remotion treatment, local artifact storage, and publishing approval queue behavior.
+Unchanged: existing playlist ingestion, clip package format, Remotion treatment, local artifact storage, and publishing approval queue behavior. Updated selection behavior: `transcript-llm` is the default; `youtube-heatmap` is opt-in for compatibility.
 
 ## Implementation reconciliation and deviations
 
@@ -96,4 +96,4 @@ Implemented behavior matches the designed boundaries: `create_audiogram` validat
 
 Completion is recorded only after the CLI contract reports `complete` and every artifact resolves to a non-empty MP4 beneath the real `out/treatments` directory. Non-success CLI outcomes remain terminal `no_clips` or `failed` states without artifact claims. A dead worker is marked failed; malformed CLI output and child-process errors cannot leave a job falsely complete. Active requests for the same video reuse one job. The ledger and outputs remain local, and no upload or publishing action is introduced.
 
-Intentional implementation details/deviations: the default job database is stored in ignored `.local/audiogram-helper-jobs.sqlite` within the project (override with `AUDIOGRAM_JOB_STORE`); Node 22's built-in SQLite currently emits its experimental-feature warning. Failure messages surfaced to ChatGPT are intentionally generic and do not expose local paths. The first `create_audiogram` response reports the observed current state; clients should poll `get_audiogram_status` for completion. The Secure MCP Tunnel is configured manually by the developer; no tunnel session or live video render was started as part of verification. The Cloud Run runner/artifact-store adapter, public distribution, and public download URLs remain future work.
+Intentional implementation details/deviations: the default job database is stored in ignored `.local/audiogram-helper-jobs.sqlite` within the project (override with `AUDIOGRAM_JOB_STORE`); Node 22's built-in SQLite currently emits its experimental-feature warning. The selector defaults to `transcript-llm`; provider configuration is still mandatory, so an unconfigured run fails instead of silently falling back to heatmap. Heatmap remains an explicit compatibility option. Failure messages surfaced to ChatGPT are intentionally generic and do not expose local paths. The first `create_audiogram` response reports the observed current state; clients should poll `get_audiogram_status` for completion. The Secure MCP Tunnel is configured manually by the developer; no tunnel session or live video render was started as part of verification. The Cloud Run runner/artifact-store adapter, public distribution, and public download URLs remain future work.

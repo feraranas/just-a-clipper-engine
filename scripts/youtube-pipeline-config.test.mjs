@@ -18,11 +18,26 @@ test("package version prefers the new variable and supports the legacy fallback"
     resolvePackageVersion({ AUDIOGRAM_TREATMENT_VERSION: "legacy" }),
     "legacy",
   );
-  assert.equal(resolvePackageVersion({}), "v1");
+  assert.equal(resolvePackageVersion({}), "transcript-llm-v1");
 });
 
-test("heatmap defaults are provider-free and strict numeric parsing preserves milliseconds", () => {
+test("transcript selection is the default and requires explicit provider configuration", () => {
+  assert.throws(
+    () => resolveSelectionConfig({}),
+    /AUDIOGRAM_LLM_PROVIDER must explicitly select/,
+  );
   const config = resolveSelectionConfig({
+    AUDIOGRAM_LLM_PROVIDER: "chatgpt-oauth",
+  });
+  assert.equal(config.selectorId, "transcript-llm");
+  assert.equal(config.packageVersion, "transcript-llm-v1");
+  assert.equal(config.providerId, "chatgpt-oauth");
+});
+
+test("explicit heatmap configuration remains provider-free and strict numeric parsing preserves milliseconds", () => {
+  const heatmap = { AUDIOGRAM_CLIP_SELECTOR: "youtube-heatmap" };
+  const config = resolveSelectionConfig({
+    ...heatmap,
     OPENAI_API_KEY: "secret",
     AUDIOGRAM_LLM_PROVIDER: "chatgpt-oauth",
   });
@@ -33,6 +48,7 @@ test("heatmap defaults are provider-free and strict numeric parsing preserves mi
   assert.equal(JSON.stringify(config).includes("secret"), false);
   assert.equal(
     resolveSelectionConfig({
+      ...heatmap,
       AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS: "0.001",
     }).minimumSeparationMs,
     1,
@@ -46,10 +62,13 @@ test("heatmap defaults are provider-free and strict numeric parsing preserves mi
     "Infinity",
     "9007199254740992",
   ])
-    assert.throws(() => resolveSelectionConfig({ AUDIOGRAM_MAX_CLIPS: value }));
+    assert.throws(() =>
+      resolveSelectionConfig({ ...heatmap, AUDIOGRAM_MAX_CLIPS: value }),
+    );
   for (const value of ["", "1x", "-1", "Infinity", "0.0001"])
     assert.throws(() =>
       resolveSelectionConfig({
+        ...heatmap,
         AUDIOGRAM_MINIMUM_CLIP_SEPARATION_SECONDS: value,
       }),
     );
@@ -108,6 +127,7 @@ test("transcript config requires explicit provider and bounded count without ret
 
 test("legacy recipe mappings are strict and never replace live heatmap parameters", () => {
   const config = resolveSelectionConfig({
+    AUDIOGRAM_CLIP_SELECTOR: "youtube-heatmap",
     AUDIOGRAM_LEGACY_HEATMAP_RECIPES_JSON:
       '{"v1":{"maxClips":4,"minimumSeparationMs":1234}}',
   });
@@ -126,6 +146,9 @@ test("legacy recipe mappings are strict and never replace live heatmap parameter
     '{"../v1":{"maxClips":1,"minimumSeparationMs":0}}',
   ])
     assert.throws(() =>
-      resolveSelectionConfig({ AUDIOGRAM_LEGACY_HEATMAP_RECIPES_JSON: value }),
+      resolveSelectionConfig({
+        AUDIOGRAM_CLIP_SELECTOR: "youtube-heatmap",
+        AUDIOGRAM_LEGACY_HEATMAP_RECIPES_JSON: value,
+      }),
     );
 });

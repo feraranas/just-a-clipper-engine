@@ -10,7 +10,9 @@ import { syncAndAnalyzeInbox } from "./youtube-inbox-pipeline-core.mjs";
 import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 
-const heatmapConfig = resolveSelectionConfig({});
+const heatmapConfig = resolveSelectionConfig({
+  AUDIOGRAM_CLIP_SELECTOR: "youtube-heatmap",
+});
 const heatmapRecipe = buildSelectionRecipe(heatmapConfig);
 const transcriptConfig = resolveSelectionConfig({
   AUDIOGRAM_CLIP_SELECTOR: "transcript-llm",
