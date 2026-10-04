@@ -1,8 +1,8 @@
 ---
 feature: Single URL Audiogram plugin bridge
 design-reviewed: true
-implementation-reconciled: false
-status: DESIGN
+implementation-reconciled: true
+status: COMPLETE
 ---
 
 # Single URL Audiogram plugin bridge
@@ -92,4 +92,8 @@ Unchanged: existing playlist ingestion, selection defaults, clip package format,
 
 ## Implementation reconciliation and deviations
 
-Not implemented yet. Reconcile this section against the resulting command, MCP tools, tunnel instructions, job persistence, artifact behavior, and tests before marking the feature complete. The Cloud Run runner/artifact-store adapter remains future work and is intentionally not claimed as implemented.
+Implemented behavior matches the designed boundaries: `create_audiogram` validates and canonicalizes one supported YouTube URL before dispatch; `get_audiogram_status` returns persisted state from a local SQLite job ledger. A detached worker invokes the versioned CLI using an argument array with shell execution disabled. The MCP process binds to `127.0.0.1`, accepts only `/mcp`, applies local Host/Origin checks and a 1 MiB request-body limit, and documents manual Secure MCP Tunnel setup without storing tunnel credentials.
+
+Completion is recorded only after the CLI contract reports `complete` and every artifact resolves to a non-empty MP4 beneath the real `out/treatments` directory. Non-success CLI outcomes remain terminal `no_clips` or `failed` states without artifact claims. A dead worker is marked failed; malformed CLI output and child-process errors cannot leave a job falsely complete. Active requests for the same video reuse one job. The ledger and outputs remain local, and no upload or publishing action is introduced.
+
+Intentional implementation details/deviations: the default job database is stored in ignored `.local/audiogram-helper-jobs.sqlite` within the project (override with `AUDIOGRAM_JOB_STORE`); Node 22's built-in SQLite currently emits its experimental-feature warning. Failure messages surfaced to ChatGPT are intentionally generic and do not expose local paths. The first `create_audiogram` response reports the observed current state; clients should poll `get_audiogram_status` for completion. The Secure MCP Tunnel is configured manually by the developer; no tunnel session or live video render was started as part of verification. The Cloud Run runner/artifact-store adapter, public distribution, and public download URLs remain future work.

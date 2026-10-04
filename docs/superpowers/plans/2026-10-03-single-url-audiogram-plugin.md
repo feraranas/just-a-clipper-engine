@@ -37,7 +37,8 @@
 - `scripts/youtube-url-core.mjs` and `.test.mjs` — accepted URL parsing, normalization, and metadata identity checks.
 - `scripts/single-url-pipeline.mjs` and `.test.mjs` — direct single-video orchestration reusing selection, ledger, asset, render, and local approval queue behavior.
 - `scripts/audiogram-url.mjs` and `.test.mjs` — stable versioned JSON command contract used by the MCP adapter.
-- `plugins/audiogram-helper/server.mjs` and `.test.mjs` — Streamable HTTP `/mcp` service, two focused tools (`create_audiogram`, `get_audiogram_status`), local runner adapter, input/result validation, and artifact verification.
+- `plugins/audiogram-helper/server.mjs` and `.test.mjs` — Streamable HTTP `/mcp` service, two focused tools (`create_audiogram`, `get_audiogram_status`), and local protocol/lifecycle coverage.
+- `plugins/audiogram-helper/job-store.mjs`, `local-runner.mjs`, `job-worker.mjs`, `result-validation.mjs` — SQLite persistence, detached CLI worker lifecycle, and artifact validation behind a transport-neutral runner boundary.
 - `plugins/audiogram-helper/README.md` — local prerequisites, loopback service startup, Secure MCP Tunnel/Developer Mode connection steps, and local-only limitations; no credentials.
 - `package.json`, `package-lock.json` — command aliases and only the SDK dependencies required by the chosen documented transport.
 - `README.md` — document the direct-URL command and prerequisites without changing the existing playlist workflow.
@@ -109,28 +110,28 @@ Keep tool names, request/result schema, and runner interface transport-neutral. 
 
 ### Task 3: Local Streamable HTTP MCP service and runner interface
 
-**Files:** Create `plugins/audiogram-helper/server.mjs`, `server.test.mjs`, `job-store.mjs`, `job-worker.mjs`, and `README.md`; modify package metadata only for the current SDK transport.
+**Files:** Create the `plugins/audiogram-helper/` service, runner, worker, job-store, result-validation modules and tests/README; modify package metadata for the current SDK and local scripts.
 
 **Consumes:** Version-1 CLI result contract. **Produces:** loopback-only `/mcp`, `create_audiogram`, `get_audiogram_status`, and a local runner adapter implementing the shared job/status interface.
 
-- [ ] Write tests first for tool discovery, URL rejection, job start/status transitions, child-process error/nonzero exit, malformed result JSON, restart/failure honesty, and invalid/missing/empty/out-of-root artifacts.
-- [ ] Run `node --test plugins/audiogram-helper/server.test.mjs`; confirm expected missing implementation failure.
-- [ ] Implement the documented Streamable HTTP transport on loopback only, with clean request handling and orderly transport/process shutdown. Keep server handlers independent of Audiograms internals through the runner adapter.
-- [ ] Implement the local runner using argument-array process invocation (`shell: false`) and a local SQLite job record; persist no OpenAI tunnel secrets. Return opaque job IDs and truthful states; do not make a long render look complete merely because it was launched. The detached worker runs the CLI, parses its one JSON result, and commits the terminal state to the job record.
-- [ ] Add README startup and manual Developer Mode/Secure MCP Tunnel steps, including that the service remains bound to `127.0.0.1` and that the tunnel is a development bridge, not public hosting.
-- [ ] Do not add a public-distribution manifest or claim directory readiness: Developer Mode connects to the tunneled MCP service through ChatGPT's developer UI. Public packaging/submission is a separate task.
-- [ ] Run MCP unit tests and a local protocol handshake/tool-list test without fetching or rendering a live video; verify the server binds only to `127.0.0.1`.
-- [ ] Commit service, tests, README, and dependency metadata.
+- [x] Write tests first for tool discovery, URL rejection, job start/status transitions, child-process error/nonzero exit, malformed result JSON, restart/failure honesty, and invalid/missing/empty/out-of-root artifacts.
+- [x] Run `node --test plugins/audiogram-helper/server.test.mjs`; confirmed expected missing-module failure before implementation.
+- [x] Implement the documented Streamable HTTP transport on loopback only, with request-size/host-origin checks and orderly shutdown. Keep server handlers independent of Audiograms internals through the runner adapter.
+- [x] Implement the local runner using argument-array process invocation (`shell: false`) and a local SQLite job record; persist no OpenAI tunnel secrets. Return opaque job IDs and truthful states; the detached worker runs the CLI, validates its JSON result, and commits terminal state.
+- [x] Add README startup and manual Developer Mode/Secure MCP Tunnel steps, including loopback binding and the tunnel's development-only boundary.
+- [x] Do not add a public-distribution manifest or claim directory readiness; public packaging/submission remains separate.
+- [x] Run MCP tests and local protocol handshake/tool discovery without fetching/rendering a live video; verify binding to `127.0.0.1`.
+- [x] Commit service, tests, README, and dependency metadata (commit pending).
 
 ### Task 4: Design reconciliation and complete local verification
 
 **Files:** Modify `docs/features/single-url-audiogram-plugin.md`; correct implementation/README metadata only if tests require it.
 
-- [ ] Compare actual request, job lifecycle, persistence, approval, artifact, and failure behavior against the feature note; document deviations explicitly.
-- [ ] Set feature-note metadata to `status: COMPLETE`, `design-reviewed: true`, and `implementation-reconciled: true` only after the comparison.
-- [ ] Run `npm run test:youtube`, `npm run lint`, and `npm run verify:feature-docs`; report any baseline or unrelated failures accurately.
-- [ ] Run a local MCP handshake and discover both tools. Do not create a public tunnel or publish anything automatically; give the user the exact manual connection steps and verify live video processing only when the user supplies/approves a test URL.
-- [ ] Inspect and commit only feature-specific files in this isolated branch.
+- [x] Compare actual request, job lifecycle, persistence, approval, artifact, and failure behavior against the feature note; document deviations explicitly.
+- [x] Set feature-note metadata to `status: COMPLETE`, `design-reviewed: true`, and `implementation-reconciled: true` after comparison.
+- [x] Run `npm run test:youtube`, `npm run lint`, and `npm run verify:feature-docs`; full test suite reports 228 pass and one previously reproduced unrelated OAuth smoke failure.
+- [x] Run a local MCP handshake and discover both tools. No public tunnel, publishing, or live video processing was initiated; manual connection steps are in the plugin README.
+- [x] Inspect and commit only feature-specific files in this isolated branch (commit pending).
 
 ## Plan self-review
 
