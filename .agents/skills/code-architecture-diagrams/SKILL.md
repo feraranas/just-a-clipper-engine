@@ -1,11 +1,11 @@
 ---
 name: code-architecture-diagrams
-description: Use when asked to trace runtime call flows, explain file and interface responsibilities, identify architecture patterns, or diagram how a pull request's changes connect to surrounding code.
+description: Use only when the user explicitly asks for a runtime call-flow diagram, including for a pull request. Do not trigger for general code explanations, architecture questions, PR reviews, or Mermaid requests without that explicit diagram request.
 ---
 
 # Code Architecture Diagrams
 
-Trace actual calls and boundaries from source. For pull requests, show changed code in the context of surrounding behavior, not as an isolated diff.
+Trigger only on an explicit request for a runtime call-flow diagram. A request to explain code, discuss architecture patterns, review a PR, or produce another kind of diagram is not sufficient by itself. Once triggered, trace actual calls and boundaries from source. For pull requests, show changed code in the context of surrounding behavior, not as an isolated diff.
 
 ## Workflow
 
