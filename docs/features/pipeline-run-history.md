@@ -2,7 +2,7 @@
 feature: Pipeline run history and details
 status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Pipeline run history and details
