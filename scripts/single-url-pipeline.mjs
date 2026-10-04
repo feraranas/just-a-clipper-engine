@@ -178,6 +178,12 @@ export const runSingleUrlPipeline = async ({
         }
         return sourceMetadata;
       },
+      ...(dependencies.fetchTranscript
+        ? { fetchTranscript: dependencies.fetchTranscript }
+        : {}),
+      ...(dependencies.createProvider
+        ? { createProvider: dependencies.createProvider }
+        : {}),
       ...(jevClient ? { jevClient } : {}),
     });
     analysisFailures = pipeline.analyzed.filter(({ status }) => status === "failed");
