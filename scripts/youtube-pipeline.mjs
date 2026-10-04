@@ -27,7 +27,7 @@ import { renderTreatmentRun } from "./treatment-runner.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
 import { resolveSelectionConfig } from "./youtube-pipeline-config.mjs";
 import { createHttpJevClient } from "./jev-client.mjs";
-import { createPipelineLogger } from "./pipeline-logger.mjs";
+import { createPipelineLogger, runLoggedStage } from "./pipeline-logger.mjs";
 import { resolvePipelineLogPath } from "./publishing-config.mjs";
 
 const appSupportDirectory = join(
@@ -47,7 +47,9 @@ const ledgerPath =
   join(appSupportDirectory, "audiograms.sqlite");
 const publishingAccountId = resolvePublishingAccountId(process.env);
 const publishingLedgerPath = resolvePublishingLedgerPath(process.env);
-const pipelineLogger = createPipelineLogger({ logPath: resolvePipelineLogPath(process.env) });
+const pipelineLogger = createPipelineLogger({
+  logPath: resolvePipelineLogPath(process.env),
+});
 const runId = randomBytes(12).toString("hex");
 const projectRoot = resolve(
   process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
@@ -57,243 +59,278 @@ const playlistTitle =
 const selectionConfig = resolveSelectionConfig(process.env);
 const selectionRecipe = buildSelectionRecipe(selectionConfig);
 const { packageVersion } = selectionConfig;
+const onEvent = (event) =>
+  pipelineLogger.event({ ...event, runId, packageVersion });
 const scope = "https://www.googleapis.com/auth/youtube.readonly";
 const hasJevEndpoint = Boolean(process.env.TYPESAFE_JEV_ENDPOINT);
 const hasJevApiKey = Boolean(process.env.TYPESAFE_JEV_API_KEY);
 if (hasJevEndpoint !== hasJevApiKey) {
-  throw new Error("TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together");
+  throw new Error(
+    "TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together",
+  );
 }
 const jevClient = hasJevEndpoint
-  ? createHttpJevClient({ endpoint: process.env.TYPESAFE_JEV_ENDPOINT, apiKey: process.env.TYPESAFE_JEV_API_KEY })
+  ? createHttpJevClient({
+      endpoint: process.env.TYPESAFE_JEV_ENDPOINT,
+      apiKey: process.env.TYPESAFE_JEV_API_KEY,
+    })
   : undefined;
 
-await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
+const executePipeline = async () => {
+  await mkdir(appSupportDirectory, { recursive: true, mode: 0o700 });
 
-const clientConfig = JSON.parse(await readFile(clientPath, "utf8"));
-const { clientId, clientSecret } = parseInstalledClient(clientConfig);
+  const clientConfig = JSON.parse(await readFile(clientPath, "utf8"));
+  const { clientId, clientSecret } = parseInstalledClient(clientConfig);
 
-let oauth2Client;
-let storedTokens;
+  let oauth2Client;
+  let storedTokens;
 
-try {
-  storedTokens = JSON.parse(await readFile(tokenPath, "utf8"));
-} catch (error) {
-  if (error.code !== "ENOENT") {
-    throw error;
+  try {
+    storedTokens = JSON.parse(await readFile(tokenPath, "utf8"));
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      throw error;
+    }
   }
-}
 
-if (storedTokens) {
-  oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
-  oauth2Client.setCredentials(storedTokens);
-} else {
-  await new Promise((resolve, reject) => {
-    const state = randomBytes(32).toString("hex");
-    const server = createServer(async (request, response) => {
-      try {
-        const requestUrl = new URL(request.url, "http://127.0.0.1");
+  if (storedTokens) {
+    oauth2Client = new google.auth.OAuth2(clientId, clientSecret);
+    oauth2Client.setCredentials(storedTokens);
+  } else {
+    await new Promise((resolve, reject) => {
+      const state = randomBytes(32).toString("hex");
+      const server = createServer(async (request, response) => {
+        try {
+          const requestUrl = new URL(request.url, "http://127.0.0.1");
 
-        if (requestUrl.pathname !== "/oauth2callback") {
-          response.writeHead(404).end("Not found");
-          return;
+          if (requestUrl.pathname !== "/oauth2callback") {
+            response.writeHead(404).end("Not found");
+            return;
+          }
+
+          if (requestUrl.searchParams.get("state") !== state) {
+            throw new Error("OAuth state mismatch");
+          }
+
+          const error = requestUrl.searchParams.get("error");
+          if (error) {
+            throw new Error(`Google OAuth returned: ${error}`);
+          }
+
+          const code = requestUrl.searchParams.get("code");
+          if (!code) {
+            throw new Error("Google OAuth callback did not include a code");
+          }
+
+          const { tokens } = await oauth2Client.getToken(code);
+          storedTokens = mergeOAuthTokens({}, tokens);
+          await writeFile(
+            tokenPath,
+            `${JSON.stringify(storedTokens, null, 2)}\n`,
+            {
+              mode: 0o600,
+            },
+          );
+          oauth2Client.setCredentials(storedTokens);
+
+          response.writeHead(200, {
+            "Content-Type": "text/plain; charset=utf-8",
+          });
+          response.end(
+            "Audiogram Inbox authorization complete. You can close this tab.",
+          );
+          server.close();
+          resolve();
+        } catch (error) {
+          response.writeHead(400, {
+            "Content-Type": "text/plain; charset=utf-8",
+          });
+          response.end(`Authorization failed: ${error.message}`);
+          server.close();
+          reject(error);
         }
-
-        if (requestUrl.searchParams.get("state") !== state) {
-          throw new Error("OAuth state mismatch");
-        }
-
-        const error = requestUrl.searchParams.get("error");
-        if (error) {
-          throw new Error(`Google OAuth returned: ${error}`);
-        }
-
-        const code = requestUrl.searchParams.get("code");
-        if (!code) {
-          throw new Error("Google OAuth callback did not include a code");
-        }
-
-        const { tokens } = await oauth2Client.getToken(code);
-        storedTokens = mergeOAuthTokens({}, tokens);
-        await writeFile(
-          tokenPath,
-          `${JSON.stringify(storedTokens, null, 2)}\n`,
-          {
-            mode: 0o600,
-          },
-        );
-        oauth2Client.setCredentials(storedTokens);
-
-        response.writeHead(200, {
-          "Content-Type": "text/plain; charset=utf-8",
-        });
-        response.end(
-          "Audiogram Inbox authorization complete. You can close this tab.",
-        );
-        server.close();
-        resolve();
-      } catch (error) {
-        response.writeHead(400, {
-          "Content-Type": "text/plain; charset=utf-8",
-        });
-        response.end(`Authorization failed: ${error.message}`);
-        server.close();
-        reject(error);
-      }
-    });
-
-    server.on("error", reject);
-    server.listen(0, "127.0.0.1", () => {
-      const address = server.address();
-      const redirectUri = `http://127.0.0.1:${address.port}/oauth2callback`;
-      oauth2Client = new google.auth.OAuth2(
-        clientId,
-        clientSecret,
-        redirectUri,
-      );
-
-      const authorizationUrl = oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        include_granted_scopes: true,
-        prompt: "consent",
-        scope,
-        state,
       });
 
-      console.log(`AUTHORIZATION_URL=${authorizationUrl}`);
+      server.on("error", reject);
+      server.listen(0, "127.0.0.1", () => {
+        const address = server.address();
+        const redirectUri = `http://127.0.0.1:${address.port}/oauth2callback`;
+        oauth2Client = new google.auth.OAuth2(
+          clientId,
+          clientSecret,
+          redirectUri,
+        );
+
+        const authorizationUrl = oauth2Client.generateAuthUrl({
+          access_type: "offline",
+          include_granted_scopes: true,
+          prompt: "consent",
+          scope,
+          state,
+        });
+
+        console.log(`AUTHORIZATION_URL=${authorizationUrl}`);
+      });
+    });
+  }
+
+  oauth2Client.on("tokens", async (tokens) => {
+    storedTokens = mergeOAuthTokens(storedTokens, tokens);
+    await writeFile(tokenPath, `${JSON.stringify(storedTokens, null, 2)}\n`, {
+      mode: 0o600,
     });
   });
-}
 
-oauth2Client.on("tokens", async (tokens) => {
-  storedTokens = mergeOAuthTokens(storedTokens, tokens);
-  await writeFile(tokenPath, `${JSON.stringify(storedTokens, null, 2)}\n`, {
-    mode: 0o600,
-  });
-});
+  const youtube = google.youtube({ version: "v3", auth: oauth2Client });
+  const playlist = await findPlaylistByTitle(async (pageToken) => {
+    const response = await youtube.playlists.list({
+      maxResults: 50,
+      mine: true,
+      pageToken,
+      part: ["snippet"],
+    });
 
-const youtube = google.youtube({ version: "v3", auth: oauth2Client });
-const playlist = await findPlaylistByTitle(async (pageToken) => {
-  const response = await youtube.playlists.list({
-    maxResults: 50,
-    mine: true,
-    pageToken,
-    part: ["snippet"],
-  });
+    return response.data;
+  }, playlistTitle);
 
-  return response.data;
-}, playlistTitle);
-
-if (!playlist) {
-  console.log(
-    JSON.stringify(
-      {
-        playlist: null,
-        videos: [],
-        message: `Create a private YouTube playlist named ${playlistTitle} and run this command again.`,
-      },
-      null,
-      2,
-    ),
-  );
-  process.exit(0);
-}
-
-const videos = await collectPlaylistItems(async (pageToken) => {
-  const response = await youtube.playlistItems.list({
-    maxResults: 50,
-    pageToken,
-    part: ["snippet"],
-    playlistId: playlist.id,
-  });
-
-  return response.data;
-});
-const requestedVideoId = process.env.AUDIOGRAM_VIDEO_ID;
-const selectedVideos = requestedVideoId
-  ? videos.filter(({ videoId }) => videoId === requestedVideoId)
-  : videos;
-
-const ledger = openAudiogramLedger(ledgerPath, {
-  selectionRecipe,
-  packageVersion,
-  legacyHeatmapRecipeMap: selectionConfig.legacyHeatmapRecipeMap,
-});
-const publishingLedger = createPublishingLedger(publishingLedgerPath);
-
-try {
-  const syncStartedAt = Date.now();
-  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "started", videoId: requestedVideoId, packageVersion });
-  const pipeline = await syncAndAnalyzeInbox({
-    ledger,
-    playlist,
-    selectionConfig,
-    selectionRecipe,
-    videos: selectedVideos,
-    jevClient,
-  });
-  await pipelineLogger.event({ runId, stage: "transcript-sync", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - syncStartedAt });
-  const renderStartedAt = Date.now();
-  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "started", videoId: requestedVideoId, packageVersion });
-  const processing = await processClipPackages({
-    ledger,
-    registry: treatmentRegistry,
-    treatments: [{ id: "audiogram-basic", version: "1" }],
-    loadTranscriptForPackage: (packageId) =>
-      ledger.getTranscriptForPackage(packageId),
-    acquireAssets: (clipPackage) =>
-       acquireClipPackageAssets(clipPackage, { projectRoot }),
-      renderTreatment: ({ clipPackage, treatment }) =>
-      renderTreatmentRun(
-        { clipPackage, treatment },
-        { projectRoot },
+  if (!playlist) {
+    console.log(
+      JSON.stringify(
+        {
+          playlist: null,
+          videos: [],
+          message: `Create a private YouTube playlist named ${playlistTitle} and run this command again.`,
+        },
+        null,
+        2,
       ),
-    projectRoot,
-    onArtifactComplete: publishingLedger
-      ? ({ artifactRelativePath, artifactHash, clipPackage, treatment }) =>
-          enqueueCompletedArtifact({
-            ledger: publishingLedger,
-            projectRoot,
-            artifactRelativePath,
-            artifactHash,
-            accountId: publishingAccountId,
-            sourceVideoId: clipPackage.sourceVideoId,
-            clipPackageId: clipPackage.id,
-            treatmentId: treatment.id,
-            treatmentVersion: treatment.version,
-            title: clipPackage.title,
-          })
-      : undefined,
-      videoId: requestedVideoId,
-  });
-  await pipelineLogger.event({ runId, stage: "render-and-queue", status: "completed", videoId: requestedVideoId, packageVersion, durationMs: Date.now() - renderStartedAt });
-  const analysisFailures = pipeline.analyzed.filter(
-    ({ status }) => status === "failed",
-  );
-
-  console.log(
-    JSON.stringify(
-      {
-        playlist,
-        packageVersion,
-        treatments: ["audiogram-basic@1"],
-        ledgerPath,
-        videosFound: selectedVideos.length,
-        ...pipeline,
-        processing,
-      },
-      null,
-      2,
-    ),
-  );
-
-  if (
-    analysisFailures.length > 0 ||
-    processing.packages.failed > 0 ||
-    processing.treatments.failed > 0
-  ) {
-    process.exitCode = 1;
+    );
+    return { failed: false };
   }
-} finally {
-  ledger.close();
-  publishingLedger?.close();
-}
+
+  const videos = await collectPlaylistItems(async (pageToken) => {
+    const response = await youtube.playlistItems.list({
+      maxResults: 50,
+      pageToken,
+      part: ["snippet"],
+      playlistId: playlist.id,
+    });
+
+    return response.data;
+  });
+  const requestedVideoId = process.env.AUDIOGRAM_VIDEO_ID;
+  const selectedVideos = requestedVideoId
+    ? videos.filter(({ videoId }) => videoId === requestedVideoId)
+    : videos;
+
+  const ledger = openAudiogramLedger(ledgerPath, {
+    selectionRecipe,
+    packageVersion,
+    legacyHeatmapRecipeMap: selectionConfig.legacyHeatmapRecipeMap,
+  });
+  const publishingLedger = createPublishingLedger(publishingLedgerPath);
+
+  try {
+    const pipeline = await runLoggedStage({
+      logger: { event: onEvent },
+      stage: "transcript-sync",
+      videoId: requestedVideoId,
+      hasFailures: (value) =>
+        value.analyzed.some(({ status }) => status === "failed"),
+      operation: () =>
+        syncAndAnalyzeInbox({
+          ledger,
+          playlist,
+          selectionConfig,
+          selectionRecipe,
+          videos: selectedVideos,
+          jevClient,
+          onEvent,
+        }),
+    });
+    const processing = await runLoggedStage({
+      logger: { event: onEvent },
+      stage: "render-and-queue",
+      videoId: requestedVideoId,
+      hasFailures: (value) =>
+        value.packages.failed > 0 ||
+        value.treatments.failed > 0 ||
+        (value.publishing?.failed ?? 0) > 0,
+      operation: () =>
+        processClipPackages({
+          ledger,
+          registry: treatmentRegistry,
+          treatments: [{ id: "audiogram-basic", version: "1" }],
+          loadTranscriptForPackage: (packageId) =>
+            ledger.getTranscriptForPackage(packageId),
+          acquireAssets: (clipPackage) =>
+            acquireClipPackageAssets(clipPackage, { projectRoot }),
+          renderTreatment: ({ clipPackage, treatment }) =>
+            renderTreatmentRun({ clipPackage, treatment }, { projectRoot }),
+          projectRoot,
+          onArtifactComplete: publishingLedger
+            ? ({
+                artifactRelativePath,
+                artifactHash,
+                clipPackage,
+                treatment,
+              }) =>
+                enqueueCompletedArtifact({
+                  ledger: publishingLedger,
+                  projectRoot,
+                  artifactRelativePath,
+                  artifactHash,
+                  accountId: publishingAccountId,
+                  sourceVideoId: clipPackage.sourceVideoId,
+                  clipPackageId: clipPackage.id,
+                  treatmentId: treatment.id,
+                  treatmentVersion: treatment.version,
+                  title: clipPackage.title,
+                })
+            : undefined,
+          videoId: requestedVideoId,
+          onEvent,
+        }),
+    });
+    const analysisFailures = pipeline.analyzed.filter(
+      ({ status }) => status === "failed",
+    );
+
+    console.log(
+      JSON.stringify(
+        {
+          playlist,
+          packageVersion,
+          treatments: ["audiogram-basic@1"],
+          ledgerPath,
+          videosFound: selectedVideos.length,
+          ...pipeline,
+          processing,
+        },
+        null,
+        2,
+      ),
+    );
+
+    if (
+      analysisFailures.length > 0 ||
+      processing.packages.failed > 0 ||
+      processing.treatments.failed > 0 ||
+      (processing.publishing?.failed ?? 0) > 0
+    ) {
+      process.exitCode = 1;
+    }
+    return { failed: process.exitCode === 1 };
+  } finally {
+    ledger.close();
+    publishingLedger?.close();
+  }
+};
+
+await runLoggedStage({
+  logger: { event: onEvent },
+  stage: "pipeline",
+  operation: executePipeline,
+  hasFailures: (result) => result.failed,
+  failureStatus: "partial",
+});

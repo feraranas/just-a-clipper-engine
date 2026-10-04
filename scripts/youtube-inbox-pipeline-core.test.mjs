@@ -263,6 +263,7 @@ test("transcript selection never requests heatmap metadata and records derived c
 
 for (const failure of ["acquisition", "provider", "schema", "semantic"]) {
   test(`a transcript ${failure} failure marks only its job failed without fallback`, async () => {
+    const events = [];
     const failedJobs = [];
     const recordedJobs = [];
     let heatmapRequests = 0;
@@ -291,6 +292,7 @@ for (const failure of ["acquisition", "provider", "schema", "semantic"]) {
     };
 
     const result = await syncAndAnalyzeInbox({
+      onEvent: (event) => events.push(event),
       ledger,
       playlist: { id: "playlist-1", title: "Audiogram Inbox" },
       selectionConfig: transcriptConfig,
@@ -357,6 +359,8 @@ for (const failure of ["acquisition", "provider", "schema", "semantic"]) {
     });
 
     assert.deepEqual(failedJobs, [1]);
+    const failedStep = failure === "acquisition" ? "transcript" : "selection";
+    assert.deepEqual(events.filter((event) => event.videoId === "video-1" && event.stage === failedStep).map((event) => event.status), ["started", "failed"]);
     assert.deepEqual(recordedJobs, [2]);
     assert.deepEqual(
       result.analyzed.map(({ videoId, status }) => ({ videoId, status })),
