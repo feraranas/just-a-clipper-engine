@@ -44,7 +44,9 @@ test("a completed package and treatment are skipped on the next run", async (t) 
   seedPackages(ledger);
   let acquisitions = 0;
   let renders = 0;
+  const events = [];
   const dependencies = {
+    onEvent: async (event) => { events.push(event); throw Error("logging unavailable"); },
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
@@ -69,6 +71,7 @@ test("a completed package and treatment are skipped on the next run", async (t) 
 
   assert.equal(acquisitions, 1);
   assert.equal(renders, 1);
+  assert.deepEqual(events.map(({ stage, status }) => [stage, status]), [["assets", "started"], ["assets", "completed"], ["render", "started"], ["render", "completed"]]);
   assert.deepEqual(first, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 1, failed: 0 },

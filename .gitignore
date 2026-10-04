@@ -7,3 +7,8 @@ dist
 out
 public/generated
 whisper.cpp
+
+# Local publishing state (keep the database and its sidecars out of source control).
+/publishing.sqlite
+/publishing.sqlite-shm
+/publishing.sqlite-wal

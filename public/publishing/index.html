@@ -19,8 +19,20 @@
       </header>
       <p id="queue-message" class="queue-message" role="status">Loading queue…</p>
       <section class="activity-panel">
-        <div class="activity-heading"><h2>Pipeline activity</h2><button id="refresh-logs" type="button">Refresh activity</button></div>
-        <ol id="pipeline-log-list" class="pipeline-log-list" aria-live="polite"><li>Loading activity…</li></ol>
+        <div class="activity-heading"><h2>System logs</h2><button id="refresh-logs" type="button">Refresh</button></div>
+        <p id="log-connection" class="log-connection" role="status">Connecting…</p>
+        <p id="log-latest" class="log-latest" role="status">Waiting for pipeline activity…</p>
+        <div class="log-toolbar">
+          <label for="log-run">Run <select id="log-run"><option value="">Latest run</option></select></label>
+          <label class="log-follow"><input id="log-follow" type="checkbox" checked /> Follow new events</label>
+        </div>
+        <details class="log-terminal" open>
+          <summary>Pipeline activity <span id="log-count">0 events</span></summary>
+          <div id="log-scroll" class="log-scroll" tabindex="0" aria-label="Pipeline event history">
+            <ol id="pipeline-log-list" class="pipeline-log-list"><li class="log-empty">Loading activity…</li></ol>
+          </div>
+        </details>
+        <p class="log-footnote">Recent window: up to 500 events across runs · refreshes every 2 seconds. Older runs may be outside this window.</p>
       </section>
       <section id="queue-list" class="queue-list" aria-live="polite"></section>
     </main>

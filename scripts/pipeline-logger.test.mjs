@@ -1,178 +1,118 @@
-import assert from "node:assert/strict";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
 import test from "node:test";
-import { join } from "node:path";
+import assert from "node:assert/strict";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
+import { join } from "node:path";
+import {
+  createPipelineLogger,
+  readPipelineEvents,
+  runLoggedStage,
+} from "./pipeline-logger.mjs";
 
-import * as pipelineLoggerApi from "./pipeline-logger.mjs";
-const { createPipelineLogger, readPipelineEvents } = pipelineLoggerApi;
+const fixture = async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "pipeline-log-test-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  return join(directory, "events.jsonl");
+};
 
-test("writes structured pipeline events as JSONL without sensitive payloads", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const logPath = join(directory, "pipeline.jsonl");
+test("logger preserves structured metadata but excludes arbitrary payloads", async (t) => {
+  const logPath = await fixture(t);
   const logger = createPipelineLogger({
     logPath,
-    now: () => "2026-09-30T12:00:00.000Z",
+    now: () => "2026-10-02T12:00:00Z",
   });
-
   await logger.event({
-    runId: "run-1",
-    stage: "jev",
+    stage: "render",
     status: "completed",
-    videoId: "video-1",
-    apiKey: "must-not-be-written",
-    transcript: "must-not-be-written",
+    clipPackageId: 42,
+    durationMs: 50,
+    message: "secret",
+    transcript: "private",
   });
+  assert.deepEqual(await readPipelineEvents(logPath), [
+    {
+      timestamp: "2026-10-02T12:00:00Z",
+      stage: "render",
+      status: "completed",
+      clipPackageId: 42,
+      durationMs: 50,
+    },
+  ]);
+});
 
-  const lines = (await readFile(logPath, "utf8")).trim().split("\n");
-  assert.equal(lines.length, 1);
-  assert.deepEqual(JSON.parse(lines[0]), {
-    timestamp: "2026-09-30T12:00:00.000Z",
-    runId: "run-1",
-    stage: "jev",
+test("write and diagnostic failures cannot fail pipeline work", async (t) => {
+  const logPath = await fixture(t);
+  await writeFile(logPath, "not a directory");
+  const logger = createPipelineLogger({
+    logPath: join(logPath, "events"),
+    onError: async () => {
+      throw Error("diagnostic failed");
+    },
+  });
+  assert.equal(
+    await runLoggedStage({
+      logger,
+      stage: "render",
+      operation: async () => 42,
+    }),
+    42,
+  );
+});
+
+test("reader tolerates malformed and interrupted records and resumes after append", async (t) => {
+  const logPath = await fixture(t);
+  const old = { stage: "render", status: "started", runId: "old" };
+  await writeFile(logPath, JSON.stringify(old) + '\nnull\n{bad}\n{"stage":');
+  await createPipelineLogger({ logPath }).event({
+    stage: "render",
     status: "completed",
-    videoId: "video-1",
+    runId: "new",
   });
+  assert.deepEqual(
+    (await readPipelineEvents(logPath)).map((event) => event.runId),
+    ["new", "old"],
+  );
+  assert.equal((await readPipelineEvents(logPath, { limit: 1 })).length, 1);
 });
 
-test("reads only the newest bounded events", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const logPath = join(directory, "pipeline.jsonl");
-  const logger = createPipelineLogger({ logPath, now: () => "now" });
-  await logger.event({ runId: "run-1", stage: "one", status: "started" });
-  await logger.event({ runId: "run-1", stage: "two", status: "completed" });
-  assert.deepEqual(await readPipelineEvents(logPath, { limit: 1 }), [
-    { timestamp: "now", runId: "run-1", stage: "two", status: "completed" },
-  ]);
+test("bounded tail skips giant records and validates limits", async (t) => {
+  const logPath = await fixture(t);
+  await writeFile(
+    logPath,
+    "x".repeat(9 * 1024 * 1024) + '\n{"stage":"render","status":"completed"}\n',
+  );
+  assert.equal((await readPipelineEvents(logPath, { limit: 1000 })).length, 1);
+  for (const limit of [0, -1, 1001, 1.5, NaN])
+    await assert.rejects(readPipelineEvents(logPath, { limit }));
+  assert.deepEqual(await readPipelineEvents(logPath + ".missing"), []);
 });
 
-test("persists sanitized failure diagnostics", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const logPath = join(directory, "pipeline.jsonl");
-  const logger = createPipelineLogger({ logPath, now: () => "now" });
-
-  await logger.event({
-    runId: "run-1",
-    stage: "transcript-sync",
-    status: "failed",
-    videoId: "video-1",
-    errorCode: "oauth_responses_timeout",
-    errorMessage: "provider timed out",
-    transcript: "must-not-be-written",
-    apiKey: "must-not-be-written",
-  });
-
-  assert.deepEqual(await readPipelineEvents(logPath), [{
-    timestamp: "now",
-    runId: "run-1",
-    stage: "transcript-sync",
-    status: "failed",
-    videoId: "video-1",
-    errorCode: "oauth_responses_timeout",
-    errorMessage: "provider timed out",
-  }]);
-});
-
-test("logger write failures are best effort", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const blocker = join(directory, "not-a-directory");
-  await writeFile(blocker, "file blocks directory creation");
-  const logger = createPipelineLogger({ logPath: join(blocker, "pipeline.jsonl") });
-
-  await assert.doesNotReject(logger.event({ stage: "render", status: "started" }));
-});
-
-test("skips a malformed partial trailing record and returns valid events", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const logPath = join(directory, "pipeline.jsonl");
-  await writeFile(logPath, [
-    '{"timestamp":"one","stage":"sync","status":"completed"}',
-    '{"timestamp":"two","stage":"render","status":"completed"}',
-    '{"timestamp":"partial","stage":"render"',
-    "",
-  ].join("\n"));
-
-  assert.deepEqual(await readPipelineEvents(logPath, { limit: 1 }), [
-    { timestamp: "two", stage: "render", status: "completed" },
-  ]);
-});
-
-test("does not parse malformed history older than the requested tail", async () => {
-  const directory = await mkdtemp(join(tmpdir(), "pipeline-logs-"));
-  const logPath = join(directory, "pipeline.jsonl");
-  await writeFile(logPath, [
-    "x".repeat(128 * 1024),
-    '{"timestamp":"latest","stage":"render","status":"completed"}',
-    "",
-  ].join("\n"));
-
-  assert.deepEqual(await readPipelineEvents(logPath, { limit: 1 }), [
-    { timestamp: "latest", stage: "render", status: "completed" },
-  ]);
-});
-
-test("records failed terminal status when an operation returns failures", async () => {
-  const { runLoggedStage } = pipelineLoggerApi;
-  assert.equal(typeof runLoggedStage, "function");
-
+test("returned failures and thrown failures have accurate terminal events", async () => {
   const events = [];
-  const result = await runLoggedStage({
-    logger: { event: async (event) => events.push(event) },
-    stage: "render-and-queue",
-    runId: "run-1",
-    operation: async () => ({ packages: { failed: 1 }, treatments: { failed: 0 } }),
-    hasFailures: (value) => value.packages.failed > 0 || value.treatments.failed > 0,
+  const logger = { event: async (event) => events.push(event) };
+  await runLoggedStage({
+    logger,
+    stage: "pipeline",
+    operation: async () => ({ failed: true }),
+    hasFailures: (result) => result.failed,
+    failureStatus: "partial",
   });
-
-  assert.equal(result.packages.failed, 1);
-  assert.deepEqual(events.map(({ status }) => status), ["started", "failed"]);
-});
-
-test("records completed terminal status when an operation succeeds", async () => {
-  const { runLoggedStage } = pipelineLoggerApi;
-  assert.equal(typeof runLoggedStage, "function");
-
-  const events = [];
-  const result = await runLoggedStage({
-    logger: { event: async (event) => events.push(event) },
-    stage: "transcript-sync",
-    runId: "run-1",
-    operation: async () => ({ analyzed: [] }),
-    hasFailures: (value) => value.analyzed.some(({ status }) => status === "failed"),
-  });
-
-  assert.deepEqual(result, { analyzed: [] });
-  assert.deepEqual(events.map(({ status }) => status), ["started", "completed"]);
-});
-
-test("records failed terminal status and rethrows stage exceptions", async () => {
-  const { runLoggedStage } = pipelineLoggerApi;
-  assert.equal(typeof runLoggedStage, "function");
-
-  const events = [];
-  const failure = new Error("stage failed");
-  await assert.rejects(runLoggedStage({
-    logger: { event: async (event) => events.push(event) },
-    stage: "transcript-sync",
-    runId: "run-1",
-    operation: async () => { throw failure; },
-  }), (error) => error === failure);
-
-  assert.deepEqual(events.map(({ status }) => status), ["started", "failed"]);
-});
-
-test("a rejected stage-event write does not prevent or replace stage work", async () => {
-  const { runLoggedStage } = pipelineLoggerApi;
-  assert.equal(typeof runLoggedStage, "function");
-
-  let ran = false;
-  const result = await runLoggedStage({
-    logger: { event: async () => { throw new Error("disk full"); } },
-    stage: "render-and-queue",
-    runId: "run-1",
-    operation: async () => { ran = true; return { completed: true }; },
-  });
-
-  assert.equal(ran, true);
-  assert.deepEqual(result, { completed: true });
+  assert.deepEqual(
+    events.map((event) => event.status),
+    ["started", "partial"],
+  );
+  const original = Error("private error payload");
+  await assert.rejects(
+    runLoggedStage({
+      logger,
+      stage: "render",
+      operation: async () => {
+        throw original;
+      },
+    }),
+    (error) => error === original,
+  );
+  assert.equal(events.at(-1).status, "failed");
+  assert.equal(events.at(-1).errorCode, "operation_failed");
+  assert.ok(!JSON.stringify(events).includes("private"));
 });

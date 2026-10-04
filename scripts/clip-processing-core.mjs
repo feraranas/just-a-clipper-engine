@@ -1,5 +1,6 @@
 import { hashArtifact } from "./publishing-completion.mjs";
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
+import { runLoggedStage } from "./pipeline-logger.mjs";
 
 export const processClipPackages = async ({
   ledger,
@@ -11,6 +12,7 @@ export const processClipPackages = async ({
   onArtifactComplete,
   projectRoot = process.cwd(),
   videoId,
+  onEvent,
 }) => {
   const result = {
     packages: { ready: 0, failed: 0 },
@@ -32,7 +34,13 @@ export const processClipPackages = async ({
           transcriptsById.set(loadedTranscript.id, transcript);
         }
       }
-      const assets = await acquireAssets({ ...clipPackage, transcript });
+      const assets = await runLoggedStage({
+        logger: { event: onEvent },
+        stage: "assets",
+        videoId: clipPackage.videoId ?? clipPackage.sourceVideoId,
+        clipPackageId: clipPackage.id,
+        operation: () => acquireAssets({ ...clipPackage, transcript }),
+      });
       ledger.markPackageReady({ packageId: clipPackage.id, assets });
       result.packages.ready += 1;
     } catch (error) {
@@ -58,19 +66,34 @@ export const processClipPackages = async ({
     try {
       const treatment = registry.get(run.treatmentId, run.treatmentVersion);
       const clipPackage = ledger.getClipPackage(run.clipPackageId);
-      const artifactRelativePath = await renderTreatment({
-        clipPackage,
-        treatment,
+      const artifactRelativePath = await runLoggedStage({
+        logger: { event: onEvent },
+        stage: "render",
+        videoId: run.videoId,
+        clipPackageId: run.clipPackageId,
+        treatmentId: run.treatmentId,
+        operation: () => renderTreatment({ clipPackage, treatment }),
       });
       if (onArtifactComplete) {
         result.publishing ??= { queued: 0, failed: 0 };
         try {
-          await onArtifactComplete({
-            artifactRelativePath,
-            artifactHash: await hashArtifact(projectRoot, artifactRelativePath),
-            run,
-            clipPackage,
-            treatment,
+          await runLoggedStage({
+            logger: { event: onEvent },
+            stage: "queue",
+            videoId: run.videoId,
+            clipPackageId: run.clipPackageId,
+            treatmentId: run.treatmentId,
+            operation: async () =>
+              onArtifactComplete({
+                artifactRelativePath,
+                artifactHash: await hashArtifact(
+                  projectRoot,
+                  artifactRelativePath,
+                ),
+                run,
+                clipPackage,
+                treatment,
+              }),
           });
           result.publishing.queued += 1;
         } catch (error) {
