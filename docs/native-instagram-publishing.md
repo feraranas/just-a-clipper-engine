@@ -30,8 +30,10 @@ This performs only two identity reads; it never opens or migrates a database.
 
 ## Approve and execute one item
 
-Use an **isolated** existing ledger and artifact root for development. Do not point
-this slice at the main checkout's queue. Preview the actual MP4 and caption in the
+Prefer an isolated ledger and artifact root for development. Using an existing
+queue requires explicit permission: first open adds schema fields and invalidates
+older approvals without caption snapshots. Live validation used the existing queue
+at the user's explicit request. Preview the actual MP4 and caption in the
 approval dashboard; enqueueing/rendering does not approve anything. Set the real
 account ID on enqueue, then explicitly approve and schedule. Local-placeholder
 accounts are not remapped. Caption edits invalidate approval. Legacy approvals
@@ -82,9 +84,13 @@ stale-lock recovery does not authorize retrying an ambiguous external write.
 ## Validation status
 
 Deterministic tests exercise API contracts, ownership, approval, hash integrity and
-crash recovery. Live account validation and one approved public Reel are still
-required before declaring end-to-end completion. No live post has been made by this
-implementation. See `docs/features/native-instagram-publishing-worker.md`.
+crash recovery. Live account validation, UI approval, direct upload and publication,
+Meta readback, browser playback and a duplicate-prevention rerun succeeded on
+2026-10-04 UTC. Media ID: `18473362021119016`.
+See `docs/research/native-instagram-live-validation.md` for sanitized evidence.
+
+Approval does not automatically launch this one-shot worker. A dispatcher/timer
+is not part of this slice; invoke the command explicitly after the item is due.
 
 Official references: [publishing](https://developers.facebook.com/documentation/instagram-platform/content-publishing),
 [resumable uploads](https://developers.facebook.com/documentation/instagram-platform/content-publishing/resumable-uploads).
