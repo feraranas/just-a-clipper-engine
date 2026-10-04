@@ -7,6 +7,7 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "@modelcontextprotocol/sdk": "1.29.0",
     "@openai-oauth/core": "2.0.0",
     "@remotion/captions": "4.0.525",
     "@remotion/cli": "4.0.525",
@@ -45,6 +46,8 @@
     "verify:feature-docs": "node scripts/verify-feature-docs.mjs",
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
     "audiogram:url": "node scripts/audiogram-url.mjs",
+    "audiogram:mcp": "node plugins/audiogram-helper/server.mjs",
+    "test:audiogram-plugin": "node --test plugins/audiogram-helper/server.test.mjs",
     "youtube:login": "node scripts/youtube-login.mjs",
     "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
     "test:selector:live": "node scripts/clip-selector-smoke.mjs",

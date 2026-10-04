@@ -39,6 +39,12 @@ result (`complete`, `no_clips`, or `failed`) exits with status 0 so callers can
 read its JSON status; command-line usage errors exit with status 2. Required
 media tools remain Node.js 22, yt-dlp, FFmpeg, and ffprobe.
 
+For local ChatGPT Developer Mode testing, see
+[`plugins/audiogram-helper/README.md`](plugins/audiogram-helper/README.md) and
+start the loopback-only MCP service with `npm run audiogram:mcp`. Connect it
+through the Secure MCP Tunnel; this development bridge does not expose a
+public endpoint or publish rendered clips.
+
 To evaluate transcript-derived candidates with Jev, provide both Typesafe
 settings. This is opt-in; omitting them leaves the existing transcript
 selector behavior unchanged:
