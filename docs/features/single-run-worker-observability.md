@@ -30,6 +30,7 @@ flowchart LR
   Runner[local-runner.mjs job dispatch]
   Store[(job-store.mjs UUID and safe summary)]
   Worker[job-worker.mjs process capture]
+  Cli[scripts/audiogram-url.mjs CLI process]
   Pipeline[single-url-pipeline.mjs stages]
   Core[youtube-inbox-pipeline-core.mjs and pipeline-logger.mjs]
   Events[(Per-job pipeline.jsonl)]
@@ -40,7 +41,8 @@ flowchart LR
   Runner --> Store
   Runner --> Worker
   Worker --> Streams
-  Worker --> Pipeline
+  Worker -->|job ID and diagnostics root| Cli
+  Cli -->|creates logger in child process| Pipeline
   Pipeline --> Core
   Pipeline --> Events
   Core --> Events
@@ -105,6 +107,10 @@ stateDiagram-v2
 ## Invariants
 
 - A job UUID identifies exactly one execution attempt and its diagnostic files.
+- The worker passes `--job-id` and `AUDIOGRAM_DIAGNOSTICS_ROOT` to the CLI
+  process. The CLI validates the ID, creates the JSONL logger, and passes its
+  callback into the single-URL pipeline. No in-memory callback crosses process
+  boundaries.
 - Event `runId` equals the owning `jobId`; no unrelated run writes into that
   job's event file.
 - Required stage order is truthful to actual execution; Jev is its own
