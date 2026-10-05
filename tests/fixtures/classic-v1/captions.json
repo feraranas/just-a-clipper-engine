@@ -1,0 +1,240 @@
+[
+  {
+    "text": " This",
+    "startMs": 0,
+    "endMs": 160,
+    "timestampMs": 0,
+    "confidence": 1
+  },
+  {
+    "text": " synthetic",
+    "startMs": 160,
+    "endMs": 320,
+    "timestampMs": 160,
+    "confidence": 1
+  },
+  {
+    "text": " fixture",
+    "startMs": 320,
+    "endMs": 480,
+    "timestampMs": 320,
+    "confidence": 1
+  },
+  {
+    "text": " checks",
+    "startMs": 480,
+    "endMs": 640,
+    "timestampMs": 480,
+    "confidence": 1
+  },
+  {
+    "text": " caption",
+    "startMs": 640,
+    "endMs": 800,
+    "timestampMs": 640,
+    "confidence": 1
+  },
+  {
+    "text": " timing",
+    "startMs": 800,
+    "endMs": 960,
+    "timestampMs": 800,
+    "confidence": 1
+  },
+  {
+    "text": " and",
+    "startMs": 960,
+    "endMs": 1120,
+    "timestampMs": 960,
+    "confidence": 1
+  },
+  {
+    "text": " page",
+    "startMs": 1120,
+    "endMs": 1280,
+    "timestampMs": 1120,
+    "confidence": 1
+  },
+  {
+    "text": " changes.",
+    "startMs": 1280,
+    "endMs": 1440,
+    "timestampMs": 1280,
+    "confidence": 1
+  },
+  {
+    "text": " We",
+    "startMs": 1440,
+    "endMs": 1600,
+    "timestampMs": 1440,
+    "confidence": 1
+  },
+  {
+    "text": " preserve",
+    "startMs": 1600,
+    "endMs": 1760,
+    "timestampMs": 1600,
+    "confidence": 1
+  },
+  {
+    "text": " the",
+    "startMs": 1760,
+    "endMs": 1920,
+    "timestampMs": 1760,
+    "confidence": 1
+  },
+  {
+    "text": " title",
+    "startMs": 1920,
+    "endMs": 2080,
+    "timestampMs": 1920,
+    "confidence": 1
+  },
+  {
+    "text": " image",
+    "startMs": 2080,
+    "endMs": 2240,
+    "timestampMs": 2080,
+    "confidence": 1
+  },
+  {
+    "text": " waveform",
+    "startMs": 2240,
+    "endMs": 2400,
+    "timestampMs": 2240,
+    "confidence": 1
+  },
+  {
+    "text": " and",
+    "startMs": 2400,
+    "endMs": 2560,
+    "timestampMs": 2400,
+    "confidence": 1
+  },
+  {
+    "text": " readable",
+    "startMs": 2560,
+    "endMs": 2720,
+    "timestampMs": 2560,
+    "confidence": 1
+  },
+  {
+    "text": " captions.",
+    "startMs": 2720,
+    "endMs": 2880,
+    "timestampMs": 2720,
+    "confidence": 1
+  },
+  {
+    "text": " Each",
+    "startMs": 2880,
+    "endMs": 3040,
+    "timestampMs": 2880,
+    "confidence": 1
+  },
+  {
+    "text": " frame",
+    "startMs": 3040,
+    "endMs": 3200,
+    "timestampMs": 3040,
+    "confidence": 1
+  },
+  {
+    "text": " should",
+    "startMs": 3200,
+    "endMs": 3360,
+    "timestampMs": 3200,
+    "confidence": 1
+  },
+  {
+    "text": " remain",
+    "startMs": 3360,
+    "endMs": 3520,
+    "timestampMs": 3360,
+    "confidence": 1
+  },
+  {
+    "text": " identical",
+    "startMs": 3520,
+    "endMs": 3680,
+    "timestampMs": 3520,
+    "confidence": 1
+  },
+  {
+    "text": " after",
+    "startMs": 3680,
+    "endMs": 3840,
+    "timestampMs": 3680,
+    "confidence": 1
+  },
+  {
+    "text": " selecting",
+    "startMs": 3840,
+    "endMs": 4000,
+    "timestampMs": 3840,
+    "confidence": 1
+  },
+  {
+    "text": " the",
+    "startMs": 4000,
+    "endMs": 4160,
+    "timestampMs": 4000,
+    "confidence": 1
+  },
+  {
+    "text": " Classic",
+    "startMs": 4160,
+    "endMs": 4320,
+    "timestampMs": 4160,
+    "confidence": 1
+  },
+  {
+    "text": " template.",
+    "startMs": 4320,
+    "endMs": 4480,
+    "timestampMs": 4320,
+    "confidence": 1
+  },
+  {
+    "text": " The",
+    "startMs": 4480,
+    "endMs": 4640,
+    "timestampMs": 4480,
+    "confidence": 1
+  },
+  {
+    "text": " final",
+    "startMs": 4640,
+    "endMs": 4800,
+    "timestampMs": 4640,
+    "confidence": 1
+  },
+  {
+    "text": " words",
+    "startMs": 4800,
+    "endMs": 4960,
+    "timestampMs": 4800,
+    "confidence": 1
+  },
+  {
+    "text": " check",
+    "startMs": 4960,
+    "endMs": 5120,
+    "timestampMs": 4960,
+    "confidence": 1
+  },
+  {
+    "text": " the",
+    "startMs": 5120,
+    "endMs": 5280,
+    "timestampMs": 5120,
+    "confidence": 1
+  },
+  {
+    "text": " ending.",
+    "startMs": 5280,
+    "endMs": 5440,
+    "timestampMs": 5280,
+    "confidence": 1
+  }
+]
