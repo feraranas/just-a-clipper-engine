@@ -1,291 +1,295 @@
-# Single-run worker observability Implementation Plan
+# Single-run worker observability implementation plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** Use `superpowers:subagent-driven-development` or `superpowers:executing-plans`. Complete each task in order. Mark each step with a checkbox.
 
-**Goal:** Make every single-URL Audiogram job independently diagnosable by job ID, with stage-level events, retained local process streams, precise MCP failures, and explicit linked retries.
+**Goal:** Give each single-URL job a separate diagnostic record, exact stage failures, local process logs, and an explicit retry path.
 
-**Architecture:** Keep the MCP server, local runner, detached worker, stable CLI contract, and single-URL pipeline as separate ports/adapters. A per-job diagnostic directory stores allowlisted JSONL events and separately bounded stdout/stderr files; SQLite stores safe job summaries and retry relationships. The pipeline emits stage events into that per-job logger, and MCP exposes only safe structured summaries plus a consent-gated retry operation.
+**Architecture:** Keep the MCP server, local runner, worker, CLI contract, and pipeline as separate components. Store safe JSONL events and bounded process logs in a directory for each job. Store safe job results and retry links in SQLite.
 
-**Tech Stack:** Node.js 22 ESM, built-in `node:sqlite`, `node:test`, MCP TypeScript SDK already used by the plugin, Zod, existing `pipeline-logger.mjs` and Audiograms pipeline interfaces.
+**Tech Stack:** Node.js 22 ESM, built-in `node:sqlite`, `node:test`, the existing MCP SDK, Zod, and the current Audiograms pipeline modules.
 
 **Spec:** `docs/superpowers/specs/2026-10-04-single-run-worker-observability-design.md`
 
-## Global Constraints
+## Global constraints
 
-- Each execution attempt has one UUID `jobId`; it is also the structured event `runId`.
-- Logs remain under the local Audiograms data boundary; do not upload logs or add cloud dependencies.
-- Create directories with owner-only permissions (0700) and log files with owner-only permissions (0600), subject to platform support.
-- Keep worker and pipeline stdout/stderr in separate bounded files with configurable per-file size caps and a documented retention window.
-- Do not store transcript/caption text, credentials, full provider payloads, arbitrary exception messages, or source URL query secrets in structured event fields.
-- Local lookup returns safe structured events only; never print raw output or log tails.
-- MCP returns only bounded, sanitized stage/error summaries and never raw local paths or raw process output.
-- Retry is an explicit user decision, uses a dedicated `retry_audiogram({jobId})` tool, creates a new job UUID, and stores `retryOfJobId`.
-- Preserve every failed stage/package in `failures[]`; use `partial` only if at least one verified artifact exists, otherwise use `failed`.
-- Jev is a distinct stage; record its actual outcome and never synthesize a skipped event as a failure.
-- Logger/file-write failure must not mask the actual processing result.
-- Preserve the existing transcript-LLM selector default, provider configuration, local artifact boundary, and no-publish behavior.
+- Give each attempt one UUID named `jobId`. Use the same value for event `runId`.
+- Store all logs under the local Audiograms data directory. Do not upload logs or add cloud services.
+- Set diagnostic directory permissions to 0700 and file permissions to 0600 when the platform supports them.
+- Store worker and pipeline stdout and stderr in separate bounded files.
+- Add configurable file size limits and document the retention period.
+- Keep transcript text, captions, credentials, provider payloads, raw exception text, and URL query secrets out of JSONL events.
+- Make local lookup return safe structured events only. Do not print raw process output or file paths.
+- Make MCP return bounded, sanitized failure details. Do not return raw output or local file paths.
+- Retry only after the user agrees. Use `retry_audiogram({jobId})` and create a new linked job.
+- List each failed stage or package in `failures[]`.
+- Use `partial` only when at least one verified artifact exists. Otherwise use `failed`.
+- Log Jev as a distinct stage. Do not report a skipped stage as a failure.
+- Do not let a logging error replace the pipeline result.
+- Keep the transcript-LLM default, provider setup, local artifacts, and no-publish behavior unchanged.
 
-## Review Focus
+## Review focus
 
-- Concurrent runs must never mix their JSONL events or process output; test two distinct job IDs writing in parallel in Task 1.
-- Old SQLite databases must migrate without losing jobs, active-job deduplication, or status reads; test opening a pre-change schema in Task 2.
-- Secret-bearing errors and transcript content must not appear in MCP payloads or JSONL; assert redaction and allowlisting in Tasks 1, 3, and 5.
-- A failed render with at least one verified MP4 must become `partial`, while a run with no verified MP4 remains `failed`; test both in Task 3.
-- Retry requests for unknown, running, or non-retryable jobs must not dispatch a worker; test the eligibility boundaries in Tasks 2 and 5.
+- Run two jobs at the same time. Check that their events and process logs stay separate. Test this in Task 1.
+- Open a database that uses the old schema. Check that its jobs and active-job checks still work. Test this in Task 2.
+- Add secrets and transcript text to test errors. Check that JSONL and MCP output exclude them. Test this in Tasks 1, 3, and 5.
+- Fail one render after another render creates a valid MP4. Check that the result is `partial`. Test this in Task 3.
+- Try to retry unknown, running, complete, and non-retryable jobs. Check that the runner does not start a worker. Test this in Tasks 2 and 5.
 
 ---
 
-### Task 1: Add isolated per-job diagnostic files and event reader
+### Task 1: Create per-job diagnostic files
 
 **Files:**
-- Create: `plugins/audiogram-helper/job-diagnostics.mjs`
-- Create: `plugins/audiogram-helper/job-diagnostics.test.mjs`
-- Modify: `scripts/pipeline-logger.mjs`
-- Modify: `scripts/pipeline-logger.test.mjs`
+- Create `plugins/audiogram-helper/job-diagnostics.mjs`.
+- Create `plugins/audiogram-helper/job-diagnostics.test.mjs`.
+- Change `scripts/pipeline-logger.mjs`.
+- Change `scripts/pipeline-logger.test.mjs`.
 
 **Interfaces:**
-- Produces `createJobDiagnostics({ projectRoot, jobId, maxFileBytes, retentionDays, now })`, returning `{ directory, eventLogPath, workerStdoutPath, workerStderrPath, pipelineStdoutPath, pipelineStderrPath, logger, readEvents }`.
-- `logger.event(event)` injects both `jobId` and `runId: jobId`, then delegates allowlisting and best-effort append to `createPipelineLogger`.
-- `readEvents({ limit })` reads only this job's JSONL file and returns validated structured events; it never reads process output.
-- Adds `jobId` to the logger's identifier allowlist. No arbitrary payload fields are added.
+- Add `createJobDiagnostics({projectRoot, jobId, maxFileBytes, retentionDays, now})`.
+- Return the diagnostic directory, five file paths, a logger, and a `readEvents` function.
+- The logger sets `jobId` and `runId` to the given job ID. Callers cannot override these values.
+- `readEvents({limit})` returns safe events from that job only. It never reads process logs.
+- Add `jobId` to the event allowlist. Do not add unrestricted event fields.
 
-- [ ] **Step 1: Write failing isolation, allowlist, permissions, and lookup tests**
+- [ ] **Step 1: Add tests for job isolation, fields, and permissions.**
 
-In `plugins/audiogram-helper/job-diagnostics.test.mjs`, create two diagnostics contexts under a temporary project root with distinct UUIDs; concurrently append render events and assert each reader sees only its own `jobId`/`runId`. Also assert directory mode 0700, file mode 0600, invalid UUID rejection, and exclusion of `transcript`, `message`, and credential-like fields.
+Create two job contexts in a temporary directory. Append events to both contexts at the same time. Check that each reader returns only its job's events. Check directory and file permissions. Check invalid UUID handling. Check that events omit `transcript`, `message`, and credential fields.
 
-- [ ] **Step 2: Run focused tests and confirm the missing interface fails**
+- [ ] **Step 2: Run the focused tests.**
 
 Run: `node --test plugins/audiogram-helper/job-diagnostics.test.mjs scripts/pipeline-logger.test.mjs`
 
-Expected: FAIL because `job-diagnostics.mjs` and the logger `jobId` allowlist entry do not exist.
+Expected: The tests fail because the diagnostics module and `jobId` allowlist entry do not exist.
 
-- [ ] **Step 3: Implement the per-job diagnostic context**
+- [ ] **Step 3: Add the per-job diagnostic context.**
 
-Create `.local/audiogram-helper/runs/<jobId>/` with owner-only permissions and define the five fixed filenames in one module. Validate UUIDs before deriving paths. Use the existing best-effort JSONL logger, injecting `jobId` and `runId` after caller metadata so callers cannot override them. Return structured events only from `readEvents`; never return raw stdout/stderr contents.
+Create `.local/audiogram-helper/runs/<jobId>/`. Set directory mode to 0700 and file mode to 0600. Define all five file names in one module. Check each UUID before you create a path. Use the existing best-effort JSONL logger. Set `jobId` and `runId` after you read caller metadata. Return structured events only.
 
-- [ ] **Step 4: Re-run focused tests**
+- [ ] **Step 4: Run the focused tests again.**
 
 Run: `node --test plugins/audiogram-helper/job-diagnostics.test.mjs scripts/pipeline-logger.test.mjs`
 
-Expected: PASS, including two concurrent runs with no cross-run records and owner-only permissions on supported platforms.
+Expected: All tests pass. Concurrent jobs have separate event files. Permission checks pass on supported platforms.
 
-### Task 2: Persist failure summaries and retry lineage in the job store
+### Task 2: Store failures and retry links
 
 **Files:**
-- Modify: `plugins/audiogram-helper/job-store.mjs`
-- Modify: `plugins/audiogram-helper/server.test.mjs`
+- Change `plugins/audiogram-helper/job-store.mjs`.
+- Change `plugins/audiogram-helper/server.test.mjs`.
 
 **Interfaces:**
-- Extend `createOrGetJob({ videoId, sourceUrl })` to preserve current active-video deduplication behavior.
-- Add `createRetryJob({ priorJobId })`, which accepts only an existing terminal `failed` or `partial` job and creates a fresh UUID with the prior canonical URL and `retryOfJobId`.
-- Extend decoded jobs with `retryOfJobId` and structured `failures` from the result JSON while preserving existing `getJob`, `setResult`, and `setFailed` calls.
-- Permit terminal statuses `complete`, `no_clips`, `failed`, and `partial`; keep queued/running transitions unchanged.
+- Keep `createOrGetJob({videoId, sourceUrl})` and its active-job behavior.
+- Add `createRetryJob({priorJobId})`.
+- Allow retry only for terminal `failed` or `partial` jobs.
+- Give the retry a new UUID. Copy the source URL and video ID. Store `retryOfJobId`.
+- Add `retryOfJobId` and structured failures to decoded jobs.
+- Support terminal states `complete`, `no_clips`, `failed`, and `partial`.
 
-- [ ] **Step 1: Add migration and retry-link tests**
+- [ ] **Step 1: Add database migration and retry tests.**
 
-Add tests that initialize the existing pre-change `jobs` schema and rows, reopen it with the updated store, and assert prior data remains readable. Add tests that `createRetryJob` creates a distinct ID, copies the same source URL/video ID, links `retryOfJobId`, and rejects missing, queued, running, and complete prior jobs.
+Create a database with the current schema and a saved job. Open it with the updated store. Check that the job remains readable. Test that a retry gets a new ID and keeps the source URL, video ID, and prior job ID. Reject missing, queued, running, and complete jobs.
 
-- [ ] **Step 2: Run the plugin test file and confirm the new tests fail**
+- [ ] **Step 2: Run the plugin tests.**
 
 Run: `node --test plugins/audiogram-helper/server.test.mjs`
 
-Expected: FAIL only on the new migration/retry assertions.
+Expected: The new migration and retry tests fail.
 
-- [ ] **Step 3: Add an idempotent SQLite schema migration**
+- [ ] **Step 3: Add an idempotent schema migration.**
 
-Add nullable `retry_of_job_id` to existing databases using a schema-version check or `PRAGMA table_info(jobs)` before `ALTER TABLE`. Keep prior rows unchanged. Implement `createRetryJob` so eligibility validation and insertion happen transactionally; return `{ job, created: true }` and persist `retry_of_job_id`.
+Use a schema version or `PRAGMA table_info(jobs)` before you add `retry_of_job_id`. Keep existing rows unchanged. Check retry eligibility and insert the new job in one transaction. Return the new job and `created: true`.
 
-- [ ] **Step 4: Run store/plugin tests**
+- [ ] **Step 4: Run the plugin tests again.**
 
 Run: `node --test plugins/audiogram-helper/server.test.mjs`
 
-Expected: PASS; existing active-job deduplication and status persistence remain unchanged.
+Expected: All tests pass. Active-job checks and saved job reads keep their current behavior.
 
-### Task 3: Emit per-job stage events and stage-specific pipeline results
+### Task 3: Trace pipeline stages and return exact failures
 
 **Files:**
-- Modify: `scripts/single-url-pipeline.mjs`
-- Modify: `scripts/single-url-pipeline.test.mjs`
-- Modify: `scripts/youtube-inbox-pipeline-core.mjs`
-- Modify: `scripts/youtube-inbox-pipeline-core.test.mjs`
-- Modify: `scripts/clip-processing-core.mjs`
-- Modify: `scripts/clip-processing-core.test.mjs`
+- Change `scripts/single-url-pipeline.mjs` and its test file.
+- Change `scripts/youtube-inbox-pipeline-core.mjs` and its test file.
+- Change `scripts/clip-processing-core.mjs` and its test file.
 
 **Interfaces:**
-- `runSingleUrlPipeline({ ..., dependencies: { onEvent } })` passes the event callback into core and clip-processing stages. The worker-created logger provides the fixed `jobId`/`runId`; pipeline code supplies only stage metadata.
-- Core stage records use `transcript`, `selection`, and `jev`; processing stages use `assets` and `render`; artifact collection uses `artifact_verification`; single-URL intake/metadata uses `intake` and `metadata`.
-- The CLI result keeps `contractVersion`, `source`, and `artifactPaths`; failures are represented by `failures: [{ stage, code, message }]`, and status is `partial` exactly when failures exist and at least one verified artifact exists, otherwise `failed`.
+- Pass `dependencies.onEvent` from `runSingleUrlPipeline` to the pipeline core and clip processor.
+- Use `intake`, `metadata`, `transcript`, `selection`, `jev`, `assets`, `render`, and `artifact_verification` stage names.
+- Keep `contractVersion`, `source`, and `artifactPaths` in the CLI result.
+- Return failures as `failures: [{stage, code, message}]`.
+- Return `partial` only when failures exist and at least one artifact passes verification.
+- Return `failed` when failures exist and no artifact passes verification.
 
-- [ ] **Step 1: Add failing event-order and failure-classification tests**
+- [ ] **Step 1: Add tests for stage order and failure details.**
 
-Extend the successful single-URL test to collect events and assert actual ordered stages for intake, metadata, transcript, selection, Jev, assets, render, and artifact verification. Extend transcript-error and mixed-render tests to assert exact failed stage, safe stable code, and status. Add an asset failure plus a multi-package case proving every failed package is preserved. Assert event records contain neither transcript cue text nor provider payloads.
+Collect events in the successful pipeline test. Check the stage order from intake through artifact verification. Check transcript and render failures for the correct stage and code. Add asset and multi-package failures. Check that each failure appears in the result. Check that events contain no transcript text or provider payloads.
 
-- [ ] **Step 2: Run pipeline tests and confirm the new expectations fail**
+- [ ] **Step 2: Run the pipeline tests.**
 
 Run: `node --test scripts/single-url-pipeline.test.mjs scripts/youtube-inbox-pipeline-core.test.mjs scripts/clip-processing-core.test.mjs`
 
-Expected: FAIL because `onEvent` is not wired by the single-URL caller and failures remain generic.
+Expected: The new event and failure tests fail. The caller does not pass `onEvent` yet. Failures still use a generic message.
 
-- [ ] **Step 3: Thread the job logger through the real stage boundaries**
+- [ ] **Step 3: Pass the logger through each stage.**
 
-Pass `onEvent` to `syncAndAnalyzeInbox` and `processClipPackages`. Add `runLoggedStage` boundaries around URL intake, metadata retrieval/validation, and artifact verification. Ensure each stage records `started` followed by its true terminal result. Ensure Jev has its own stage event and error classification; do not emit a fabricated failed event for a skipped/non-invoked stage. Do not add source URLs, transcript text, captions, arbitrary exception messages, or provider payloads to structured event metadata.
+Pass `onEvent` to `syncAndAnalyzeInbox` and `processClipPackages`. Use `runLoggedStage` for intake, metadata, and artifact verification. Record the true start and result for each stage. Give Jev its own stage event. Do not report a stage that did not run as failed. Do not include URLs, transcript text, captions, raw errors, or provider payloads in event fields.
 
-- [ ] **Step 4: Return exact and pluralized safe failures**
+- [ ] **Step 4: Return a failure for each failed stage or package.**
 
-Collect failure records from analyzed items and package/treatment failures with stable codes and sanitized messages. Determine verified artifact paths before terminal classification. Return `partial` only when the verified list is non-empty and `failures` is non-empty; return `failed` when failures exist without verified outputs. Preserve `no_clips` and `complete` semantics. Remove the generic “One or more analysis, asset, or render steps failed.” response.
+Collect safe failure details from analysis, asset, and render results. Check artifacts before you set the final status. Return `partial` when failures exist and verified artifacts exist. Return `failed` when failures exist and no verified artifacts exist. Keep `no_clips` and `complete` behavior. Remove the generic multi-stage failure message.
 
-- [ ] **Step 5: Run focused pipeline tests**
+- [ ] **Step 5: Run the pipeline tests again.**
 
 Run: `node --test scripts/single-url-pipeline.test.mjs scripts/youtube-inbox-pipeline-core.test.mjs scripts/clip-processing-core.test.mjs scripts/pipeline-logger.test.mjs`
 
-Expected: PASS with accurate event order, multi-failure records, truthful partial results, and no sensitive payloads in JSONL.
+Expected: All tests pass. Events show the real stage order. Results include each failure and the correct status.
 
-### Task 4: Retain worker and CLI stdout/stderr in separate bounded files
+### Task 4: Save bounded worker and pipeline output
 
 **Files:**
-- Modify: `plugins/audiogram-helper/local-runner.mjs`
-- Modify: `plugins/audiogram-helper/job-worker.mjs`
-- Modify: `plugins/audiogram-helper/server.test.mjs`
-- Modify: `plugins/audiogram-helper/job-diagnostics.mjs`
-- Modify: `plugins/audiogram-helper/job-diagnostics.test.mjs`
+- Change `plugins/audiogram-helper/local-runner.mjs`.
+- Change `plugins/audiogram-helper/job-worker.mjs`.
+- Change `plugins/audiogram-helper/server.test.mjs`.
+- Change `plugins/audiogram-helper/job-diagnostics.mjs` and its test file.
 
 **Interfaces:**
-- `createLocalRunner` receives a diagnostic-context factory and launches each worker with file descriptors for `worker.stdout.log` and `worker.stderr.log`, not `stdio: 'ignore'`.
-- `runJobWorker({ ..., diagnosticsFactory, runCommand })` routes CLI stdout to a bounded contract buffer and `pipeline.stdout.log`, routes stderr to `pipeline.stderr.log`, and keeps the structured CLI contract parseable.
-- Exceeding a configured cap truncates/halts further raw-file writes safely, continues draining child pipes, preserves the exit/result outcome, and sets `diagnosticsIncomplete: true` in the safe job result.
+- Pass a diagnostic context to `createLocalRunner`.
+- Send the worker's stdout and stderr to its two job files. Do not use `stdio: 'ignore'`.
+- Add `diagnosticsFactory` to `runJobWorker`.
+- Send CLI stdout to a bounded contract buffer and a separate file. Send CLI stderr to its own file.
+- Continue reading child output after a log file reaches its size limit.
+- Set `diagnosticsIncomplete: true` if the output exceeds a cap or a log write fails.
 
-- [ ] **Step 1: Add tests proving all four stream files are written on success and failure**
+- [ ] **Step 1: Add tests for all four output files.**
 
-Use injected child/command adapters to assert distinct worker stdout/stderr and pipeline stdout/stderr destinations. Simulate a nonzero CLI exit that includes both `stdout` and `stderr`; assert the job remains failed with its stage/code and that each stream is preserved separately. Simulate output beyond the configured cap and assert file sizes stay bounded and the job result marks diagnostics incomplete.
+Use test adapters for the worker and CLI process. Check that each process writes to the correct files. Simulate a nonzero CLI exit with stdout and stderr. Check that the job stays failed and keeps its stage and code. Exceed a file cap. Check the file size and `diagnosticsIncomplete` result.
 
-- [ ] **Step 2: Run plugin tests and confirm capture tests fail**
+- [ ] **Step 2: Run the plugin tests.**
 
 Run: `node --test plugins/audiogram-helper/job-diagnostics.test.mjs plugins/audiogram-helper/server.test.mjs`
 
-Expected: FAIL because the current detached spawn ignores all streams and the worker uses a discarding/rejecting `execFile` path.
+Expected: The capture tests fail. The runner currently ignores worker output. The worker currently uses `execFile`.
 
-- [ ] **Step 3: Attach detached worker streams to per-job files**
+- [ ] **Step 3: Connect worker output files.**
 
-Open the two outer stream files with mode 0600, pass their descriptors to `spawnProcess` as stdout/stderr while preserving `detached: true`, `shell: false`, and the argument array, then close the parent's descriptors after spawn. Keep worker-start errors classified and persisted without leaking local paths.
+Open the two worker files with mode 0600. Pass their file descriptors to the detached process. Keep `detached: true`, `shell: false`, and the current argument array. Close the parent file descriptors after spawn. Store worker start errors without exposing local paths.
 
-- [ ] **Step 4: Stream CLI output without losing the JSON contract**
+- [ ] **Step 4: Stream CLI output and parse its result.**
 
-Replace the default `execFile` capture with a spawn-based adapter that incrementally writes each stream through the bounded-file writer. Retain stdout only up to the contract buffer limit needed to parse the small JSON result; continue consuming the child stream after the raw-file cap. On nonzero exit, retain both streams and classify using the stage-aware contract when available, otherwise `WORKER_PROCESS_FAILED`.
+Use `spawn` for the CLI process. Write each stream to its bounded file. Keep stdout in memory only up to the contract limit. Continue to drain both streams after a file reaches its cap. Parse the CLI JSON result. If the child exits with an error and no stage failure exists, use `WORKER_PROCESS_FAILED`.
 
-- [ ] **Step 5: Re-run stream and worker tests**
+- [ ] **Step 5: Run the plugin tests again.**
 
 Run: `node --test plugins/audiogram-helper/job-diagnostics.test.mjs plugins/audiogram-helper/server.test.mjs`
 
-Expected: PASS; raw output files are separate and capped, and result persistence succeeds even when output exceeds the cap.
+Expected: All tests pass. Each stream has its own capped file. Result storage still works when a file reaches its cap.
 
-### Task 5: Expose safe status details and explicit MCP retry
+### Task 5: Return safe status and add MCP retry
 
 **Files:**
-- Modify: `plugins/audiogram-helper/server.mjs`
-- Modify: `plugins/audiogram-helper/local-runner.mjs`
-- Modify: `plugins/audiogram-helper/job-store.mjs`
-- Modify: `plugins/audiogram-helper/server.test.mjs`
-- Modify: `plugins/audiogram-helper/README.md`
+- Change `plugins/audiogram-helper/server.mjs`.
+- Change `plugins/audiogram-helper/local-runner.mjs` and `job-store.mjs`.
+- Change `plugins/audiogram-helper/server.test.mjs`.
+- Change `plugins/audiogram-helper/README.md`.
 
 **Interfaces:**
-- `createLocalRunner` adds `retry({ jobId })`; it validates stored eligibility, creates the linked job, dispatches it through the same worker path, and returns the new job state.
-- MCP adds `retry_audiogram({ jobId })`, documented as requiring explicit user confirmation before the tool is called.
-- MCP `outputShape` adds `partial`, `failures[]`, `retryOfJobId`, and `diagnosticsIncomplete`; it continues returning only safe summaries and verified artifact paths.
-- `get_audiogram_status` returns the original ID and precise failures without exposing event/raw-file paths.
+- Add `retry({jobId})` to the local runner.
+- Add MCP tool `retry_audiogram({jobId})`.
+- Tell ChatGPT to ask the user before it calls the retry tool.
+- Add `partial`, `failures`, `retryOfJobId`, and `diagnosticsIncomplete` to the output schema.
+- Keep local file paths and raw logs out of MCP results.
 
-- [ ] **Step 1: Add MCP contract and retry-boundary tests**
+- [ ] **Step 1: Add MCP result and retry tests.**
 
-Update tool-list assertions to include `retry_audiogram`. Through a real MCP test client, assert failed status includes `jobId`, stage/code failures, and no raw paths or log contents. Assert calling retry on a valid failed job dispatches exactly one new job with a different ID and correct `retryOfJobId`; assert unknown, running, complete, and no-retryable jobs do not dispatch. Check the tool description tells ChatGPT to ask for explicit user approval before retry.
+Use the MCP test client. Check that the tool list includes `retry_audiogram`. Check that status includes the job ID and safe stage failures. Check that status omits raw paths and log contents. Retry one failed job. Check that one new job starts with a new ID and the correct prior ID. Check that unknown, running, complete, and non-retryable jobs do not start workers. Check the tool description says to ask the user first.
 
-- [ ] **Step 2: Run plugin tests and confirm contract assertions fail**
+- [ ] **Step 2: Run the plugin tests.**
 
 Run: `node --test plugins/audiogram-helper/server.test.mjs`
 
-Expected: FAIL because only create/status operations and the old output enum exist.
+Expected: The new MCP and retry tests fail. The server only has create and status tools.
 
-- [ ] **Step 3: Implement runner retry and safe failure serialization**
+- [ ] **Step 3: Add safe runner results.**
 
-Use the transactional job-store retry method, create a new per-job diagnostic directory, spawn exactly one worker, and preserve the retry relationship in the job store/result. Status responses must use an explicit safe serializer rather than spreading raw stored data into MCP responses.
+Use the job store to create an eligible retry. Create a diagnostic directory for its new ID. Start one worker. Store `retryOfJobId`. Build status results from an explicit safe object. Do not copy raw database or error objects into MCP results.
 
-- [ ] **Step 4: Register the MCP tool and update usage guidance**
+- [ ] **Step 4: Add the MCP tool and update its guide.**
 
-Register `retry_audiogram` with a UUID input and a clear confirmation requirement in its tool description. Update `get_audiogram_status` output schema and tool description to explain stage-level safe diagnostics and the job ID. Document all three operations without claiming raw log access from ChatGPT.
+Register `retry_audiogram` with a UUID input. Its description must require user approval before the call. Update the status tool schema and description. Update the README to describe all three tools. Do not claim that ChatGPT can read raw logs.
 
-- [ ] **Step 5: Run plugin contract tests**
+- [ ] **Step 5: Run the plugin tests again.**
 
 Run: `node --test plugins/audiogram-helper/server.test.mjs`
 
-Expected: PASS; MCP only exposes sanitized structured results, and explicit retry links a new job to its prior attempt.
+Expected: All tests pass. MCP returns safe results. Retry creates a linked job.
 
-### Task 6: Add local structured-event lookup by job ID
+### Task 6: Add local event lookup
 
 **Files:**
-- Create: `scripts/audiogram-job-logs.mjs`
-- Create: `scripts/audiogram-job-logs.test.mjs`
-- Modify: `package.json`
-- Modify: `plugins/audiogram-helper/README.md`
+- Create `scripts/audiogram-job-logs.mjs` and its test file.
+- Change `package.json`.
+- Change `plugins/audiogram-helper/README.md`.
 
 **Interfaces:**
-- Export `readJobDiagnostics({ projectRoot, jobId, limit })` from the diagnostics module; it returns the validated safe events for exactly one UUID or a not-found result.
-- Add `npm run audiogram:logs -- --job-id <UUID>` as an operator command that prints structured JSON events only. It must not print raw stream contents or filesystem paths.
+- Export `readJobDiagnostics({projectRoot, jobId, limit})` from the diagnostics module.
+- Read events for one UUID only. Return a not-found result when the UUID has no event file.
+- Add `npm run audiogram:logs -- --job-id <UUID>`.
+- Print JSON events only. Do not print file paths or process output.
 
-- [ ] **Step 1: Add lookup tests for valid, missing, malformed, and cross-job IDs**
+- [ ] **Step 1: Add lookup tests.**
 
-Create two job directories with distinct events. Assert the selected ID yields only its events; a missing valid UUID yields a clear not-found result; malformed UUID input exits nonzero; no output contains a raw log path, source URL, transcript text, or stream contents.
+Create event files for two job IDs. Check that lookup returns events for only the selected ID. Check the not-found result for an unknown valid UUID. Check that an invalid UUID exits with an error. Check that output omits paths, URLs, transcripts, and raw streams.
 
-- [ ] **Step 2: Run lookup tests and verify they fail before implementation**
+- [ ] **Step 2: Run the lookup tests.**
 
 Run: `node --test scripts/audiogram-job-logs.test.mjs`
 
-Expected: FAIL because the command and exported lookup do not yet exist.
+Expected: The tests fail because the command and lookup function do not exist.
 
-- [ ] **Step 3: Implement the UUID-filtered structured-event command**
+- [ ] **Step 3: Add the lookup command.**
 
-Parse only `--job-id` and optional bounded `--limit`; validate both before touching the filesystem. Read through the diagnostics module and serialize events as JSON lines. Return exit status 1 for invalid input or storage errors, and a nonzero/not-found indication for an unknown ID without scanning other job directories.
+Parse `--job-id` and an optional bounded `--limit`. Check both inputs before you read files. Use the diagnostics module to read one job. Print events as JSON lines. Return exit status 1 for invalid input or storage errors. Return a not-found result for an unknown ID. Do not scan other job directories.
 
-- [ ] **Step 4: Add the package script and local instructions**
+- [ ] **Step 4: Add the package command and README notes.**
 
-Add `audiogram:logs` to `package.json`. Document that local operator lookup returns structured events only; worker and pipeline raw streams remain separate, private files and are not displayed by this command or sent through MCP.
+Add `audiogram:logs` to `package.json`. State that local lookup returns safe events only. State that raw streams remain private and do not appear in lookup or MCP output.
 
-- [ ] **Step 5: Run lookup tests**
+- [ ] **Step 5: Run the lookup tests again.**
 
 Run: `node --test scripts/audiogram-job-logs.test.mjs`
 
-Expected: PASS; lookup is scoped to one UUID and emits safe structured records only.
+Expected: All tests pass. Lookup returns events for one UUID only.
 
-### Task 7: Reconcile the feature-flow note and run acceptance verification
+### Task 7: Reconcile the feature note and run tests
 
 **Files:**
-- Modify: `docs/features/single-run-worker-observability.md`
-- Modify: `docs/superpowers/specs/2026-10-04-single-run-worker-observability-design.md` only if implementation reveals an intentional deviation
-- Test: `plugins/audiogram-helper/job-diagnostics.test.mjs`
-- Test: `plugins/audiogram-helper/server.test.mjs`
-- Test: `scripts/audiogram-job-logs.test.mjs`
-- Test: `scripts/single-url-pipeline.test.mjs`
-- Test: `scripts/youtube-inbox-pipeline-core.test.mjs`
-- Test: `scripts/clip-processing-core.test.mjs`
+- Change `docs/features/single-run-worker-observability.md`.
+- Change the spec only if implementation adds an intentional difference.
+- Test the files listed in this task.
 
 **Interfaces:**
-- Actual lifecycle, event flow, result schema, retry boundary, local lookup, privacy, and retention behavior must match the approved spec or be documented as an intentional deviation.
+- Make the feature note match the implementation, tests, and approved spec.
+- Document each intentional difference in the feature note.
 
-- [ ] **Step 1: Update diagrams and reconciliation from actual implementation**
+- [ ] **Step 1: Update the diagrams and feature note.**
 
-Update the Mermaid flow and lifecycle diagrams for per-job files, partial status, dedicated retry, and local event lookup. Add an implementation reconciliation section describing actual behavior and deviations. Set frontmatter to `status: COMPLETE`, `design-reviewed: true`, and `implementation-reconciled: true` only after code and tests match the note.
+Update the diagrams for per-job files, `partial` status, retry, and local event lookup. Add implementation details and intentional differences. Set `status: COMPLETE`, `design-reviewed: true`, and `implementation-reconciled: true` only after tests pass.
 
-- [ ] **Step 2: Run focused acceptance tests**
+- [ ] **Step 2: Run focused acceptance tests.**
 
 Run: `node --test plugins/audiogram-helper/job-diagnostics.test.mjs plugins/audiogram-helper/server.test.mjs scripts/audiogram-job-logs.test.mjs scripts/single-url-pipeline.test.mjs scripts/youtube-inbox-pipeline-core.test.mjs scripts/clip-processing-core.test.mjs scripts/pipeline-logger.test.mjs`
 
-Expected: PASS; confirms run isolation, old-store migration, process capture/caps, truthful stage results, retry lineage and consent documentation, and structured-only local lookup.
+Expected: All tests pass. They check isolation, migration, stream capture, stage results, retries, and local lookup.
 
-- [ ] **Step 3: Run repository-wide feature-doc gate and relevant suites**
+- [ ] **Step 3: Run repository checks.**
 
 Run: `npm run verify:feature-docs`
 
-Expected: PASS for all feature notes. Also run `npm run test:audiogram-plugin` and `npm run test:youtube` to detect integration regressions.
+Expected: The feature-doc check passes. Then run `npm run test:audiogram-plugin` and `npm run test:youtube`.
 
-- [ ] **Step 4: Review final diff for privacy and scope**
+- [ ] **Step 4: Review the final diff.**
 
-Run: `git diff --check` and inspect `git diff -- plugins/audiogram-helper scripts package.json docs/features/single-run-worker-observability.md docs/superpowers/specs/2026-10-04-single-run-worker-observability-design.md`.
+Run `git diff --check`. Review changes to the plugin, scripts, `package.json`, feature note, and spec.
 
-Expected: no whitespace errors, unrelated worktree files unchanged, and no secrets/transcripts/raw log data or external upload behavior introduced.
+Expected: No whitespace errors. No unrelated drafts change. No secret, transcript, raw log output, upload, or publishing behavior enters the diff.
