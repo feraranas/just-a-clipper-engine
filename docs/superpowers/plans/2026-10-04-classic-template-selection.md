@@ -414,9 +414,18 @@ Change `package.json` only for a convenience parity command.
 Architecture approval: user requested this implementation plan on 2026-10-04.
 Execution method: inline, with focused self-review and no subagents, per repository instructions.
 Plan status: the user approved development.
-Execution starts with the baseline task.
+Execution covered all six tasks.
+The feature note records verification evidence, deviations and the existing OAuth test failure.
 Square geometry: deferred pending an explicit answer.
 Preserve portrait throughout this plan.
 
 All six tasks form one compatibility feature.
 Report selection as complete only after the implementation covers the plugin and result paths.
+## Execution record
+
+The implementation followed this plan inline.
+The checklist above retains the original instructions for review.
+The feature note contains the reconciled result.
+The full test suite still exposes an existing OAuth smoke failure.
+The local pre-push hook excludes that smoke-test file.
+Do not infer full-suite success from a successful push.

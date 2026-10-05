@@ -83,7 +83,11 @@ test("converts an unexpected runner exception into one safe structured failure",
   const exitCode = await runAudiogramUrlCli(
     ["--url", successResult.source.url],
     io,
-    { runPipeline: async () => { throw new Error("runner exploded"); } },
+    {
+      runPipeline: async () => {
+        throw new Error("runner exploded");
+      },
+    },
   );
   const result = JSON.parse(stdout.join(""));
 
@@ -95,14 +99,54 @@ test("converts an unexpected runner exception into one safe structured failure",
   assert.equal(stderr.length, 0);
 });
 
-test('forwards canonical template flags and keeps the JSON result contract',async()=>{
- const {io,stdout}=makeIO();let received;
- const exitCode=await runAudiogramUrlCli(['--url',successResult.source.url,'--template','classic','--template-version','1','--variation','default'],io,{environment:{},runPipeline:async(input)=>{received=input;return successResult;}});
- assert.equal(exitCode,0);assert.deepEqual(received.templateSelection,{templateId:'classic',templateVersion:'1',variationId:'default'});
- assert.deepEqual(JSON.parse(stdout.join('')),successResult);
+test("forwards canonical template flags and keeps the JSON result contract", async () => {
+  const { io, stdout } = makeIO();
+  let received;
+  const exitCode = await runAudiogramUrlCli(
+    [
+      "--url",
+      successResult.source.url,
+      "--template",
+      "classic",
+      "--template-version",
+      "1",
+      "--variation",
+      "default",
+    ],
+    io,
+    {
+      environment: {},
+      runPipeline: async (input) => {
+        received = input;
+        return successResult;
+      },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.deepEqual(received.templateSelection, {
+    templateId: "classic",
+    templateVersion: "1",
+    variationId: "default",
+  });
+  assert.deepEqual(JSON.parse(stdout.join("")), successResult);
 });
-test('invalid CLI selection returns a failure without invoking the pipeline',async()=>{
- const {io,stdout}=makeIO();let calls=0;
- const exitCode=await runAudiogramUrlCli(['--url',successResult.source.url,'--variation','missing'],io,{runPipeline:async()=>{calls++;return successResult;}});
- assert.equal(exitCode,0);assert.equal(calls,0);assert.equal(JSON.parse(stdout.join('')).error.code,'INVALID_TEMPLATE_SELECTION');
+test("invalid CLI selection returns a failure without invoking the pipeline", async () => {
+  const { io, stdout } = makeIO();
+  let calls = 0;
+  const exitCode = await runAudiogramUrlCli(
+    ["--url", successResult.source.url, "--variation", "missing"],
+    io,
+    {
+      runPipeline: async () => {
+        calls++;
+        return successResult;
+      },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(calls, 0);
+  assert.equal(
+    JSON.parse(stdout.join("")).error.code,
+    "INVALID_TEMPLATE_SELECTION",
+  );
 });

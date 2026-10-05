@@ -231,23 +231,90 @@ test("requires a package version before creating treatment output", async (t) =>
   await assert.rejects(stat(join(projectRoot, "out")), { code: "ENOENT" });
 });
 
-test('records resolved selection and artifact hash alongside the rendered video',async(t)=>{
- const projectRoot=await mkdtemp(join(tmpdir(),'manifest-'));t.after(()=>rm(projectRoot,{recursive:true,force:true}));
- const {audiogramBasicTreatment}=await import('./treatment-registry.mjs');
- const {createHash}=await import('node:crypto');
- const clipPackage={videoId:'video-1',packageVersion:'v1',rank:1,title:'Example',assets:['audio','captions','thumbnail'].map(role=>({role,relativePath:`public/${role}.json`}))};
- const output=await renderTreatmentRun({clipPackage,treatment:audiogramBasicTreatment,selection:{templateId:'classic',templateVersion:'1',variationId:'default'}},{projectRoot,runCommand:async(_,args)=>writeFile(args[3],'video')});
- const manifest=JSON.parse(await readFile(join(projectRoot,output.replace(/\.mp4$/,'.manifest.json')),'utf8'));
- assert.deepEqual(manifest.selection,{templateId:'classic',templateVersion:'1',variationId:'default'});
- assert.equal(manifest.artifactHash,createHash('sha256').update('video').digest('hex'));
- assert.equal(manifest.compositionId,'AudiogramBasic');assert.equal(manifest.props.title,'Example');
- assert.equal(manifest.props.visualizer.type,'oscilloscope');
+test("records resolved selection and artifact hash alongside the rendered video", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "manifest-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const { audiogramBasicTreatment } = await import("./treatment-registry.mjs");
+  const { createHash } = await import("node:crypto");
+  const clipPackage = {
+    videoId: "video-1",
+    packageVersion: "v1",
+    rank: 1,
+    title: "Example",
+    assets: ["audio", "captions", "thumbnail"].map((role) => ({
+      role,
+      relativePath: `public/${role}.json`,
+    })),
+  };
+  const output = await renderTreatmentRun(
+    {
+      clipPackage,
+      treatment: audiogramBasicTreatment,
+      selection: {
+        templateId: "classic",
+        templateVersion: "1",
+        variationId: "default",
+      },
+    },
+    { projectRoot, runCommand: async (_, args) => writeFile(args[3], "video") },
+  );
+  const manifest = JSON.parse(
+    await readFile(
+      join(projectRoot, output.replace(/\.mp4$/, ".manifest.json")),
+      "utf8",
+    ),
+  );
+  assert.deepEqual(manifest.selection, {
+    templateId: "classic",
+    templateVersion: "1",
+    variationId: "default",
+  });
+  assert.equal(
+    manifest.artifactHash,
+    createHash("sha256").update("video").digest("hex"),
+  );
+  assert.equal(manifest.compositionId, "AudiogramBasic");
+  assert.equal(manifest.props.title, "Example");
+  assert.equal(manifest.props.visualizer.type, "oscilloscope");
 });
 
-test('manifest failure does not return a successful artifact',async(t)=>{
- const projectRoot=await mkdtemp(join(tmpdir(),'manifest-fail-'));t.after(()=>rm(projectRoot,{recursive:true,force:true}));
- const {mkdir}=await import('node:fs/promises');
- await mkdir(join(projectRoot,'out/treatments/custom/1/video-1/v1/clip-1.manifest.json'),{recursive:true});
- await assert.rejects(renderTreatmentRun({clipPackage:{videoId:'video-1',packageVersion:'v1',rank:1,assets:[]},treatment:{id:'custom',version:'1',compositionId:'Custom',requiredAssetRoles:[],output:{extension:'mp4',codec:'h264'},buildProps:()=>({})}},{projectRoot,runCommand:async(_,args)=>writeFile(args[3],'video')}));
- await assert.rejects(stat(join(projectRoot,'out/treatments/custom/1/video-1/v1/clip-1.mp4')),{code:'ENOENT'});
+test("manifest failure does not return a successful artifact", async (t) => {
+  const projectRoot = await mkdtemp(join(tmpdir(), "manifest-fail-"));
+  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  const { mkdir } = await import("node:fs/promises");
+  await mkdir(
+    join(
+      projectRoot,
+      "out/treatments/custom/1/video-1/v1/clip-1.manifest.json",
+    ),
+    { recursive: true },
+  );
+  await assert.rejects(
+    renderTreatmentRun(
+      {
+        clipPackage: {
+          videoId: "video-1",
+          packageVersion: "v1",
+          rank: 1,
+          assets: [],
+        },
+        treatment: {
+          id: "custom",
+          version: "1",
+          compositionId: "Custom",
+          requiredAssetRoles: [],
+          output: { extension: "mp4", codec: "h264" },
+          buildProps: () => ({}),
+        },
+      },
+      {
+        projectRoot,
+        runCommand: async (_, args) => writeFile(args[3], "video"),
+      },
+    ),
+  );
+  await assert.rejects(
+    stat(join(projectRoot, "out/treatments/custom/1/video-1/v1/clip-1.mp4")),
+    { code: "ENOENT" },
+  );
 });

@@ -1,6 +1,9 @@
 import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
-import { resolveTemplateSelection, listTemplates } from "../src/templates/catalog.mjs";
+import {
+  resolveTemplateSelection,
+  listTemplates,
+} from "../src/templates/catalog.mjs";
 import { execFile } from "node:child_process";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
 import { join, relative, sep } from "node:path";
@@ -24,10 +27,31 @@ export const renderTreatmentRun = async (
   { clipPackage, treatment, selection },
   { projectRoot = process.cwd(), runCommand = defaultRunCommand } = {},
 ) => {
-  const known = listTemplates().flatMap(template => template.variations.map(variation => ({template, variation})))
-    .find(({variation}) => variation.treatment.id === treatment.id && variation.treatment.version === treatment.version);
-  const resolved = selection === undefined ? (known ? resolveTemplateSelection({templateId: known.template.id, templateVersion: known.template.version, variationId: known.variation.id}) : null) : resolveTemplateSelection(selection);
-  if (resolved && (resolved.treatment.id !== treatment.id || resolved.treatment.version !== treatment.version || resolved.compositionId !== treatment.compositionId)) {
+  const known = listTemplates()
+    .flatMap((template) =>
+      template.variations.map((variation) => ({ template, variation })),
+    )
+    .find(
+      ({ variation }) =>
+        variation.treatment.id === treatment.id &&
+        variation.treatment.version === treatment.version,
+    );
+  const resolved =
+    selection === undefined
+      ? known
+        ? resolveTemplateSelection({
+            templateId: known.template.id,
+            templateVersion: known.template.version,
+            variationId: known.variation.id,
+          })
+        : null
+      : resolveTemplateSelection(selection);
+  if (
+    resolved &&
+    (resolved.treatment.id !== treatment.id ||
+      resolved.treatment.version !== treatment.version ||
+      resolved.compositionId !== treatment.compositionId)
+  ) {
     throw new Error("Selection does not match the render treatment");
   }
   const treatmentId = safePathPart(treatment.id, "treatment ID");
@@ -85,11 +109,24 @@ export const renderTreatmentRun = async (
     throw new Error(`Rendered artifact is empty: ${partialPath}`);
   }
   const manifestPath = join(outputDirectory, `${baseName}.manifest.json`);
-  const manifestPartialPath = join(outputDirectory, `.${baseName}.manifest.partial.json`);
-  const manifest = {manifestVersion: 1, selection: resolved?.selection ?? null,
-    treatment: {id: treatment.id, version: treatment.version}, compositionId: treatment.compositionId,
-    props, artifactHash: createHash("sha256").update(await readFile(partialPath)).digest("hex")};
-  await writeFile(manifestPartialPath, `${JSON.stringify(manifest, null, 2)}\n`);
+  const manifestPartialPath = join(
+    outputDirectory,
+    `.${baseName}.manifest.partial.json`,
+  );
+  const manifest = {
+    manifestVersion: 1,
+    selection: resolved?.selection ?? null,
+    treatment: { id: treatment.id, version: treatment.version },
+    compositionId: treatment.compositionId,
+    props,
+    artifactHash: createHash("sha256")
+      .update(await readFile(partialPath))
+      .digest("hex"),
+  };
+  await writeFile(
+    manifestPartialPath,
+    `${JSON.stringify(manifest, null, 2)}\n`,
+  );
   await rename(manifestPartialPath, manifestPath);
   await rename(partialPath, outputPath);
   return toProjectRelative(projectRoot, outputPath);

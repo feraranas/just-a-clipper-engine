@@ -198,3 +198,44 @@ installed-package boundary and residual warning context.
 This project derives from Remotion's Audiogram template. Review the
 [Remotion license](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md)
 for applicable commercial terms.
+
+## Select a video template
+
+The current design is **Classic V1 / Default**. It preserves the existing portrait layout at 1080x1920 and 30 fps.
+Omit template fields to use Classic / Default.
+
+```console
+npm run audiogram:url -- --url 'https://www.youtube.com/watch?v=VIDEO_ID' --template classic --template-version 1 --variation default
+```
+
+The playlist pipeline accepts these environment settings:
+
+```sh
+AUDIOGRAM_TEMPLATE=classic
+AUDIOGRAM_TEMPLATE_VERSION=1
+AUDIOGRAM_VARIATION=default
+```
+
+Explicit CLI fields take precedence over environment values. Unknown or empty choices fail before acquisition.
+Visual choices do not change the clip-selection recipe.
+Studio groups the existing `AudiogramBasic` composition under **Classic**.
+The internal treatment remains `audiogram-basic@1`, so historical paths and completed renders remain compatible.
+
+New renders include `clip-N.manifest.json` beside their MP4 and props file.
+The manifest records the selection, treatment, composition, props and MP4 hash.
+Historical MP4s do not require a manifest.
+A request fails if any selected clip lacks a verified MP4, but returns paths for the valid files.
+
+To add a future template:
+
+1. Define its composition and schema.
+2. Add a catalog entry in `src/templates/catalog.mjs`.
+3. Register a distinct versioned treatment in `scripts/treatment-registry.mjs`.
+4. Define the required assets and props builder.
+5. Add a regression fixture and inspect a local preview.
+6. Check job identity, output isolation and result collection.
+
+Classic's defaults live in `src/templates/classic/defaults.json`.
+Do not change those values for a new template.
+Square output and Editorial are not available in this release.
+See [the feature contract](docs/features/classic-template-selection.md) and [the synthetic fixture](tests/fixtures/classic-v1/README.md).

@@ -5,7 +5,8 @@ import { resolve } from "node:path";
 
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 
-const usage = "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default]";
+const usage =
+  "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default]";
 
 export const runAudiogramUrlCli = async (
   args = process.argv.slice(2),
@@ -16,7 +17,12 @@ export const runAudiogramUrlCli = async (
   try {
     parsed = parseArgs({
       args,
-      options: { url: { type: "string" }, template: { type: "string" }, "template-version": { type: "string" }, variation: { type: "string" } },
+      options: {
+        url: { type: "string" },
+        template: { type: "string" },
+        "template-version": { type: "string" },
+        variation: { type: "string" },
+      },
       strict: true,
       allowPositionals: false,
     });
@@ -34,10 +40,18 @@ export const runAudiogramUrlCli = async (
   let result;
   try {
     const request = {};
-    for (const [flag,field] of [["template","templateId"],["template-version","templateVersion"],["variation","variationId"]]) {
-      if(parsed.values[flag] !== undefined) request[field] = parsed.values[flag];
+    for (const [flag, field] of [
+      ["template", "templateId"],
+      ["template-version", "templateVersion"],
+      ["variation", "variationId"],
+    ]) {
+      if (parsed.values[flag] !== undefined)
+        request[field] = parsed.values[flag];
     }
-    const resolved = resolveTemplateSelectionConfig({request, environment: dependencies.environment ?? process.env});
+    const resolved = resolveTemplateSelectionConfig({
+      request,
+      environment: dependencies.environment ?? process.env,
+    });
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
       templateSelection: resolved.selection,
@@ -57,8 +71,14 @@ export const runAudiogramUrlCli = async (
       source: null,
       artifactPaths: [],
       error: {
-        code: error?.code === "INVALID_TEMPLATE_SELECTION" ? error.code : "RUNNER_FAILED",
-        message: error?.code === "INVALID_TEMPLATE_SELECTION" ? error.message : "Audiograms could not complete the request.",
+        code:
+          error?.code === "INVALID_TEMPLATE_SELECTION"
+            ? error.code
+            : "RUNNER_FAILED",
+        message:
+          error?.code === "INVALID_TEMPLATE_SELECTION"
+            ? error.message
+            : "Audiograms could not complete the request.",
       },
     };
   }

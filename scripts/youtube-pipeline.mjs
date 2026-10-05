@@ -57,7 +57,9 @@ const projectRoot = resolve(
 );
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
-const templateChoice = resolveTemplateSelectionConfig({environment: process.env});
+const templateChoice = resolveTemplateSelectionConfig({
+  environment: process.env,
+});
 const selectionConfig = resolveSelectionConfig(process.env);
 const selectionRecipe = buildSelectionRecipe(selectionConfig);
 const { packageVersion } = selectionConfig;
@@ -268,7 +270,10 @@ const executePipeline = async () => {
           acquireAssets: (clipPackage) =>
             acquireClipPackageAssets(clipPackage, { projectRoot }),
           renderTreatment: ({ clipPackage, treatment }) =>
-            renderTreatmentRun({ clipPackage, treatment, selection: templateChoice.selection }, { projectRoot }),
+            renderTreatmentRun(
+              { clipPackage, treatment, selection: templateChoice.selection },
+              { projectRoot },
+            ),
           projectRoot,
           onArtifactComplete: publishingLedger
             ? ({

@@ -1,8 +1,8 @@
 ---
 feature: classic-template-selection
-status: DESIGN
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Classic V1: preserve the current template and select variations
@@ -10,7 +10,8 @@ implementation-reconciled: false
 This design proposal dates from 2026-10-04.
 The design review used the source code.
 The user approved the implementation-plan stage on 2026-10-04.
-This document does not claim completed implementation or matching rendered output.
+The implementation now preserves the inspected Classic output.
+The reconciliation section records the tests, render evidence and remaining limits.
 Inspected base: `main`, `195a8f4418ba5eaf47806506b474f4d31d4fcbe1`.
 
 ## Plain-language overview
@@ -78,7 +79,7 @@ Use these terms consistently:
 - **Manifest:** a file that records an artifact's inputs and identity.
 - **Parity:** identical decoded frames and audio under the same rendering conditions.
 
-## Current evidence and baseline decision
+## Inspected baseline and format decision
 
 - `src/Root.tsx` registers `AudiogramBasic`, 1080x1920, with 30 fps supplied by metadata calculation.
   Defaults live here.
@@ -122,7 +123,7 @@ Alternative: a dynamic plugin framework.
 It adds discovery and compatibility machinery without a present requirement.
 This design recommends neither alternative.
 
-Proposed selection contract:
+Selection contract:
 
 ```json
 {"templateId":"classic","templateVersion":"1","variationId":"default"}
@@ -229,7 +230,8 @@ Queuing is not publishing.
 
 Preserve artifact-hash approvals.
 Another variation's artifact never inherits approval merely because its source matches.
-The design work did not perform external writes, database migrations or renders.
+Development used local renders and temporary test databases.
+The implementation did not migrate the user's live job database or publish media.
 
 ## Failure and retry paths
 
@@ -302,16 +304,64 @@ Intentional pixel changes require explicit review and recorded baseline changes.
 
 ## Implementation reconciliation and deviations
 
-DESIGN ONLY.
-This document proposes a catalog, selector, fixed defaults, job identity changes and visual regression checks.
-The implementation does not yet contain these changes.
-The user approved development after the plan review.
-The square format decision remains pending.
-The implementation plan is `docs/superpowers/plans/2026-10-04-classic-template-selection.md`.
-Square support remains deferred.
+The implementation now follows the documented selection flow.
+The catalog resolves Classic / Default to `audiogram-basic@1` and `AudiogramBasic`.
+Studio and the props builder use the same Classic defaults.
+The CLI, playlist pipeline and helper worker preserve the canonical selection.
+The pipeline scopes pending runs, failures and returned files to that treatment.
 
-The existing portrait default remains unchanged.
-Set COMPLETE only after implementation, verification and reconciliation succeed.
+The helper store adds the render identity and selection in a transaction.
+Existing records receive Classic / Default without changing their IDs, statuses or results.
+Matching active requests reuse a job.
+Another template for the same active video returns a conflict.
+The existing index still permits only one active job per video.
 
-Changed: this document records the architecture and acceptance contract.
-Unchanged: all product code, output behavior, stored jobs and publishing rules.
+Each new render records a manifest before the runner reports success.
+A manifest failure prevents the completion callback.
+Historical MP4s remain valid without manifests.
+A missing selected MP4 now fails the request, even when other selected files exist.
+The failure response includes paths for the remaining valid files.
+
+The implementation includes these documented adjustments:
+
+- The catalog exports the JSON defaults through a typed module. No TypeScript JSON configuration change was necessary.
+- The existing generic renderer still accepts treatments outside the catalog. Those manifests contain a null selection.
+- User-selected production requests always use a checked catalog selection.
+- `BEGIN IMMEDIATE` serializes job lookup and insertion. No post-insert uniqueness retry is necessary for these transactions.
+- The missing-file check covers partial batches as well as empty batches.
+- The visual review used sampled frames and exact decoded media comparison. It did not include real-time audiovisual playback.
+
+### Verification evidence
+
+The baseline source revision is `9f48744`.
+The baseline contains 180 frames at 1080x1920 and 30 fps.
+The fixture uses six seconds of synthetic audio and synthetic text.
+The committed manifest records input, font, dependency and baseline hashes.
+Local videos and font files remain under `out/classic-regression/`.
+
+Both candidate renders matched all baseline frames and decoded audio:
+
+- The composition render used omitted template selection.
+- The treatment runner used explicit Classic / Default selection and wrote its manifest.
+
+The real comparison command rejected a deliberately changed video.
+The review included frames at the start, during waveform activity, during caption changes and at the end.
+The fixture lives in `tests/fixtures/classic-v1/`.
+The comparison tool is `scripts/verify-classic-parity.mjs`.
+
+The focused suite passed 73 tests with no failures or skips.
+Lint and TypeScript checks passed.
+The Remotion bundle build passed.
+The full pipeline suite passed 327 of 328 tests with no skips.
+The failing test is `authorized OAuth smoke requires dedicated credentials before network` in `scripts/clip-selector-smoke.test.mjs`.
+The same test fails on the untouched base revision `195a8f4`.
+The failure concerns existing OAuth credential isolation, outside template selection.
+Do not describe the full suite as green.
+
+No live YouTube/provider workflow or installed-host MCP session formed part of verification.
+Plugin tests exercised the local MCP server, temporary databases and a real CLI subprocess.
+Square output remains deferred.
+Editorial remains outside this feature.
+
+Changed: template selection, fixed Classic defaults, selected-run isolation, manifests and helper job metadata.
+Unchanged: Classic's decoded reference output, internal treatment identity, historical output paths, clip-selection recipe and publication approval rules.

@@ -49,8 +49,10 @@ const transcriptSelection = {
       insightCueId: cueId(2),
       payoffCueId: cueId(3),
       endCueId: cueId(4),
-      contextSummary: "Provides setup for a new listener to understand the idea.",
-      insightSummary: "States the substantive insight grounded in transcript cues.",
+      contextSummary:
+        "Provides setup for a new listener to understand the idea.",
+      insightSummary:
+        "States the substantive insight grounded in transcript cues.",
       payoffSummary: "Completes the thought with its practical consequence.",
       score: 1 - rank / 10,
       editorialChecks: {
@@ -64,7 +66,10 @@ const transcriptSelection = {
   }),
 };
 
-const createOptions = async (directory, { media = metadata, transcriptError } = {}) => {
+const createOptions = async (
+  directory,
+  { media = metadata, transcriptError } = {},
+) => {
   const databaseDirectory = join(directory, "state");
   await mkdir(databaseDirectory, { recursive: true });
   const environment = {
@@ -116,11 +121,21 @@ const createOptions = async (directory, { media = metadata, transcriptError } = 
             },
           };
         },
-        acquireAssets: async (clipPackage) => [
-          { role: "audio", relativePath: `public/generated/${videoId}/audio.wav` },
-          { role: "captions", relativePath: `public/generated/${videoId}/captions.json` },
-          { role: "thumbnail", relativePath: `public/generated/${videoId}/thumbnail.jpg` },
-        ].map((asset) => ({ ...asset, clipPackageId: clipPackage.id })),
+        acquireAssets: async (clipPackage) =>
+          [
+            {
+              role: "audio",
+              relativePath: `public/generated/${videoId}/audio.wav`,
+            },
+            {
+              role: "captions",
+              relativePath: `public/generated/${videoId}/captions.json`,
+            },
+            {
+              role: "thumbnail",
+              relativePath: `public/generated/${videoId}/thumbnail.jpg`,
+            },
+          ].map((asset) => ({ ...asset, clipPackageId: clipPackage.id })),
         renderTreatment: async ({ clipPackage, treatment }) => {
           const relativePath = `out/treatments/${treatment.id}/${treatment.version}/${videoId}/transcript-llm-v1/clip-${clipPackage.rank}.mp4`;
           const artifactPath = join(directory, relativePath);
@@ -155,7 +170,11 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   assert.equal(getProviderRequestCount(), 1);
   assert.equal(options.environment.AUDIOGRAM_CLIP_SELECTOR, undefined);
   assert.equal(result.status, "complete");
-  assert.deepEqual(result.source, { videoId, title: metadata.title, url: sourceUrl });
+  assert.deepEqual(result.source, {
+    videoId,
+    title: metadata.title,
+    url: sourceUrl,
+  });
   assert.deepEqual(result.artifactPaths, renderedPaths);
 
   const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
@@ -182,7 +201,10 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   } finally {
     approvalLedger.close();
   }
-  assert.equal((await readFile(join(directory, renderedPaths[0]))).length > 0, true);
+  assert.equal(
+    (await readFile(join(directory, renderedPaths[0]))).length > 0,
+    true,
+  );
 });
 
 test("rejects an invalid URL before metadata lookup or ledger creation", async (t) => {
@@ -253,38 +275,81 @@ test("reports partial rendering failure with only verified finished clips", asyn
   assert.equal(result.artifactPaths.length, 2);
 });
 
-test('invalid template fails before metadata or database work',async()=>{
- let calls=0;
- const result=await runSingleUrlPipeline({url:sourceUrl,templateSelection:{templateId:'missing'},dependencies:{fetchMetadata:async()=>{calls++;return metadata;},openLedger:()=>{calls++;throw Error('must not open');}}});
- assert.equal(calls,0);assert.equal(result.error.code,'INVALID_TEMPLATE_SELECTION');
+test("invalid template fails before metadata or database work", async () => {
+  let calls = 0;
+  const result = await runSingleUrlPipeline({
+    url: sourceUrl,
+    templateSelection: { templateId: "missing" },
+    dependencies: {
+      fetchMetadata: async () => {
+        calls++;
+        return metadata;
+      },
+      openLedger: () => {
+        calls++;
+        throw Error("must not open");
+      },
+    },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.error.code, "INVALID_TEMPLATE_SELECTION");
 });
-test('unrelated failed treatment does not fail a completed selected result',async(t)=>{
- const directory=await mkdtemp(join(tmpdir(),'single-selected-'));t.after(()=>rm(directory,{recursive:true,force:true}));
- const {options}=await createOptions(directory);
- assert.equal((await runSingleUrlPipeline(options)).status,'complete');
- const {openAudiogramLedger}=await import('./audiogram-ledger.mjs');
- const ledger=openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
- const job=ledger.getPackageJob(videoId,'transcript-llm-v1');
- for(const pkg of ledger.listClipPackages(job.id)) {
-  const run=ledger.ensureTreatmentRun({packageId:pkg.id,treatmentId:'other',treatmentVersion:'1'});
-  ledger.markTreatmentRunFailed(run.id,'Other style failed');
- }
- ledger.close();
- assert.equal((await runSingleUrlPipeline(options)).status,'complete');
+test("unrelated failed treatment does not fail a completed selected result", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-selected-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  assert.equal((await runSingleUrlPipeline(options)).status, "complete");
+  const { openAudiogramLedger } = await import("./audiogram-ledger.mjs");
+  const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
+  const job = ledger.getPackageJob(videoId, "transcript-llm-v1");
+  for (const pkg of ledger.listClipPackages(job.id)) {
+    const run = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "other",
+      treatmentVersion: "1",
+    });
+    ledger.markTreatmentRunFailed(run.id, "Other style failed");
+  }
+  ledger.close();
+  assert.equal((await runSingleUrlPipeline(options)).status, "complete");
 });
 
-test('returns only the requested treatment artifacts when another treatment exists',async(t)=>{
- const directory=await mkdtemp(join(tmpdir(),'selected-results-'));t.after(()=>rm(directory,{recursive:true,force:true}));
- const {options}=await createOptions(directory);
- const first=await runSingleUrlPipeline(options);assert.equal(first.status,'complete');
- const {createTreatmentRegistry,audiogramBasicTreatment}=await import('./treatment-registry.mjs');
- options.dependencies.registry=createTreatmentRegistry([audiogramBasicTreatment,{...audiogramBasicTreatment,id:'test-only'}]);
- options.dependencies.resolveTemplateSelectionConfig=()=>({selection:{templateId:'test-only',templateVersion:'1',variationId:'default'},treatment:{id:'test-only',version:'1'},compositionId:'AudiogramBasic',renderKey:'test-only@1'});
- const second=await runSingleUrlPipeline(options);
- assert.equal(second.status,'complete');assert.equal(second.artifactPaths.length,3);
- assert.ok(second.artifactPaths.every(p=>p.startsWith('out/treatments/test-only/1/')));
- assert.ok(second.artifactPaths.every(p=>!first.artifactPaths.includes(p)));
- await rm(join(directory,second.artifactPaths[0]));
- const missing=await runSingleUrlPipeline(options);
- assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
+test("returns only the requested treatment artifacts when another treatment exists", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "selected-results-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const first = await runSingleUrlPipeline(options);
+  assert.equal(first.status, "complete");
+  const { createTreatmentRegistry, audiogramBasicTreatment } =
+    await import("./treatment-registry.mjs");
+  options.dependencies.registry = createTreatmentRegistry([
+    audiogramBasicTreatment,
+    { ...audiogramBasicTreatment, id: "test-only" },
+  ]);
+  options.dependencies.resolveTemplateSelectionConfig = () => ({
+    selection: {
+      templateId: "test-only",
+      templateVersion: "1",
+      variationId: "default",
+    },
+    treatment: { id: "test-only", version: "1" },
+    compositionId: "AudiogramBasic",
+    renderKey: "test-only@1",
+  });
+  const second = await runSingleUrlPipeline(options);
+  assert.equal(second.status, "complete");
+  assert.equal(second.artifactPaths.length, 3);
+  assert.ok(
+    second.artifactPaths.every((p) =>
+      p.startsWith("out/treatments/test-only/1/"),
+    ),
+  );
+  assert.ok(
+    second.artifactPaths.every((p) => !first.artifactPaths.includes(p)),
+  );
+  await rm(join(directory, second.artifactPaths[0]));
+  const missing = await runSingleUrlPipeline(options);
+  assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
+  assert.equal(missing.status, "failed");
+  assert.equal(missing.artifactPaths.length, 2);
 });

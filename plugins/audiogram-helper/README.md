@@ -22,3 +22,19 @@ The Secure MCP Tunnel is a private development bridge, not hosting. The tunnel c
 
 - `create_audiogram({ url })`: validate the supported YouTube URL, create or reuse an active local job for that video, and return its opaque job ID.
 - `get_audiogram_status({ jobId })`: return status and, only after verification, local artifact paths.
+
+## Template choice
+
+`create_audiogram` accepts optional `templateId`, `templateVersion` and `variationId` fields.
+The current values are `classic`, `1` and `default`.
+Omitted fields use those defaults. Invalid choices fail before job creation.
+
+The job store records the canonical choice. The detached worker forwards that choice to the CLI.
+An active request for the same video and render identity reuses the existing job.
+A request for another template while that video is active returns a conflict.
+This preserves one active worker per video and prevents races during asset acquisition.
+The helper does not reuse completed jobs. The pipeline ledger can reuse completed renders.
+
+The store migrates old records to Classic / Default in a transaction.
+Existing job IDs, statuses and results remain intact.
+Tests use temporary databases. Development verification does not migrate the user's live job database.

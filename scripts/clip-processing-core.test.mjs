@@ -46,7 +46,10 @@ test("a completed package and treatment are skipped on the next run", async (t) 
   let renders = 0;
   const events = [];
   const dependencies = {
-    onEvent: async (event) => { events.push(event); throw Error("logging unavailable"); },
+    onEvent: async (event) => {
+      events.push(event);
+      throw Error("logging unavailable");
+    },
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
@@ -71,7 +74,15 @@ test("a completed package and treatment are skipped on the next run", async (t) 
 
   assert.equal(acquisitions, 1);
   assert.equal(renders, 1);
-  assert.deepEqual(events.map(({ stage, status }) => [stage, status]), [["assets", "started"], ["assets", "completed"], ["render", "started"], ["render", "completed"]]);
+  assert.deepEqual(
+    events.map(({ stage, status }) => [stage, status]),
+    [
+      ["assets", "started"],
+      ["assets", "completed"],
+      ["render", "started"],
+      ["render", "completed"],
+    ],
+  );
   assert.deepEqual(first, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 1, failed: 0 },
@@ -328,15 +339,35 @@ test("reopens persisted transcript selections and reuses one transcript for part
   );
 });
 
-test('does not execute a different treatment pending for the same video',async(t)=>{
- const directory=await mkdtemp(join(tmpdir(),'selected-treatment-'));t.after(()=>rm(directory,{recursive:true,force:true}));
- const ledger=openAudiogramLedger(join(directory,'ledger.sqlite'));t.after(()=>ledger.close());
- const [pkg]=seedPackages(ledger);ledger.markPackageReady({packageId:pkg.id,assets:[]});
- const other=ledger.ensureTreatmentRun({packageId:pkg.id,treatmentId:'other',treatmentVersion:'1'});
- const first={...audiogramBasicTreatment,requiredAssetRoles:[]};
- const second={...first,id:'other'};
- const rendered=[];
- const result=await processClipPackages({ledger,registry:createTreatmentRegistry([first,second]),treatments:[{id:first.id,version:first.version}],videoId:'video-1',renderTreatment:async({treatment})=>{rendered.push(treatment.id);return `out/${treatment.id}.mp4`;}});
- assert.deepEqual(rendered,['audiogram-basic']);assert.equal(result.treatments.rendered,1);
- assert.equal(ledger.listPendingTreatmentRuns().some(run=>run.id===other.id),true);
+test("does not execute a different treatment pending for the same video", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "selected-treatment-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
+  t.after(() => ledger.close());
+  const [pkg] = seedPackages(ledger);
+  ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+  const other = ledger.ensureTreatmentRun({
+    packageId: pkg.id,
+    treatmentId: "other",
+    treatmentVersion: "1",
+  });
+  const first = { ...audiogramBasicTreatment, requiredAssetRoles: [] };
+  const second = { ...first, id: "other" };
+  const rendered = [];
+  const result = await processClipPackages({
+    ledger,
+    registry: createTreatmentRegistry([first, second]),
+    treatments: [{ id: first.id, version: first.version }],
+    videoId: "video-1",
+    renderTreatment: async ({ treatment }) => {
+      rendered.push(treatment.id);
+      return `out/${treatment.id}.mp4`;
+    },
+  });
+  assert.deepEqual(rendered, ["audiogram-basic"]);
+  assert.equal(result.treatments.rendered, 1);
+  assert.equal(
+    ledger.listPendingTreatmentRuns().some((run) => run.id === other.id),
+    true,
+  );
 });
