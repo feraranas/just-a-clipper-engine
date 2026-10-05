@@ -1,8 +1,8 @@
 ---
 feature: Single-run worker observability
-status: DESIGN
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Single-run worker observability
@@ -18,7 +18,8 @@ job ID, and retain a link to the failed attempt.
 
 Design detail and unresolved choices are recorded in
 [`docs/superpowers/specs/2026-10-04-single-run-worker-observability-design.md`](../superpowers/specs/2026-10-04-single-run-worker-observability-design.md).
-This is a DESIGN note; implementation has not been approved or started.
+The implementation now records isolated, bounded diagnostics for each job and
+returns safe stage failures through MCP.
 
 ## Mermaid flowchart
 
@@ -36,6 +37,7 @@ flowchart LR
   Events[(Per-job pipeline.jsonl)]
   Streams[(Per-job stdout and stderr files)]
   Lookup[Local operator lookup by job ID]
+  Retry[retry_audiogram after user approval]
   Result[Safe stage-aware status and support ID]
   User --> ChatGPT --> MCP --> Runner
   Runner --> Store
@@ -50,23 +52,27 @@ flowchart LR
   Events --> Lookup
   Streams --> Lookup
   MCP --> Result --> ChatGPT
+  MCP --> Retry --> Runner
 ```
 
 ## Lifecycle/state diagram
 
 ```mermaid
 stateDiagram-v2
-  [*] --> received
-  received --> running: create job UUID and isolated diagnostics
-  running --> succeeded: CLI contract and artifact verification succeed
+  [*] --> queued
+  queued --> running: worker starts with job UUID
+  running --> complete: CLI contract and artifact verification succeed
+  running --> no_clips: selection returns no clips
   running --> failed: stage or process fails; retain safe failure and streams
   running --> partial: failures remain and at least one artifact is verified
   failed --> retry_requested: user explicitly asks to retry
   partial --> retry_requested: user explicitly asks to retry
-  retry_requested --> running: create new UUID linked to prior job
+  retry_requested --> queued: create new UUID linked to prior job
   failed --> inspected: operator looks up UUID locally
-  succeeded --> inspected: operator looks up UUID locally
-  succeeded --> [*]
+  complete --> inspected: operator looks up UUID locally
+  no_clips --> inspected: operator looks up UUID locally
+  complete --> [*]
+  no_clips --> [*]
   inspected --> [*]
 ```
 
@@ -134,5 +140,26 @@ boundary, and no external publishing or upload.
 
 ## Implementation reconciliation and deviations
 
-Not applicable yet. This note describes intended behavior only and must be
-reconciled against implementation and tests after the feature is built.
+The implementation matches the approved process boundary: `local-runner.mjs`
+passes `--job-id` and `AUDIOGRAM_DIAGNOSTICS_ROOT` to `job-worker.mjs`, which
+passes them to `audiogram-url.mjs`; the CLI process creates the logger and
+passes its callback to `runSingleUrlPipeline`. Worker and CLI streams use
+separate owner-only files. Both worker and CLI stream files and structured
+events have a configurable size cap. The default retention is 30 days, and the next job
+creation removes expired UUID directories.
+
+Pipeline stage callbacks record intake, metadata, transcript, selection, Jev,
+assets, render, and artifact verification. When no Jev endpoint is configured,
+the trace records `jev: skipped`; it does not record a failure. Results retain
+per-stage/package safe failures. The worker validates every artifact before it
+returns `partial` or `complete` to MCP. Local lookup returns only allowlisted
+events. MCP status does not return raw process streams or exception text.
+
+One related safety fix was added after the full suite exposed a test using the
+real app credential path despite supplying a test environment. Credential path
+resolution now uses the supplied environment. This keeps tests and injected
+runtime configuration isolated from process-global credentials.
+
+The focused acceptance suite, plugin suite, serial full script suite, and
+feature-document gate pass. No cloud logging, uploads, publishing, or
+automatic retry was added.

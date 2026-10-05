@@ -58,6 +58,17 @@ test("default path is app-owned and runtime override is explicit", () => {
     "/synthetic/auth.json",
   );
 });
+test("runtime credential path uses the supplied environment and never falls back to process credentials", async (t) => {
+  const o = await fixture(t);
+  let fetchCalls = 0;
+  await assert.rejects(loadFreshChatGptSession({
+    ...o,
+    authFile: undefined,
+    environment: { AUDIOGRAM_CHATGPT_AUTH_PATH: join(o.dir, "missing", "isolated.json") },
+    fetch: async () => { fetchCalls += 1; throw new Error("must not refresh without credentials"); },
+  }), { code: "oauth_credentials_missing" });
+  assert.equal(fetchCalls, 0);
+});
 test("atomic first save repairs permissions and exposes only the minimal session", async (t) => {
   const options = await fixture(t);
   await writeCredentialsAtomically(valid(), options);

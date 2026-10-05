@@ -75,10 +75,12 @@ test("a completed package and treatment are skipped on the next run", async (t) 
   assert.deepEqual(first, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 1, failed: 0 },
+    failures: [],
   });
   assert.deepEqual(second, {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
+    failures: [],
   });
 });
 
@@ -109,6 +111,7 @@ test("a failed package does not prevent another package from rendering", async (
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 1 },
     treatments: { rendered: 1, failed: 0 },
+    failures: [{ stage: "assets", code: "ASSET_FAILED", packageId: packages[0].id }],
   });
   assert.equal(ledger.getClipPackage(packages[0].id).status, "failed");
   assert.equal(ledger.getClipPackage(packages[1].id).status, "ready");
@@ -141,6 +144,7 @@ test("a render failure leaves the reusable package ready", async (t) => {
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 0, failed: 1 },
+    failures: [{ stage: "render", code: "RENDER_FAILED", packageId: clipPackage.id }],
   });
   assert.equal(ledger.getClipPackage(clipPackage.id).status, "ready");
   assert.equal(ledger.listTreatmentRuns(clipPackage.id)[0].status, "failed");
@@ -251,6 +255,7 @@ test("reopens persisted transcript selections and reuses one transcript for part
   assert.deepEqual(first, {
     packages: { ready: 3, failed: 0 },
     treatments: { rendered: 3, failed: 0 },
+    failures: [],
   });
   assert.equal(transcriptLoads, 3);
   assert.equal(acquiredTranscripts.length, 3);
@@ -321,6 +326,7 @@ test("reopens persisted transcript selections and reuses one transcript for part
   assert.deepEqual(second, {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
+    failures: [],
   });
   assert.deepEqual(
     { commands: commands.length, renders, transcriptLoads },

@@ -185,6 +185,23 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   assert.equal((await readFile(join(directory, renderedPaths[0]))).length > 0, true);
 });
 
+test("passes safe stage events through the dependency callback", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-events-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const events = [];
+  options.dependencies.onEvent = async (event) => events.push(event);
+  await runSingleUrlPipeline(options);
+  const orderedStages = ["intake", "metadata", "transcript", "selection", "jev", "assets", "render", "artifact_verification"];
+  const firstIndexes = orderedStages.map((stage) => events.findIndex((event) => event.stage === stage));
+  assert.ok(firstIndexes.every((index) => index >= 0));
+  assert.deepEqual(firstIndexes, [...firstIndexes].sort((a, b) => a - b));
+  assert.equal(events.find((event) => event.stage === "jev").status, "skipped");
+  assert.equal(events.find((event) => event.stage === "artifact_verification").status, "started");
+  assert.equal(events.findLast((event) => event.stage === "artifact_verification").status, "completed");
+  assert.equal(JSON.stringify(events).includes("Transcript cue"), false);
+});
+
 test("rejects an invalid URL before metadata lookup or ledger creation", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "single-url-invalid-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -197,6 +214,7 @@ test("rejects an invalid URL before metadata lookup or ledger creation", async (
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "INVALID_HOST");
+  assert.equal(result.failures[0].stage, "intake");
   assert.equal(result.source, null);
   assert.deepEqual(metadataRequests, []);
 });
@@ -212,6 +230,7 @@ test("rejects metadata for another video before creating a ledger job", async (t
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "VIDEO_ID_MISMATCH");
+  assert.equal(result.failures[0].stage, "metadata");
   await assert.rejects(readFile(options.environment.AUDIOGRAM_DB_PATH), {
     code: "ENOENT",
   });
@@ -229,6 +248,7 @@ test("fails transcript acquisition without falling back to heatmap selection", a
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "PROCESSING_FAILED");
+  assert.equal(result.failures[0].stage, "transcript");
   assert.deepEqual(result.artifactPaths, []);
   assert.deepEqual(metadataRequests, [sourceUrl]);
   assert.deepEqual(transcriptRequests, [sourceUrl]);
@@ -247,8 +267,9 @@ test("reports partial rendering failure with only verified finished clips", asyn
 
   const result = await runSingleUrlPipeline(options);
 
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "partial");
   assert.equal(result.error.code, "PROCESSING_FAILED");
+  assert.equal(result.failures[0].stage, "render");
   assert.deepEqual(result.artifactPaths, renderedPaths);
   assert.equal(result.artifactPaths.length, 2);
 });

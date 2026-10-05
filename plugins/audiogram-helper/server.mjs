@@ -12,8 +12,10 @@ import { createLocalRunner, parseAndValidateUrl } from './local-runner.mjs';
 const HOST = '127.0.0.1';
 const JOB_STORE_PATH = (root) => process.env.AUDIOGRAM_JOB_STORE ?? path.join(root, '.local', 'audiogram-helper-jobs.sqlite');
 const outputShape = {
-  jobId: z.string(), status: z.enum(['queued', 'running', 'complete', 'no_clips', 'failed']),
+  jobId: z.string(), status: z.enum(['queued', 'running', 'complete', 'no_clips', 'failed', 'partial']),
   title: z.string().nullable().optional(), artifacts: z.array(z.string()), error: z.string().nullable().optional(),
+  failures: z.array(z.object({ stage: z.enum(['worker', 'intake', 'metadata', 'transcript', 'selection', 'jev', 'assets', 'render', 'artifact_verification']), code: z.string(), message: z.string(), packageId: z.string().optional() })).optional(),
+  retryOfJobId: z.string().uuid().optional(), diagnosticsIncomplete: z.boolean().optional(),
 };
 
 function makeMcpServer({ runner }) {
@@ -39,6 +41,19 @@ function makeMcpServer({ runner }) {
     const state = await runner.getStatus(jobId);
     if (!state) return { isError: true, content: [{ type: 'text', text: 'Audiogram job was not found.' }] };
     return { content: [{ type: 'text', text: `Audiogram job ${state.jobId} is ${state.status}.` }], structuredContent: { title: null, artifacts: [], ...state } };
+  });
+  server.registerTool('retry_audiogram', {
+    description: 'Retry a failed or partial Audiogram as a new job. Ask the user for explicit approval before calling this tool.',
+    inputSchema: { jobId: z.string().uuid() },
+    outputSchema: outputShape,
+  }, async ({ jobId }) => {
+    try {
+      const state = await runner.retry({ jobId });
+      if (!state) return { isError: true, content: [{ type: 'text', text: 'Audiogram job was not found.' }] };
+      return { content: [{ type: 'text', text: `Audiogram retry ${state.jobId} is ${state.status}.` }], structuredContent: { title: null, artifacts: [], ...state } };
+    } catch {
+      return { isError: true, content: [{ type: 'text', text: 'This Audiogram job cannot be retried.' }] };
+    }
   });
   return server;
 }

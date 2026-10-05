@@ -51,13 +51,16 @@ export const syncAndAnalyzeInbox = async ({
   });
 
   for (const job of pendingJobs) {
-    const step = (stage, operation) =>
-      runLoggedStage({
+    let activeStage = selectorId === "transcript-llm" ? "transcript" : "selection";
+    const step = (stage, operation) => {
+      activeStage = stage;
+      return runLoggedStage({
         logger: { event: onEvent },
         stage,
         videoId: job.videoId,
         operation,
       });
+    };
     try {
       let packages;
       if (selectorId === "youtube-heatmap") {
@@ -107,6 +110,12 @@ export const syncAndAnalyzeInbox = async ({
               jevClient,
             }),
           );
+        } else {
+          await emitPipelineEvent(onEvent, {
+            stage: "jev",
+            status: "skipped",
+            videoId: job.videoId,
+          });
         }
         ledger.recordTranscriptSelection({
           jobId: job.id,
@@ -144,6 +153,10 @@ export const syncAndAnalyzeInbox = async ({
         title: job.title,
         status: "failed",
         error: sanitizeErrorDiagnostic(error),
+        failure: {
+          stage: activeStage,
+          code: ({ transcript: "TRANSCRIPT_FAILED", selection: "SELECTION_FAILED", jev: "JEV_FAILED", heatmap: "SELECTION_FAILED" })[activeStage] ?? "ANALYSIS_FAILED",
+        },
       });
     }
   }

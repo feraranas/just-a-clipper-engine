@@ -167,11 +167,13 @@ const regular = (stat) =>
 // Validate every existing ancestor before mkdir; realpath also rejects ancestor
 // aliases. O_NOFOLLOW and inode checks protect the file operations themselves.
 export const verifyCredentialLocation = async ({
-  authFile = resolveChatGptAuthFile(),
+  authFile,
+  environment = process.env,
   projectRoot = process.cwd(),
   fs = nodeFs,
   allowMissing = true,
 } = {}) => {
+  authFile ??= resolveChatGptAuthFile({ environment });
   try {
     if (
       typeof authFile !== "string" ||
