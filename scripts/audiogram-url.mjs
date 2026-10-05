@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
+import { createJobDiagnostics, validateJobId } from "../plugins/audiogram-helper/job-diagnostics.mjs";
 
 const usage = "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url>";
 
@@ -15,7 +16,7 @@ export const runAudiogramUrlCli = async (
   try {
     parsed = parseArgs({
       args,
-      options: { url: { type: "string" } },
+      options: { url: { type: "string" }, "job-id": { type: "string" } },
       strict: true,
       allowPositionals: false,
     });
@@ -30,18 +31,37 @@ export const runAudiogramUrlCli = async (
     return 2;
   }
 
+  const jobId = parsed.values["job-id"];
+  if (jobId !== undefined) {
+    try {
+      validateJobId(jobId);
+    } catch (error) {
+      io.stderr.write(`${error.message}\n${usage} [--job-id <UUID>]\n`);
+      return 2;
+    }
+  }
+
   let result;
+  let diagnostics;
   try {
+    const projectRoot =
+      dependencies.projectRoot ?? process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
+    const environment = dependencies.environment ?? process.env;
+    diagnostics = jobId === undefined
+      ? null
+      : createJobDiagnostics({
+          projectRoot,
+          diagnosticsRoot: environment.AUDIOGRAM_DIAGNOSTICS_ROOT,
+          jobId,
+        });
+    await diagnostics?.ready;
+    const pipelineDependencies = { ...(dependencies.pipelineDependencies ?? {}) };
+    if (diagnostics) pipelineDependencies.onEvent = diagnostics.logger.event;
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
-      projectRoot:
-        dependencies.projectRoot ??
-        process.env.AUDIOGRAM_PROJECT_ROOT ??
-        process.cwd(),
-      environment: dependencies.environment ?? process.env,
-      ...(dependencies.pipelineDependencies
-        ? { dependencies: dependencies.pipelineDependencies }
-        : {}),
+      projectRoot,
+      environment,
+      dependencies: pipelineDependencies,
     });
   } catch {
     result = {
@@ -55,6 +75,9 @@ export const runAudiogramUrlCli = async (
       },
     };
   }
+
+  if (diagnostics?.diagnosticsIncomplete)
+    result = { ...result, diagnosticsIncomplete: true };
 
   io.stdout.write(`${JSON.stringify(result)}\n`);
   return 0;

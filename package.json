@@ -47,6 +47,7 @@
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
     "audiogram:url": "node scripts/audiogram-url.mjs",
     "audiogram:mcp": "node plugins/audiogram-helper/server.mjs",
+    "audiogram:logs": "node scripts/audiogram-job-logs.mjs",
     "test:audiogram-plugin": "node --test plugins/audiogram-helper/server.test.mjs",
     "youtube:login": "node scripts/youtube-login.mjs",
     "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
