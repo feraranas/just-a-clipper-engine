@@ -13,6 +13,46 @@ The user approved the implementation-plan stage on 2026-10-04.
 This document does not claim completed implementation or matching rendered output.
 Inspected base: `main`, `195a8f4418ba5eaf47806506b474f4d31d4fcbe1`.
 
+## Plain-language overview
+
+We will keep the current video design and name it Classic.
+Later, the user can choose another design without changing Classic.
+
+| Part | Purpose |
+| --- | --- |
+| Template catalog | Lists the available designs and their variations. |
+| Treatment registry | Connects a choice to its composition, inputs and output settings. |
+| Renderer | Starts Remotion and saves the video file. |
+| Classic template | Draws the thumbnail, title, waveform and transcript. |
+
+The first catalog contains one choice: **Classic / Default**.
+Requests without a choice use Classic / Default.
+Existing requests continue to work.
+
+The request follows these steps:
+
+1. The user provides a YouTube URL and an optional template choice.
+2. The system checks the choice before downloading or processing content.
+3. The pipeline selects clips and prepares audio, thumbnails and captions.
+4. The renderer uses the selected template to create each video.
+5. The system returns the video files.
+
+Background jobs must remember the choice while each video renders.
+This prevents a job from returning a video that uses another template.
+
+We will render the same short sample before and after the code changes.
+We will compare every decoded video frame and the audio.
+We will also watch the result.
+
+The first implementation succeeds when these conditions hold:
+
+- The current design looks and sounds the same.
+- The user can select Classic / Default explicitly.
+- Requests without a selection still produce Classic.
+- The system remembers the choice and returns the correct video.
+
+Editorial remains outside this implementation.
+
 ## Intent and scope
 
 Name the existing visual design **Classic**, version **1**, with a **Default** variation.
@@ -265,7 +305,8 @@ Intentional pixel changes require explicit review and recorded baseline changes.
 DESIGN ONLY.
 This document proposes a catalog, selector, fixed defaults, job identity changes and visual regression checks.
 The implementation does not yet contain these changes.
-Implementation-plan review and the square format decision remain pending.
+The user approved development after the plan review.
+The square format decision remains pending.
 The implementation plan is `docs/superpowers/plans/2026-10-04-classic-template-selection.md`.
 Square support remains deferred.
 

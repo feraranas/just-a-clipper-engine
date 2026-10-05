@@ -413,8 +413,8 @@ Change `package.json` only for a convenience parity command.
 
 Architecture approval: user requested this implementation plan on 2026-10-04.
 Execution method: inline, with focused self-review and no subagents, per repository instructions.
-Plan status: ready for human review.
-Product implementation did not start.
+Plan status: the user approved development.
+Execution starts with the baseline task.
 Square geometry: deferred pending an explicit answer.
 Preserve portrait throughout this plan.
 
