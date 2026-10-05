@@ -153,8 +153,21 @@ validated.
 - `job-worker.mjs` owns child process lifecycle, stdout/stderr capture, and
   CLI-contract validation; it reports an exact failure classification to the
   job store without flattening useful output.
-- `scripts/audiogram-url.mjs` remains the stable command boundary and relays
-  the pipeline result contract.
+- `job-worker.mjs` and `scripts/audiogram-url.mjs` run as separate processes.
+  The worker cannot pass an in-memory callback to the CLI process.
+- The worker starts `scripts/audiogram-url.mjs` with `--job-id <UUID>` and sets
+  `AUDIOGRAM_DIAGNOSTICS_ROOT` to the local diagnostics root in the child
+  environment. The root defaults to
+  `<projectRoot>/.local/audiogram-helper/runs`.
+- The CLI validates the job ID, derives that job's directory from the root,
+  creates its JSONL logger, and passes `logger.event` to
+  `runSingleUrlPipeline` as `dependencies.onEvent`. The CLI does not accept an
+  event-log file path from the MCP request.
+- Direct CLI runs without `--job-id` remain supported. They do not emit
+  per-job events.
+- The worker separately writes its output to the worker stream files. It
+  captures the CLI process output in the pipeline stream files. The CLI process
+  writes structured events to `pipeline.jsonl`.
 - `scripts/single-url-pipeline.mjs` orchestrates the single-source stages and
   emits stage-level events, including stages beyond the existing core hooks.
 - `scripts/youtube-inbox-pipeline-core.mjs` and
@@ -188,17 +201,20 @@ validated.
    independently observable in their actual execution order.
 4. Worker and CLI stdout/stderr are retained separately, including on child
    failure, without allowing output-buffer limits to erase the failure record.
-5. `get_audiogram_status` returns the same job ID and a precise, sanitized
+5. The worker passes job identity and diagnostics root across the process
+   boundary. The CLI process creates the logger and passes its callback into
+   the pipeline.
+6. `get_audiogram_status` returns the same job ID and a precise, sanitized
    failure stage/code; no generic multi-stage failure replaces known detail.
-6. A local operator can retrieve only the chosen job's events and locate its
+7. A local operator can retrieve only the chosen job's events and locate its
    raw stream files using that ID.
-7. Retry occurs only after an explicit user choice, creates a new job ID, and
+8. Retry occurs only after an explicit user choice, creates a new job ID, and
    records the prior ID; no retry occurs automatically.
-8. Logger failure cannot hide or replace the actual processing result.
-9. Tests prove log isolation under concurrent jobs and safe serialization of
+9. Logger failure cannot hide or replace the actual processing result.
+10. Tests prove log isolation under concurrent jobs and safe serialization of
    failure results; secrets and transcript/caption text are absent from MCP
    output and structured events.
-10. No external upload, publishing action, or cloud dependency is introduced.
+11. No external upload, publishing action, or cloud dependency is introduced.
 
 ## Decisions confirmed for this design
 

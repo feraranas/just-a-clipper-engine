@@ -46,7 +46,8 @@
 - Change `scripts/pipeline-logger.test.mjs`.
 
 **Interfaces:**
-- Add `createJobDiagnostics({projectRoot, jobId, maxFileBytes, retentionDays, now})`.
+- Add `createJobDiagnostics({projectRoot, diagnosticsRoot, jobId, maxFileBytes, retentionDays, now})`.
+- Use `diagnosticsRoot` when the caller provides it. Otherwise use `<projectRoot>/.local/audiogram-helper/runs`.
 - Return the diagnostic directory, five file paths, a logger, and a `readEvents` function.
 - The logger sets `jobId` and `runId` to the given job ID. Callers cannot override these values.
 - `readEvents({limit})` returns safe events from that job only. It never reads process logs.
@@ -115,6 +116,8 @@ Expected: All tests pass. Active-job checks and saved job reads keep their curre
 
 **Interfaces:**
 - Pass `dependencies.onEvent` from `runSingleUrlPipeline` to the pipeline core and clip processor.
+- The CLI process creates the logger. It passes `logger.event` as `dependencies.onEvent`.
+- The worker process does not pass a JavaScript callback to the CLI process.
 - Use `intake`, `metadata`, `transcript`, `selection`, `jev`, `assets`, `render`, and `artifact_verification` stage names.
 - Keep `contractVersion`, `source`, and `artifactPaths` in the CLI result.
 - Return failures as `failures: [{stage, code, message}]`.
@@ -152,11 +155,16 @@ Expected: All tests pass. Events show the real stage order. Results include each
 - Change `plugins/audiogram-helper/job-worker.mjs`.
 - Change `plugins/audiogram-helper/server.test.mjs`.
 - Change `plugins/audiogram-helper/job-diagnostics.mjs` and its test file.
+- Change `scripts/audiogram-url.mjs` and `scripts/audiogram-url.test.mjs`.
 
 **Interfaces:**
 - Pass a diagnostic context to `createLocalRunner`.
 - Send the worker's stdout and stderr to its two job files. Do not use `stdio: 'ignore'`.
-- Add `diagnosticsFactory` to `runJobWorker`.
+- Pass `--job-id <UUID>` and `AUDIOGRAM_DIAGNOSTICS_ROOT` from the worker to the CLI process.
+- Set `AUDIOGRAM_DIAGNOSTICS_ROOT` when the runner starts the worker.
+- Add optional `--job-id` parsing to `runAudiogramUrlCli`.
+- With a job ID, the CLI checks the ID format, creates the diagnostics logger, and passes `logger.event` to `runSingleUrlPipeline` as `dependencies.onEvent`.
+- Without a job ID, the CLI keeps its current direct-run behavior and does not create per-job events.
 - Send CLI stdout to a bounded contract buffer and a separate file. Send CLI stderr to its own file.
 - Continue reading child output after a log file reaches its size limit.
 - Set `diagnosticsIncomplete: true` if the output exceeds a cap or a log write fails.
@@ -164,6 +172,8 @@ Expected: All tests pass. Events show the real stage order. Results include each
 - [ ] **Step 1: Add tests for all four output files.**
 
 Use test adapters for the worker and CLI process. Check that each process writes to the correct files. Simulate a nonzero CLI exit with stdout and stderr. Check that the job stays failed and keeps its stage and code. Exceed a file cap. Check the file size and `diagnosticsIncomplete` result.
+
+Test the process contract. Check that `job-worker.mjs` passes the UUID in `--job-id` and the diagnostics root in `AUDIOGRAM_DIAGNOSTICS_ROOT`. Check that the CLI creates the logger in its own process and passes `logger.event` into the pipeline. Run the CLI without a job ID and check that it still returns the existing contract.
 
 - [ ] **Step 2: Run the plugin tests.**
 
@@ -178,6 +188,8 @@ Open the two worker files with mode 0600. Pass their file descriptors to the det
 - [ ] **Step 4: Stream CLI output and parse its result.**
 
 Use `spawn` for the CLI process. Write each stream to its bounded file. Keep stdout in memory only up to the contract limit. Continue to drain both streams after a file reaches its cap. Parse the CLI JSON result. If the child exits with an error and no stage failure exists, use `WORKER_PROCESS_FAILED`.
+
+Pass the checked job UUID as `--job-id`. Set `AUDIOGRAM_DIAGNOSTICS_ROOT` in the child environment. Do not try to pass an in-memory callback across this process boundary.
 
 - [ ] **Step 5: Run the plugin tests again.**
 
