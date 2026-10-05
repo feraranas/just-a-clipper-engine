@@ -19,6 +19,7 @@ export const processClipPackages = async ({
     treatments: { rendered: 0, failed: 0 },
   };
   const transcriptsById = new Map();
+  const requestedKeys = new Set(treatments.map(({id, version}) => `${id}@${version}`));
 
   const matchesVideo = (item) => !videoId || item.videoId === videoId;
   for (const clipPackage of ledger
@@ -62,7 +63,8 @@ export const processClipPackages = async ({
 
   for (const run of ledger
     .listPendingTreatmentRuns()
-    .filter((item) => !videoId || item.videoId === videoId)) {
+    .filter((item) => (!videoId || item.videoId === videoId) &&
+      requestedKeys.has(`${item.treatmentId}@${item.treatmentVersion}`))) {
     try {
       const treatment = registry.get(run.treatmentId, run.treatmentVersion);
       const clipPackage = ledger.getClipPackage(run.clipPackageId);

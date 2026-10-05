@@ -1,3 +1,4 @@
+import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
 import { mkdir, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
@@ -27,7 +28,6 @@ const defaultApplicationSupport = join(
   "Application Support",
   "Audiogram Inbox",
 );
-const TREATMENTS = [{ id: "audiogram-basic", version: "1" }];
 
 const failedResult = ({ source = null, code, message, artifactPaths = [] }) => ({
   contractVersion: 1,
@@ -43,7 +43,7 @@ const safeErrorMessage = (error, projectRoot) =>
     maximumLength: 600,
   });
 
-const listRenderedArtifacts = async ({ ledger, videoId, packageVersion, projectRoot }) => {
+const listRenderedArtifacts = async ({ ledger, videoId, packageVersion, projectRoot, treatment }) => {
   const job = ledger.getPackageJob(videoId, packageVersion);
   if (!job) return [];
 
@@ -51,8 +51,8 @@ const listRenderedArtifacts = async ({ ledger, videoId, packageVersion, projectR
   for (const clipPackage of ledger.listClipPackages(job.id)) {
     for (const run of ledger.listTreatmentRuns(clipPackage.id)) {
       if (
-        run.treatmentId !== "audiogram-basic" ||
-        run.treatmentVersion !== "1" ||
+        run.treatmentId !== treatment.id ||
+        run.treatmentVersion !== treatment.version ||
         run.status !== "rendered" ||
         typeof run.artifactRelativePath !== "string"
       ) {
@@ -97,11 +97,18 @@ const listRenderedArtifacts = async ({ ledger, videoId, packageVersion, projectR
 
 export const runSingleUrlPipeline = async ({
   url,
+  templateSelection,
   projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
   environment = process.env,
   dependencies = {},
 }) => {
   const root = resolve(projectRoot);
+  let resolved;
+  try {
+    resolved = (dependencies.resolveTemplateSelectionConfig ?? resolveTemplateSelectionConfig)({request: templateSelection, environment});
+  } catch (error) {
+    return failedResult({code: "INVALID_TEMPLATE_SELECTION", message: safeErrorMessage(error, root)});
+  }
   let parsedUrl;
   try {
     parsedUrl = parseYouTubeVideoUrl(url);
@@ -191,7 +198,7 @@ export const runSingleUrlPipeline = async ({
     const treatmentDeps = {
       ledger,
       registry: dependencies.registry ?? treatmentRegistry,
-      treatments: TREATMENTS,
+      treatments: [resolved.treatment],
       loadTranscriptForPackage: (packageId) => ledger.getTranscriptForPackage(packageId),
       acquireAssets: (clipPackage) =>
         (dependencies.acquireAssets ?? acquireClipPackageAssets)(clipPackage, {
@@ -199,7 +206,7 @@ export const runSingleUrlPipeline = async ({
         }),
       renderTreatment: ({ clipPackage, treatment }) =>
         (dependencies.renderTreatment ?? renderTreatmentRun)(
-          { clipPackage, treatment },
+          { clipPackage, treatment, selection: resolved.selection },
           { projectRoot: root },
         ),
       projectRoot: root,
@@ -226,6 +233,7 @@ export const runSingleUrlPipeline = async ({
       ledger,
       videoId: source.videoId,
       packageVersion,
+      treatment: resolved.treatment,
       projectRoot: root,
     });
     const job = ledger.getPackageJob(source.videoId, packageVersion);
@@ -237,7 +245,7 @@ export const runSingleUrlPipeline = async ({
       ledger.listClipPackages(job?.id).some((item) => item.status === "failed") ||
       ledger
         .listClipPackages(job?.id)
-        .some((item) => ledger.listTreatmentRuns(item.id).some((run) => run.status === "failed"));
+        .some((item) => ledger.listTreatmentRuns(item.id).some((run) => run.status === "failed" && run.treatmentId === resolved.treatment.id && run.treatmentVersion === resolved.treatment.version));
 
     if (hasProcessingFailures) {
       return failedResult({
@@ -278,6 +286,7 @@ export const runSingleUrlPipeline = async ({
           ledger,
           videoId: source.videoId,
           packageVersion,
+          treatment: resolved.treatment,
           projectRoot: root,
         });
       } catch {

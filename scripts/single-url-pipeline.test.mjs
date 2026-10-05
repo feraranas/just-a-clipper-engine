@@ -252,3 +252,23 @@ test("reports partial rendering failure with only verified finished clips", asyn
   assert.deepEqual(result.artifactPaths, renderedPaths);
   assert.equal(result.artifactPaths.length, 2);
 });
+
+test('invalid template fails before metadata or database work',async()=>{
+ let calls=0;
+ const result=await runSingleUrlPipeline({url:sourceUrl,templateSelection:{templateId:'missing'},dependencies:{fetchMetadata:async()=>{calls++;return metadata;},openLedger:()=>{calls++;throw Error('must not open');}}});
+ assert.equal(calls,0);assert.equal(result.error.code,'INVALID_TEMPLATE_SELECTION');
+});
+test('unrelated failed treatment does not fail a completed selected result',async(t)=>{
+ const directory=await mkdtemp(join(tmpdir(),'single-selected-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const {options}=await createOptions(directory);
+ assert.equal((await runSingleUrlPipeline(options)).status,'complete');
+ const {openAudiogramLedger}=await import('./audiogram-ledger.mjs');
+ const ledger=openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
+ const job=ledger.getPackageJob(videoId,'transcript-llm-v1');
+ for(const pkg of ledger.listClipPackages(job.id)) {
+  const run=ledger.ensureTreatmentRun({packageId:pkg.id,treatmentId:'other',treatmentVersion:'1'});
+  ledger.markTreatmentRunFailed(run.id,'Other style failed');
+ }
+ ledger.close();
+ assert.equal((await runSingleUrlPipeline(options)).status,'complete');
+});

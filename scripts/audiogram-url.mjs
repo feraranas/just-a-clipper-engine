@@ -1,10 +1,11 @@
+import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 
-const usage = "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url>";
+const usage = "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default]";
 
 export const runAudiogramUrlCli = async (
   args = process.argv.slice(2),
@@ -15,7 +16,7 @@ export const runAudiogramUrlCli = async (
   try {
     parsed = parseArgs({
       args,
-      options: { url: { type: "string" } },
+      options: { url: { type: "string" }, template: { type: "string" }, "template-version": { type: "string" }, variation: { type: "string" } },
       strict: true,
       allowPositionals: false,
     });
@@ -32,8 +33,14 @@ export const runAudiogramUrlCli = async (
 
   let result;
   try {
+    const request = {};
+    for (const [flag,field] of [["template","templateId"],["template-version","templateVersion"],["variation","variationId"]]) {
+      if(parsed.values[flag] !== undefined) request[field] = parsed.values[flag];
+    }
+    const resolved = resolveTemplateSelectionConfig({request, environment: dependencies.environment ?? process.env});
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
+      templateSelection: resolved.selection,
       projectRoot:
         dependencies.projectRoot ??
         process.env.AUDIOGRAM_PROJECT_ROOT ??
@@ -43,15 +50,15 @@ export const runAudiogramUrlCli = async (
         ? { dependencies: dependencies.pipelineDependencies }
         : {}),
     });
-  } catch {
+  } catch (error) {
     result = {
       contractVersion: 1,
       status: "failed",
       source: null,
       artifactPaths: [],
       error: {
-        code: "RUNNER_FAILED",
-        message: "Audiograms could not complete the request.",
+        code: error?.code === "INVALID_TEMPLATE_SELECTION" ? error.code : "RUNNER_FAILED",
+        message: error?.code === "INVALID_TEMPLATE_SELECTION" ? error.message : "Audiograms could not complete the request.",
       },
     };
   }
