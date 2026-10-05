@@ -52,7 +52,7 @@ test('runner launches detached worker with argument array and reports queued sta
   const result = await runner.start({ url: 'https://youtu.be/abcdefghijk', videoId: 'abcdefghijk' });
   assert.equal(result.status, 'running');
   assert.equal(calls.length, 1);
-  assert.deepEqual(calls[0][1], ['/project/plugins/audiogram-helper/job-worker.mjs', '--job-id', result.jobId, '--url', 'https://youtu.be/abcdefghijk']);
+  assert.deepEqual(calls[0][1], ['/project/plugins/audiogram-helper/job-worker.mjs', '--job-id', result.jobId, '--url', 'https://youtu.be/abcdefghijk', '--template', 'classic', '--template-version', '1', '--variation', 'default']);
   assert.deepEqual(calls[0][2], { cwd: dir, detached: true, shell: false, stdio: 'ignore' });
   store.close();
 });
@@ -119,8 +119,12 @@ test('MCP rejects unsupported URLs before runner dispatch and exposes create/sta
     const invalid = await client.callTool({ name: 'create_audiogram', arguments: { url: 'https://example.com/video' } });
     assert.equal(invalid.isError, true);
     assert.equal(calls.length, 0);
+    const invalidTemplate = await client.callTool({name:'create_audiogram',arguments:{url:'https://youtu.be/abcdefghijk',variationId:'missing'}});
+    assert.equal(invalidTemplate.isError,true);
+    assert.equal(calls.length,0);
     const accepted = await client.callTool({ name: 'create_audiogram', arguments: { url: 'https://youtu.be/abcdefghijk' } });
     assert.equal(accepted.structuredContent.status, 'queued');
+    assert.deepEqual(calls[0].templateSelection,{templateId:'classic',templateVersion:'1',variationId:'default'});
     const statusId = '88f72107-f36c-4eac-990d-44e64dc6a4cc';
     runner.getStatus = async () => ({ jobId: statusId, status: 'running', artifacts: [] });
     const status = await client.callTool({ name: 'get_audiogram_status', arguments: { jobId: statusId } });

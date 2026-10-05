@@ -1,3 +1,4 @@
+import {resolveTemplateSelection} from "../../src/templates/catalog.mjs";
 import { spawn } from 'node:child_process';
 import process from 'node:process';
 import { parseYouTubeVideoUrl } from '../../scripts/youtube-url-core.mjs';
@@ -5,11 +6,12 @@ import { validateCliResult } from './result-validation.mjs';
 
 export function createLocalRunner({ jobStore, projectRoot, workerPath, spawnProcess = spawn, isProcessAlive = (pid) => { try { process.kill(pid, 0); return true; } catch { return false; } } }) {
   return {
-    async start({ url, videoId }) {
-      const { job, created } = jobStore.createOrGetJob({ videoId, sourceUrl: url });
+    async start({ url, videoId, templateSelection }) {
+      const resolved=resolveTemplateSelection(templateSelection);
+      const { job, created } = jobStore.createOrGetJob({ videoId, sourceUrl: url, selection: resolved.selection, renderKey: resolved.renderKey });
       if (created) {
         try {
-          const child = spawnProcess(process.execPath, [workerPath, '--job-id', job.jobId, '--url', url], { cwd: projectRoot, detached: true, shell: false, stdio: 'ignore' });
+          const child = spawnProcess(process.execPath, [workerPath, '--job-id', job.jobId, '--url', url, '--template', resolved.selection.templateId, '--template-version', resolved.selection.templateVersion, '--variation', resolved.selection.variationId], { cwd: projectRoot, detached: true, shell: false, stdio: 'ignore' });
           if (!child.pid) throw new Error('Worker could not be started.');
           child.once?.('error', () => jobStore.setFailed(job.jobId, 'Worker could not be started.'));
           jobStore.markRunning(job.jobId, child.pid);

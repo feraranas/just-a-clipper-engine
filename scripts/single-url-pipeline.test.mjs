@@ -272,3 +272,19 @@ test('unrelated failed treatment does not fail a completed selected result',asyn
  ledger.close();
  assert.equal((await runSingleUrlPipeline(options)).status,'complete');
 });
+
+test('returns only the requested treatment artifacts when another treatment exists',async(t)=>{
+ const directory=await mkdtemp(join(tmpdir(),'selected-results-'));t.after(()=>rm(directory,{recursive:true,force:true}));
+ const {options}=await createOptions(directory);
+ const first=await runSingleUrlPipeline(options);assert.equal(first.status,'complete');
+ const {createTreatmentRegistry,audiogramBasicTreatment}=await import('./treatment-registry.mjs');
+ options.dependencies.registry=createTreatmentRegistry([audiogramBasicTreatment,{...audiogramBasicTreatment,id:'test-only'}]);
+ options.dependencies.resolveTemplateSelectionConfig=()=>({selection:{templateId:'test-only',templateVersion:'1',variationId:'default'},treatment:{id:'test-only',version:'1'},compositionId:'AudiogramBasic',renderKey:'test-only@1'});
+ const second=await runSingleUrlPipeline(options);
+ assert.equal(second.status,'complete');assert.equal(second.artifactPaths.length,3);
+ assert.ok(second.artifactPaths.every(p=>p.startsWith('out/treatments/test-only/1/')));
+ assert.ok(second.artifactPaths.every(p=>!first.artifactPaths.includes(p)));
+ await rm(join(directory,second.artifactPaths[0]));
+ const missing=await runSingleUrlPipeline(options);
+ assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
+});

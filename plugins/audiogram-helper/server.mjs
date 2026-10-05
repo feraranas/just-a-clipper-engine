@@ -1,3 +1,4 @@
+import {resolveTemplateSelection} from "../../src/templates/catalog.mjs";
 import { createServer } from 'node:http';
 import { Buffer } from 'node:buffer';
 import process from 'node:process';
@@ -20,16 +21,17 @@ function makeMcpServer({ runner }) {
   const server = new McpServer({ name: 'audiogram-helper', version: '0.1.0' });
   server.registerTool('create_audiogram', {
     description: 'Create local captioned clip drafts from one public YouTube video URL. Processing may take time; use get_audiogram_status to check it.',
-    inputSchema: { url: z.string().min(1).max(2048) }, outputSchema: outputShape,
-  }, async ({ url }) => {
+    inputSchema: { url: z.string().min(1).max(2048), templateId:z.string().optional(), templateVersion:z.string().optional(), variationId:z.string().optional() }, outputSchema: outputShape,
+  }, async ({ url, ...templateSelection }) => {
     let parsed;
-    try { parsed = parseAndValidateUrl(url); }
+    let resolved;
+    try { parsed = parseAndValidateUrl(url); resolved=resolveTemplateSelection(templateSelection); }
     catch (error) { return { isError: true, content: [{ type: 'text', text: error.message }] }; }
     try {
-      const state = await runner.start({ url: parsed.sourceUrl, videoId: parsed.videoId });
+      const state = await runner.start({ url: parsed.sourceUrl, videoId: parsed.videoId, templateSelection: resolved.selection });
       return { content: [{ type: 'text', text: `Audiogram job ${state.jobId} is ${state.status}.` }], structuredContent: { title: null, artifacts: [], ...state } };
-    } catch {
-      return { isError: true, content: [{ type: 'text', text: 'Audiograms could not start this job.' }] };
+    } catch (error) {
+      return { isError: true, content: [{ type: 'text', text: error?.code === 'VIDEO_BUSY_DIFFERENT_TEMPLATE' ? error.message : 'Audiograms could not start this job.' }] };
     }
   });
   server.registerTool('get_audiogram_status', {
