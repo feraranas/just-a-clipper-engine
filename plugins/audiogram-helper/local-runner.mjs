@@ -99,7 +99,10 @@ export function createLocalRunner({ jobStore, projectRoot, workerPath, diagnosti
         }
       }
       const safeFailure = job.result?.failures?.[0]?.message;
-      return { jobId, status: job.status, artifacts: [], ...(job.retryOfJobId ? { retryOfJobId: job.retryOfJobId } : {}), ...(job.result?.failures ? { failures: job.result.failures } : {}), ...(job.result?.diagnosticsIncomplete ? { diagnosticsIncomplete: true } : {}), ...(job.error ? { error: safeFailure ?? (job.result ? 'Audiogram processing failed.' : job.error) } : {}) };
+      const statusError = job.status === 'no_clips'
+        ? job.result?.error ?? 'No clips were selected from this video.'
+        : safeFailure ?? (job.result ? 'Audiogram processing failed.' : job.error);
+      return { jobId, status: job.status, artifacts: [], ...(job.retryOfJobId ? { retryOfJobId: job.retryOfJobId } : {}), ...(job.result?.failures ? { failures: job.result.failures } : {}), ...(job.result?.diagnosticsIncomplete ? { diagnosticsIncomplete: true } : {}), ...((job.error || job.status === 'no_clips') ? { error: statusError } : {}) };
     },
     async retry({ jobId }) {
       const { job } = jobStore.createRetryJob({ priorJobId: jobId });

@@ -364,6 +364,25 @@ test('runner status exposes safe failure details and omits raw error text', asyn
   store.close();
 });
 
+test('runner status preserves the no-clips explanation', async () => {
+  const dir = await tempDir();
+  const store = createJobStore(path.join(dir, 'jobs.sqlite'));
+  const { job } = store.createOrGetJob({ videoId: 'abcdefghijk', sourceUrl: 'https://youtu.be/abcdefghijk' });
+  store.setResult(job.jobId, {
+    status: 'no_clips',
+    title: 'Talk',
+    artifacts: [],
+    error: 'No clips were selected from this video.',
+  });
+  const runner = createLocalRunner({ jobStore: store, projectRoot: dir });
+
+  const status = await runner.getStatus(job.jobId);
+
+  assert.equal(status.status, 'no_clips');
+  assert.equal(status.error, 'No clips were selected from this video.');
+  store.close();
+});
+
 test('MCP rejects unsupported URLs before runner dispatch and exposes create/status tools', async () => {
   const calls = [];
   const runner = { start: async (input) => { calls.push(input); return { jobId: 'job-1', status: 'queued' }; }, getStatus: async () => ({ jobId: 'job-1', status: 'queued' }), retry: async () => ({ jobId: randomUUID(), status: 'running' }) };
