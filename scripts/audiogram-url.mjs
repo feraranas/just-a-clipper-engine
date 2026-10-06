@@ -16,7 +16,11 @@ export const runAudiogramUrlCli = async (
   try {
     parsed = parseArgs({
       args,
-      options: { url: { type: "string" }, "job-id": { type: "string" } },
+      options: {
+        url: { type: "string" },
+        "job-id": { type: "string" },
+        retry: { type: "boolean" },
+      },
       strict: true,
       allowPositionals: false,
     });
@@ -57,6 +61,7 @@ export const runAudiogramUrlCli = async (
     await diagnostics?.ready;
     const pipelineDependencies = { ...(dependencies.pipelineDependencies ?? {}) };
     if (diagnostics) pipelineDependencies.onEvent = diagnostics.logger.event;
+    if (parsed.values.retry) pipelineDependencies.retryFailedPipeline = true;
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
       projectRoot,

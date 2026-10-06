@@ -255,6 +255,27 @@ test("fails transcript acquisition without falling back to heatmap selection", a
   assert.deepEqual(providerConfigs, []);
 });
 
+test("retries failed transcript work when the caller marks a job as a retry", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-retry-transcript-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  let failTranscript = true;
+  options.dependencies.fetchTranscript = async () => {
+    if (failTranscript) throw new Error("temporary transcript failure");
+    return transcript;
+  };
+
+  const first = await runSingleUrlPipeline(options);
+  failTranscript = false;
+  const retried = await runSingleUrlPipeline({
+    ...options,
+    dependencies: { ...options.dependencies, retryFailedPipeline: true },
+  });
+
+  assert.equal(first.status, "failed");
+  assert.equal(retried.status, "complete");
+});
+
 test("reports partial rendering failure with only verified finished clips", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "single-url-partial-"));
   t.after(() => rm(directory, { recursive: true, force: true }));

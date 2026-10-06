@@ -76,6 +76,23 @@ test("with a job ID, CLI creates its own logger and passes it into the pipeline"
   assert.equal(stdout.length, 1);
 });
 
+test("CLI retry flag asks the pipeline to reset failed work", async () => {
+  const { io } = makeIO();
+  let retryFailedPipeline = false;
+  const exitCode = await runAudiogramUrlCli(
+    ["--url", successResult.source.url, "--retry"],
+    io,
+    {
+      runPipeline: async (input) => {
+        retryFailedPipeline = input.dependencies.retryFailedPipeline;
+        return successResult;
+      },
+    },
+  );
+  assert.equal(exitCode, 0);
+  assert.equal(retryFailedPipeline, true);
+});
+
 test("CLI rejects malformed job IDs before calling the pipeline", async () => {
   const { io, stdout, stderr } = makeIO();
   const exitCode = await runAudiogramUrlCli(

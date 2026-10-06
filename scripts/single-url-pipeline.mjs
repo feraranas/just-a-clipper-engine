@@ -184,6 +184,13 @@ export const runSingleUrlPipeline = async ({
         })
       : undefined;
 
+    if (dependencies.retryFailedPipeline) {
+      ledger.resetFailedWorkForRetry({
+        videoId: source.videoId,
+        packageVersion,
+      });
+    }
+
     const pipeline = await (dependencies.syncAndAnalyzeInbox ?? syncAndAnalyzeInbox)({
       ledger,
       playlist: { id: null, title: "Single URL" },

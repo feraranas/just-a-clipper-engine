@@ -171,6 +171,7 @@ export async function runJobWorker({
       "--job-id",
       jobId,
     ];
+    if (job.retryOfJobId) args.push("--retry");
     const childEnvironment = {
       ...environment,
       AUDIOGRAM_PROJECT_ROOT: projectRoot,
