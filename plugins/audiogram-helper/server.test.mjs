@@ -109,6 +109,69 @@ test('runner launches detached worker with argument array and reports queued sta
   store.close();
 });
 
+test('runner starts the worker when diagnostics files cannot be created', async () => {
+  const dir = await tempDir();
+  const store = createJobStore(path.join(dir, 'jobs.sqlite'));
+  const diagnosticsRoot = path.join(dir, 'not-a-directory');
+  await writeFile(diagnosticsRoot, 'file blocks diagnostics directory');
+  let launch;
+  const runner = createLocalRunner({
+    jobStore: store,
+    projectRoot: dir,
+    workerPath: path.join(dir, 'worker.mjs'),
+    diagnosticsRoot,
+    isProcessAlive: () => true,
+    spawnProcess: (_command, _args, options) => {
+      launch = options;
+      const child = new EventEmitter();
+      child.pid = 12345;
+      child.unref = () => {};
+      return child;
+    },
+  });
+
+  const result = await runner.start({ videoId: 'abcdefghijk', url: 'https://youtu.be/abcdefghijk' });
+
+  assert.equal(result.status, 'running');
+  assert.ok(launch);
+  assert.deepEqual(launch.stdio, ['ignore', 'ignore', 'ignore']);
+  assert.equal(launch.env.AUDIOGRAM_DIAGNOSTICS_INCOMPLETE, '1');
+  store.close();
+});
+
+test('worker completes the job and marks diagnostics incomplete when the diagnostics root is unavailable', async () => {
+  const dir = await tempDir();
+  const storePath = path.join(dir, 'jobs.sqlite');
+  const diagnosticsRoot = path.join(dir, 'not-a-directory');
+  await writeFile(diagnosticsRoot, 'file blocks diagnostics directory');
+  const store = createJobStore(storePath);
+  const { job } = store.createOrGetJob({ videoId: 'abcdefghijk', sourceUrl: 'https://youtu.be/abcdefghijk' });
+  await runJobWorker({
+    jobId: job.jobId,
+    sourceUrl: job.sourceUrl,
+    projectRoot: dir,
+    jobStorePath: storePath,
+    diagnosticsRoot,
+    environment: { AUDIOGRAM_DIAGNOSTICS_ROOT: diagnosticsRoot },
+    spawnProcess: () => {
+      const child = new EventEmitter();
+      child.stdout = new PassThrough();
+      child.stderr = new PassThrough();
+      setImmediate(() => {
+        child.stdout.end(JSON.stringify({ contractVersion: 1, status: 'no_clips', source: { videoId: 'abcdefghijk', title: 'Talk' }, artifactPaths: [] }));
+        child.stderr.end('diagnostic output');
+        setImmediate(() => child.emit('close', 0, null));
+      });
+      return child;
+    },
+  });
+
+  const result = store.getJob(job.jobId).result;
+  assert.equal(result.status, 'no_clips');
+  assert.equal(result.diagnosticsIncomplete, true);
+  store.close();
+});
+
 test('worker parses the stable CLI contract and persists terminal state', async () => {
   const dir = await tempDir();
   const storePath = path.join(dir, 'jobs.sqlite');
