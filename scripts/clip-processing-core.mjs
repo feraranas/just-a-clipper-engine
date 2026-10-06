@@ -13,7 +13,12 @@ export const processClipPackages = async ({
   projectRoot = process.cwd(),
   videoId,
   onEvent,
+  retryFailedRenders = false,
 }) => {
+  if (typeof retryFailedRenders !== "boolean")
+    throw new Error("retryFailedRenders must be boolean");
+  if (retryFailedRenders && !videoId)
+    throw new Error("retryFailedRenders requires videoId");
   const result = {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
@@ -55,11 +60,14 @@ export const processClipPackages = async ({
   for (const clipPackage of ledger.listReadyPackages().filter(matchesVideo)) {
     for (const { id, version } of treatments) {
       registry.get(id, version);
-      ledger.ensureTreatmentRun({
+      const run = ledger.ensureTreatmentRun({
         packageId: clipPackage.id,
         treatmentId: id,
         treatmentVersion: version,
       });
+      if (retryFailedRenders && run.status === "failed") {
+        ledger.retryFailedTreatmentRun(run.id);
+      }
     }
   }
 

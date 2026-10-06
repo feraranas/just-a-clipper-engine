@@ -239,3 +239,22 @@ Classic's defaults live in `src/templates/classic/defaults.json`.
 Do not change those values for a new template.
 Square output and Editorial are not available in this release.
 See [the feature contract](docs/features/classic-template-selection.md) and [the synthetic fixture](tests/fixtures/classic-v1/README.md).
+
+
+### Retry a failed render
+
+Use the same URL and template selection with the explicit retry option:
+
+```sh
+npm run audiogram:url -- --url "https://www.youtube.com/watch?v=VIDEO_ID" --template classic --template-version 1 --variation default --retry-failed-renders
+```
+
+The option retries failed renders for that video and template when their clip
+assets are ready. Completed renders remain unchanged. A normal request does
+not retry failed renders. Each reset saves the previous error and retry time
+in `treatment_run_retries`. Another failure requires another explicit retry.
+
+This option is available through the single-URL CLI. It does not retry asset
+acquisition failures, restore missing completed videos, or publish videos.
+Do not run concurrent requests for the same video. The existing renderer has
+no cross-process claim for a pending render.

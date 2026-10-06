@@ -6,7 +6,7 @@ import { resolve } from "node:path";
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 
 const usage =
-  "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default]";
+  "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default] [--retry-failed-renders]";
 
 export const runAudiogramUrlCli = async (
   args = process.argv.slice(2),
@@ -22,6 +22,7 @@ export const runAudiogramUrlCli = async (
         template: { type: "string" },
         "template-version": { type: "string" },
         variation: { type: "string" },
+        "retry-failed-renders": { type: "boolean", default: false },
       },
       strict: true,
       allowPositionals: false,
@@ -55,6 +56,7 @@ export const runAudiogramUrlCli = async (
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
       templateSelection: resolved.selection,
+      retryFailedRenders: parsed.values["retry-failed-renders"],
       projectRoot:
         dependencies.projectRoot ??
         process.env.AUDIOGRAM_PROJECT_ROOT ??

@@ -314,6 +314,7 @@ test("fresh database schema version 2 creates provenance tables and JSON constra
       "package_jobs",
       "selection_runs",
       "transcripts",
+      "treatment_run_retries",
       "treatment_runs",
       "videos",
     ],

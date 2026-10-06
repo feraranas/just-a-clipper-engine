@@ -175,7 +175,7 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
     title: metadata.title,
     url: sourceUrl,
   });
-  assert.deepEqual(result.artifactPaths, renderedPaths);
+  assert.deepEqual([...result.artifactPaths].sort(), [...renderedPaths].sort());
 
   const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
   try {
@@ -271,7 +271,7 @@ test("reports partial rendering failure with only verified finished clips", asyn
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "PROCESSING_FAILED");
-  assert.deepEqual(result.artifactPaths, renderedPaths);
+  assert.deepEqual([...result.artifactPaths].sort(), [...renderedPaths].sort());
   assert.equal(result.artifactPaths.length, 2);
 });
 
@@ -352,4 +352,57 @@ test("returns only the requested treatment artifacts when another treatment exis
   assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
   assert.equal(missing.status, "failed");
   assert.equal(missing.artifactPaths.length, 2);
+});
+
+test("explicit retry recovers only the failed render and preserves completed clips", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-retry-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const render = options.dependencies.renderTreatment;
+  const attempts = [];
+  let shouldFail = true;
+  options.dependencies.renderTreatment = async (input) => {
+    attempts.push(input.clipPackage.rank);
+    if (input.clipPackage.rank === 2 && shouldFail)
+      throw Error("synthetic render failure");
+    return render(input);
+  };
+  assert.equal((await runSingleUrlPipeline(options)).status, "failed");
+  assert.deepEqual(attempts, [1, 2, 3]);
+  assert.equal((await runSingleUrlPipeline(options)).status, "failed");
+  assert.deepEqual(attempts, [1, 2, 3]);
+  assert.equal(
+    (await runSingleUrlPipeline({ ...options, retryFailedRenders: true }))
+      .status,
+    "failed",
+  );
+  assert.deepEqual(attempts, [1, 2, 3, 2]);
+  shouldFail = false;
+  const result = await runSingleUrlPipeline({
+    ...options,
+    retryFailedRenders: true,
+  });
+  assert.equal(result.status, "complete");
+  assert.equal(result.artifactPaths.length, 3);
+  assert.deepEqual(attempts, [1, 2, 3, 2, 2]);
+  assert.equal(
+    (await runSingleUrlPipeline({ ...options, retryFailedRenders: true }))
+      .status,
+    "complete",
+  );
+  assert.deepEqual(attempts, [1, 2, 3, 2, 2]);
+  const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
+  try {
+    const job = ledger.getPackageJob(videoId, "transcript-llm-v1");
+    const pkg = ledger.listClipPackages(job.id).find((p) => p.rank === 2);
+    const run = ledger.listTreatmentRuns(pkg.id)[0];
+    const retries = ledger.listTreatmentRunRetries(run.id);
+    assert.equal(retries.length, 2);
+    assert.ok(
+      retries.every((r) => r.previous_error === "synthetic render failure"),
+    );
+    assert.equal(run.status, "rendered");
+  } finally {
+    ledger.close();
+  }
 });

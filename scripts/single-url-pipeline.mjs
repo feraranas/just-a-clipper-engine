@@ -116,10 +116,17 @@ const listRenderedArtifacts = async ({
 export const runSingleUrlPipeline = async ({
   url,
   templateSelection,
+  retryFailedRenders = false,
   projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd(),
   environment = process.env,
   dependencies = {},
 }) => {
+  if (typeof retryFailedRenders !== "boolean") {
+    return failedResult({
+      code: "INVALID_RETRY_OPTION",
+      message: "retryFailedRenders must be boolean.",
+    });
+  }
   const root = resolve(projectRoot);
   let resolved;
   try {
@@ -243,6 +250,7 @@ export const runSingleUrlPipeline = async ({
       ledger,
       registry: dependencies.registry ?? treatmentRegistry,
       treatments: [resolved.treatment],
+      retryFailedRenders,
       loadTranscriptForPackage: (packageId) =>
         ledger.getTranscriptForPackage(packageId),
       acquireAssets: (clipPackage) =>

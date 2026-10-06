@@ -987,6 +987,14 @@ export const openAudiogramLedger = (
       database.exec("PRAGMA foreign_keys = ON");
     }
     database.exec("PRAGMA journal_mode = WAL");
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS treatment_run_retries (
+        id INTEGER PRIMARY KEY,
+        treatment_run_id INTEGER NOT NULL REFERENCES treatment_runs(id) ON DELETE CASCADE,
+        previous_error TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+    `);
   } catch (error) {
     database.close();
     throw error;
@@ -1626,6 +1634,50 @@ export const openAudiogramLedger = (
           )
           .run(timestamp, packageId);
         database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    listTreatmentRunRetries: (runId) =>
+      database
+        .prepare(
+          "SELECT * FROM treatment_run_retries WHERE treatment_run_id = ? ORDER BY id",
+        )
+        .all(runId),
+    retryFailedTreatmentRun: (runId) => {
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const run = database
+          .prepare(
+            `
+          SELECT treatment_runs.* FROM treatment_runs
+          JOIN clip_packages ON clip_packages.id = treatment_runs.clip_package_id
+          WHERE treatment_runs.id = ? AND treatment_runs.status = 'failed'
+            AND clip_packages.status = 'ready'
+        `,
+          )
+          .get(runId);
+        if (!run) {
+          database.exec("COMMIT");
+          return false;
+        }
+        const timestamp = now();
+        database
+          .prepare(
+            `INSERT INTO treatment_run_retries
+          (treatment_run_id, previous_error, created_at) VALUES (?, ?, ?)`,
+          )
+          .run(runId, run.last_error, timestamp);
+        database
+          .prepare(
+            `UPDATE treatment_runs SET status = 'pending',
+          last_error = NULL, artifact_relative_path = NULL, updated_at = ?
+          WHERE id = ? AND status = 'failed'`,
+          )
+          .run(timestamp, runId);
+        database.exec("COMMIT");
+        return true;
       } catch (error) {
         database.exec("ROLLBACK");
         throw error;

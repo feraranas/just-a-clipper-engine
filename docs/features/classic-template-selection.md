@@ -210,7 +210,7 @@ stateDiagram-v2
     Pending --> Rendering: assets ready
     Rendering --> Rendered: validated artifact recorded
     Rendering --> Failed: render or asset failure
-    Failed --> Pending: existing explicit retry policy
+    Failed --> Pending: explicit retry-failed-renders request
     Rendered --> Returned: selected artifact exists
     Reuse --> Returned: selected artifact exists
     Reuse --> MissingArtifact: file absent
@@ -237,9 +237,19 @@ The implementation did not migrate the user's live job database or publish media
 
 Invalid selection fails early with allowed choices.
 Missing required assets retain actionable diagnostics.
-Failed renders retain existing failure/retry semantics and partial-file protection.
-Retry the same resolved identity.
-Do not switch presets.
+Retry extension design (2026-10-05): expose `--retry-failed-renders` on the single-URL CLI.
+Without this option, failed renders remain failed.
+With this option, reset only failed runs for the selected video and treatment
+whose clip assets are ready. Keep the same run identity and locked template settings.
+Record the previous error and retry time in a separate durable audit table.
+Reset the run and write the audit entry in one transaction.
+Completed runs and other videos or treatments remain unchanged.
+A second render failure remains failed until another explicit request.
+This option does not retry asset acquisition failures, missing completed files,
+or publication. It does not add automatic retries or a helper/playlist retry option.
+Existing partial-file protection remains in place.
+Do not run overlapping CLI requests for the same video; the existing processor
+has no cross-process render claim. This extension does not introduce one.
 The pipeline must not report missing historical files as successful reusable outputs.
 
 Queue failure and render success remain separate outcomes.
@@ -304,7 +314,25 @@ Intentional pixel changes require explicit review and recorded baseline changes.
 
 ## Implementation reconciliation and deviations
 
-The implementation now follows the documented selection flow.
+Retry extension reconciliation (2026-10-05): the single-URL CLI now forwards an
+explicit boolean retry request to the processor. The processor resets only
+failed runs for the selected video and treatment with ready clip assets.
+The ledger saves the previous error and reset time in `treatment_run_retries`
+and resets the same run in a single transaction. This additive table is created
+when an existing ledger opens; existing table contracts and schema version remain unchanged.
+No live user database was opened during verification.
+
+The focused suite passed 47 tests. It covers a failed first attempt, no implicit
+retry, another failed retry, successful recovery, unchanged completed clips,
+selection isolation, persisted audit history, existing-database compatibility,
+and rollback of both audit and reset on failure. Artifact-list assertions now
+compare sets because the fixture writes files asynchronously and its completion
+order is not the output ordering contract.
+The earlier retry arrow was unsupported. It now describes the explicit CLI option.
+Helper and playlist retry surfaces remain deferred. Existing concurrent-render
+limitations remain unchanged.
+
+The existing selection implementation follows the documented selection flow.
 The catalog resolves Classic / Default to `audiogram-basic@1` and `AudiogramBasic`.
 Studio and the props builder use the same Classic defaults.
 The CLI, playlist pipeline and helper worker preserve the canonical selection.

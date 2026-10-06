@@ -150,3 +150,28 @@ test("invalid CLI selection returns a failure without invoking the pipeline", as
     "INVALID_TEMPLATE_SELECTION",
   );
 });
+
+test("retry requires an explicit boolean flag", async () => {
+  for (const enabled of [false, true]) {
+    let captured;
+    const { io } = makeIO();
+    assert.equal(
+      await runAudiogramUrlCli(
+        [
+          "--url",
+          successResult.source.url,
+          ...(enabled ? ["--retry-failed-renders"] : []),
+        ],
+        io,
+        {
+          runPipeline: async (input) => {
+            captured = input;
+            return successResult;
+          },
+        },
+      ),
+      0,
+    );
+    assert.equal(captured.retryFailedRenders, enabled);
+  }
+});
