@@ -224,6 +224,28 @@ test('worker records malformed CLI output as failed', async () => {
   store.close();
 });
 
+test('worker labels readable but invalid CLI contracts as contract failures', async (t) => {
+  const contracts = [
+    { contractVersion: 2, status: 'no_clips', source: { title: 'Talk' }, artifactPaths: [] },
+    { contractVersion: 1, status: 'complete', source: { title: 'Talk' }, artifactPaths: [] },
+  ];
+  for (const contract of contracts) {
+    await t.test(`contract version ${contract.contractVersion}, status ${contract.status}`, async () => {
+      const dir = await tempDir();
+      const storePath = path.join(dir, 'jobs.sqlite');
+      const store = createJobStore(storePath);
+      const { job } = store.createOrGetJob({ videoId: 'abcdefghijk', sourceUrl: 'https://youtu.be/abcdefghijk' });
+      await runJobWorker({ jobId: job.jobId, sourceUrl: job.sourceUrl, projectRoot: dir, jobStorePath: storePath,
+        runCommand: async () => ({ stdout: JSON.stringify(contract), stderr: '' }) });
+      const failure = store.getJob(job.jobId).result.failures[0];
+      assert.equal(failure.stage, 'worker');
+      assert.equal(failure.code, 'CLI_CONTRACT_INVALID');
+      assert.equal(failure.message, 'The CLI result was invalid.');
+      store.close();
+    });
+  }
+});
+
 test('worker records command failure and nonzero exit as failed', async (t) => {
   for (const commandError of [new Error('spawn failed'), Object.assign(new Error('CLI exited'), { code: 1 })]) {
     await t.test(commandError.message, async () => {
