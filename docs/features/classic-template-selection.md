@@ -393,3 +393,27 @@ Editorial remains outside this feature.
 
 Changed: template selection, fixed Classic defaults, selected-run isolation, manifests and helper job metadata.
 Unchanged: Classic's decoded reference output, internal treatment identity, historical output paths, clip-selection recipe and publication approval rules.
+
+
+## Input content identity extension
+
+Implemented and reconciled for discussion_r4180848782.
+The runner tests passed all 11 cases. The broader focused suite passed 45 tests.
+Tests cover hashes for all required roles, same-path replacement, mutation and
+deletion during rendering, invalid inputs and unchanged legacy render paths.
+Lint and TypeScript passed. A real six-second Classic render produced a version-2
+manifest and matched all 180 baseline frames and decoded audio.
+The local render is `out/treatments/audiogram-basic/1/synthetic-classic/input-hash-v2/clip-1.mp4`.
+No private source inputs or live job databases formed part of verification.
+New render manifests use version 2 and include an inputAssets list.
+Each required input has its role, project-relative path, byte count and SHA-256 hash.
+Hash all required inputs before starting the renderer. Hash the same inputs again
+after the renderer exits and before writing the manifest or accepting the MP4.
+Reject missing, unreadable, non-file, ambiguous or out-of-project inputs.
+Reject the render when an input hash or size differs between checks.
+No completion callback runs for rejected renders.
+Preserve older manifests and historical output reuse without rewriting them.
+This check identifies the inputs; it does not archive them or reconstruct deleted files.
+Before/after checks cannot detect a temporary change restored before the final check.
+Immutable render-input snapshots remain outside this bounded change.
+The helper-job diagram comment is outside this change.

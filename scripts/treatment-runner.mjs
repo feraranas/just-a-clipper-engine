@@ -1,12 +1,13 @@
 import { createHash } from "node:crypto";
-import { readFile } from "node:fs/promises";
+import { readFile, realpath } from "node:fs/promises";
+import { createReadStream } from "node:fs";
 import {
   resolveTemplateSelection,
   listTemplates,
 } from "../src/templates/catalog.mjs";
 import { execFile } from "node:child_process";
 import { mkdir, rename, stat, writeFile } from "node:fs/promises";
-import { join, relative, sep } from "node:path";
+import { isAbsolute, join, relative, resolve, sep } from "node:path";
 import { promisify } from "node:util";
 
 import { safePathPart } from "./path-components.mjs";
@@ -22,6 +23,50 @@ const defaultRunCommand = async (command, args, { cwd }) =>
 
 const toProjectRelative = (projectRoot, path) =>
   relative(projectRoot, path).split(sep).join("/");
+
+const insideRoot = (root, target) => {
+  const path = relative(root, target);
+  return path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path);
+};
+
+const hashInputAssets = async (projectRoot, assets) => {
+  const canonicalRoot = await realpath(projectRoot);
+  return Promise.all(
+    assets.map(async ({ role, relativePath }) => {
+      try {
+        if (
+          typeof relativePath !== "string" ||
+          isAbsolute(relativePath) ||
+          !insideRoot(projectRoot, resolve(projectRoot, relativePath))
+        ) {
+          throw new Error("path is outside the project");
+        }
+        const filePath = resolve(projectRoot, relativePath);
+        if (!insideRoot(canonicalRoot, await realpath(filePath))) {
+          throw new Error("file is outside the project");
+        }
+        if (!(await stat(filePath)).isFile())
+          throw new Error("not a regular file");
+        const hash = createHash("sha256");
+        let sizeBytes = 0;
+        for await (const chunk of createReadStream(filePath)) {
+          hash.update(chunk);
+          sizeBytes += chunk.length;
+        }
+        return {
+          role,
+          relativePath: toProjectRelative(projectRoot, filePath),
+          sizeBytes,
+          sha256: hash.digest("hex"),
+        };
+      } catch {
+        throw new Error(
+          `Input asset ${role} is missing, unreadable or outside the project`,
+        );
+      }
+    }),
+  );
+};
 
 export const renderTreatmentRun = async (
   { clipPackage, treatment, selection },
@@ -68,6 +113,15 @@ export const renderTreatmentRun = async (
     throw new Error(`Invalid package rank: ${clipPackage.rank}`);
   }
   assertRequiredAssets(treatment, clipPackage);
+  const requiredAssets = treatment.requiredAssetRoles.map((role) => {
+    const matches = (clipPackage.assets ?? []).filter(
+      (asset) => asset.role === role,
+    );
+    if (matches.length !== 1)
+      throw new Error(`Input asset ${role} must have exactly one path`);
+    return { role, relativePath: matches[0].relativePath };
+  });
+  const inputAssets = await hashInputAssets(projectRoot, requiredAssets);
 
   const outputDirectory = join(
     projectRoot,
@@ -108,13 +162,18 @@ export const renderTreatmentRun = async (
   if (!rendered.isFile() || rendered.size === 0) {
     throw new Error(`Rendered artifact is empty: ${partialPath}`);
   }
+  const checkedInputs = await hashInputAssets(projectRoot, requiredAssets);
+  if (JSON.stringify(checkedInputs) !== JSON.stringify(inputAssets)) {
+    throw new Error("Input asset contents changed during rendering");
+  }
   const manifestPath = join(outputDirectory, `${baseName}.manifest.json`);
   const manifestPartialPath = join(
     outputDirectory,
     `.${baseName}.manifest.partial.json`,
   );
   const manifest = {
-    manifestVersion: 1,
+    manifestVersion: 2,
+    inputAssets,
     selection: resolved?.selection ?? null,
     treatment: { id: treatment.id, version: treatment.version },
     compositionId: treatment.compositionId,

@@ -252,8 +252,12 @@ Keep legacy omitted callers targeting their existing treatment set.
 Preserve path containment, realpath/symlink and nonempty-file checks.
 
 - [ ] Add an atomic `clip-N.manifest.json` sidecar.
-- [ ] Include `manifestVersion: 1`, canonical selection, treatment ID/version and composition ID.
+- [ ] Include `manifestVersion: 2`, canonical selection, treatment ID/version and composition ID.
 - [ ] Include the exact resolved props and artifact hash.
+- [ ] Include each required input's role, project-relative path, byte count and SHA-256 hash.
+- [ ] Hash inputs before rendering and check the same contents after rendering, before accepting output.
+- [ ] Reject changed, missing, unreadable, ambiguous or out-of-project inputs.
+- [ ] These hashes identify inputs but do not preserve deleted files or replace immutable snapshots.
 - [ ] Write the manifest.
 - [ ] Rename the manifest before reporting a new run as successful.
 - [ ] A manifest failure must fail the render operation.
@@ -429,3 +433,9 @@ The feature note contains the reconciled result.
 The full test suite still exposes an existing OAuth smoke failure.
 The local pre-push hook excludes that smoke-test file.
 Do not infer full-suite success from a successful push.
+
+
+Input-content review follow-up: implemented for discussion_r4180848782.
+The 45 focused tests and real 180-frame/audio parity comparison passed.
+New manifests use version 2; historical manifests remain unchanged.
+Before/after checks do not detect a temporary change restored before the final check.
