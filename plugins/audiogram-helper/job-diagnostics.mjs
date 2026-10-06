@@ -120,7 +120,14 @@ export function createJobDiagnostics({
       await handle.chmod(0o600);
       await handle.close();
     }
-  })();
+  })().catch(async (error) => {
+    diagnosticsIncomplete = true;
+    try {
+      await onError?.(error);
+    } catch {
+      /* diagnostics setup is best effort */
+    }
+  });
   const event = async (input) => {
     try {
       await ready;

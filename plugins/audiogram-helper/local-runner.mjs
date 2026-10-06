@@ -18,19 +18,41 @@ export function createLocalRunner({ jobStore, projectRoot, workerPath, diagnosti
     const diagnostics = createJobDiagnostics({ projectRoot, diagnosticsRoot, jobId: job.jobId });
     let stdoutFd;
     let stderrFd;
+    let diagnosticsIncomplete = false;
     try {
       await diagnostics.ready;
-      stdoutFd = openSync(diagnostics.files.workerStdout, constants.O_WRONLY | constants.O_APPEND);
-      stderrFd = openSync(diagnostics.files.workerStderr, constants.O_WRONLY | constants.O_APPEND);
+    } catch {
+      diagnosticsIncomplete = true;
+    }
+    if (!diagnosticsIncomplete) {
+      try {
+        stdoutFd = openSync(diagnostics.files.workerStdout, constants.O_WRONLY | constants.O_APPEND);
+        stderrFd = openSync(diagnostics.files.workerStderr, constants.O_WRONLY | constants.O_APPEND);
+      } catch {
+        diagnosticsIncomplete = true;
+      }
+    }
+    if (diagnosticsIncomplete) {
+      if (stdoutFd !== undefined) closeSync(stdoutFd);
+      if (stderrFd !== undefined) closeSync(stderrFd);
+      stdoutFd = stderrFd = undefined;
+    }
+    try {
+      const childEnvironment = {
+        ...process.env,
+        AUDIOGRAM_PROJECT_ROOT: projectRoot,
+        AUDIOGRAM_DIAGNOSTICS_ROOT: diagnostics.root,
+        ...(diagnosticsIncomplete ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: '1' } : {}),
+      };
       const child = spawnProcess(process.execPath, [workerPath, '--job-id', job.jobId, '--url', job.sourceUrl], {
         cwd: projectRoot,
         detached: true,
         shell: false,
-        stdio: ['ignore', stdoutFd, stderrFd],
-        env: { ...process.env, AUDIOGRAM_PROJECT_ROOT: projectRoot, AUDIOGRAM_DIAGNOSTICS_ROOT: diagnostics.root },
+        stdio: ['ignore', stdoutFd ?? 'ignore', stderrFd ?? 'ignore'],
+        env: childEnvironment,
       });
-      closeSync(stdoutFd);
-      closeSync(stderrFd);
+      if (stdoutFd !== undefined) closeSync(stdoutFd);
+      if (stderrFd !== undefined) closeSync(stderrFd);
       stdoutFd = stderrFd = undefined;
       if (!child.pid) throw new Error('Worker could not be started.');
       child.once?.('error', () => recordFailure(job.jobId, 'worker', 'WORKER_START_FAILED', 'Worker could not be started.'));

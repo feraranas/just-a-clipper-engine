@@ -66,14 +66,23 @@ function executeCli({
     let stdout = Buffer.alloc(0);
     let stdoutBytes = 0;
     let diagnosticsIncomplete = false;
-    const stdoutFd = openSync(diagnostics.files.pipelineStdout, "w", 0o600);
-    const stderrFd = openSync(diagnostics.files.pipelineStderr, "w", 0o600);
+    let stdoutFd;
+    let stderrFd;
+    try {
+      stdoutFd = openSync(diagnostics.files.pipelineStdout, "w", 0o600);
+      stderrFd = openSync(diagnostics.files.pipelineStderr, "w", 0o600);
+    } catch {
+      diagnosticsIncomplete = true;
+      if (stdoutFd !== undefined) closeSync(stdoutFd);
+      if (stderrFd !== undefined) closeSync(stderrFd);
+      stdoutFd = stderrFd = undefined;
+    }
     let descriptorsClosed = false;
     const closeDescriptors = () => {
       if (descriptorsClosed) return;
       descriptorsClosed = true;
-      closeSync(stdoutFd);
-      closeSync(stderrFd);
+      if (stdoutFd !== undefined) closeSync(stdoutFd);
+      if (stderrFd !== undefined) closeSync(stderrFd);
     };
     let child;
     try {
@@ -95,7 +104,7 @@ function executeCli({
       );
       const keepLength = Math.min(remaining, chunk.length);
       if (keepLength < chunk.length) diagnosticsIncomplete = true;
-      if (keepLength > 0) {
+      if (keepLength > 0 && fd !== undefined) {
         try {
           writeSync(fd, chunk.subarray(0, keepLength));
         } catch {
@@ -155,6 +164,7 @@ export async function runJobWorker({
   isWorkerOutputIncomplete = () => false,
 }) {
   const store = createJobStore(jobStorePath);
+  let diagnosticsIncomplete = environment.AUDIOGRAM_DIAGNOSTICS_INCOMPLETE === "1";
   try {
     const job = store.getJob(jobId);
     if (!job) throw new Error("Job does not exist.");
@@ -176,6 +186,7 @@ export async function runJobWorker({
       ...environment,
       AUDIOGRAM_PROJECT_ROOT: projectRoot,
       AUDIOGRAM_DIAGNOSTICS_ROOT: diagnostics.root,
+      ...(diagnosticsIncomplete ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: "1" } : {}),
     };
     try {
       const output = await (runCommand
@@ -195,6 +206,7 @@ export async function runJobWorker({
         ...result,
         diagnosticsIncomplete: Boolean(
           output.diagnosticsIncomplete ||
+          diagnosticsIncomplete ||
           diagnostics.diagnosticsIncomplete ||
           isWorkerOutputIncomplete(),
         ),
