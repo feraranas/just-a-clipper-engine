@@ -201,7 +201,14 @@ export async function runJobWorker({
             spawnProcess,
           }));
       const contract = JSON.parse(output.stdout.trim());
-      const result = await validateCliResult(contract, projectRoot);
+      let result;
+      try {
+        result = await validateCliResult(contract, projectRoot);
+      } catch {
+        throw Object.assign(new Error("CLI result validation failed."), {
+          code: "CLI_CONTRACT_INVALID",
+        });
+      }
       store.setResult(jobId, {
         ...result,
         diagnosticsIncomplete: Boolean(
@@ -213,7 +220,8 @@ export async function runJobWorker({
         ),
       });
     } catch (error) {
-      const contractFailure = error instanceof SyntaxError;
+      const invalidContract = error?.code === "CLI_CONTRACT_INVALID";
+      const contractFailure = error instanceof SyntaxError || invalidContract;
       store.setResult(jobId, {
         status: "failed",
         title: null,
@@ -225,9 +233,11 @@ export async function runJobWorker({
             code: contractFailure
               ? "CLI_CONTRACT_INVALID"
               : "WORKER_PROCESS_FAILED",
-            message: contractFailure
-              ? "The CLI result could not be read."
-              : "The CLI process did not complete.",
+            message: invalidContract
+              ? "The CLI result was invalid."
+              : error instanceof SyntaxError
+                ? "The CLI result could not be read."
+                : "The CLI process did not complete.",
           },
         ],
         diagnosticsIncomplete: Boolean(
