@@ -273,3 +273,21 @@ test("reports partial rendering failure with only verified finished clips", asyn
   assert.deepEqual(result.artifactPaths, renderedPaths);
   assert.equal(result.artifactPaths.length, 2);
 });
+
+test("reports artifact verification failure when rendering records no verified files", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-unverified-artifact-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  options.dependencies.renderTreatment = async ({ clipPackage, treatment }) =>
+    `out/treatments/${treatment.id}/${treatment.version}/${videoId}/transcript-llm-v1/clip-${clipPackage.rank}.mp4`;
+
+  const result = await runSingleUrlPipeline(options);
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.error.code, "NO_VERIFIED_ARTIFACTS");
+  assert.deepEqual(result.failures, [{
+    stage: "artifact_verification",
+    code: "NO_VERIFIED_ARTIFACTS",
+    message: "Processing did not produce a verified MP4 artifact.",
+  }]);
+});
