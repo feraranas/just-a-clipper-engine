@@ -123,6 +123,20 @@ test('worker parses the stable CLI contract and persists terminal state', async 
   store.close();
 });
 
+test('worker marks a linked retry for the CLI pipeline', async () => {
+  const dir = await tempDir();
+  const storePath = path.join(dir, 'jobs.sqlite');
+  const store = createJobStore(storePath);
+  const { job: prior } = store.createOrGetJob({ videoId: 'abcdefghijk', sourceUrl: 'https://youtu.be/abcdefghijk' });
+  store.setResult(prior.jobId, { status: 'failed', artifacts: [], error: 'failed' });
+  const { job: retry } = store.createRetryJob({ priorJobId: prior.jobId });
+  let processContract;
+  await runJobWorker({ jobId: retry.jobId, sourceUrl: retry.sourceUrl, projectRoot: dir, jobStorePath: storePath,
+    runCommand: async (input) => { processContract = input; return { stdout: JSON.stringify({ contractVersion: 1, status: 'no_clips', source: { videoId: 'abcdefghijk', title: 'Talk' }, artifactPaths: [] }), stderr: '' }; } });
+  assert.ok(processContract.args.includes('--retry'));
+  store.close();
+});
+
 test('worker records malformed CLI output as failed', async () => {
   const dir = await tempDir();
   const storePath = path.join(dir, 'jobs.sqlite');
