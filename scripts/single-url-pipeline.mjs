@@ -143,6 +143,7 @@ export const runSingleUrlPipeline = async ({
     });
   }
   const contractSource = { videoId: source.videoId, title: source.title, url: source.sourceUrl };
+  activeStage = "setup";
 
   let ledger;
   let publishingLedger;
@@ -191,6 +192,7 @@ export const runSingleUrlPipeline = async ({
       });
     }
 
+    activeStage = selectConfig.selectorId === "transcript-llm" ? "transcript" : "selection";
     const pipeline = await (dependencies.syncAndAnalyzeInbox ?? syncAndAnalyzeInbox)({
       ledger,
       playlist: { id: null, title: "Single URL" },
@@ -340,13 +342,21 @@ export const runSingleUrlPipeline = async ({
     }
     return failedResult({
       source: source ? contractSource : null,
-      code: "PROCESSING_FAILED",
+      code: activeStage === "setup" ? "PIPELINE_SETUP_FAILED" : "PROCESSING_FAILED",
       message: safeErrorMessage(error, root),
       artifactPaths,
       failures: [{
         stage: activeStage,
-        code: activeStage === "metadata" ? "METADATA_FAILED" : "PROCESSING_FAILED",
-        message: activeStage === "metadata" ? "Video metadata could not be read." : "Audiogram processing failed.",
+        code: activeStage === "metadata"
+          ? "METADATA_FAILED"
+          : activeStage === "setup"
+            ? "PIPELINE_SETUP_FAILED"
+            : "PROCESSING_FAILED",
+        message: activeStage === "metadata"
+          ? "Video metadata could not be read."
+          : activeStage === "setup"
+            ? "Audiogram processing could not be configured."
+            : "Audiogram processing failed.",
       }],
     });
   } finally {

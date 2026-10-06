@@ -5,7 +5,7 @@ export async function validateCliResult(result, projectRoot) {
   if (!result || result.contractVersion !== 1 || !['complete', 'no_clips', 'failed', 'partial'].includes(result.status)) throw new Error('Invalid Audiograms result contract.');
   const failures = Array.isArray(result.failures)
     ? result.failures.slice(0, 50).flatMap((failure) => {
-        if (!failure || !['worker', 'intake', 'metadata', 'transcript', 'selection', 'jev', 'assets', 'render', 'artifact_verification'].includes(failure.stage)) return [];
+        if (!failure || !['worker', 'intake', 'metadata', 'setup', 'transcript', 'selection', 'jev', 'assets', 'render', 'artifact_verification'].includes(failure.stage)) return [];
         if (typeof failure.code !== 'string' || !/^[A-Z][A-Z0-9_]{1,63}$/.test(failure.code)) return [];
         return [{
           stage: failure.stage,

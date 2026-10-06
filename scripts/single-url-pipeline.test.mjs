@@ -9,6 +9,7 @@ import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
+import { validateCliResult } from "../plugins/audiogram-helper/result-validation.mjs";
 
 const videoId = "dQw4w9WgXcQ";
 const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -234,6 +235,23 @@ test("rejects metadata for another video before creating a ledger job", async (t
   await assert.rejects(readFile(options.environment.AUDIOGRAM_DB_PATH), {
     code: "ENOENT",
   });
+});
+
+test("reports post-metadata configuration errors as setup failures", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-setup-failure-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  options.dependencies.resolveSelectionConfig = () => {
+    throw new Error("private configuration detail");
+  };
+
+  const result = await runSingleUrlPipeline(options);
+  const safeResult = await validateCliResult(result, directory);
+
+  assert.equal(result.failures[0].stage, "setup");
+  assert.equal(result.failures[0].code, "PIPELINE_SETUP_FAILED");
+  assert.equal(result.failures[0].message, "Audiogram processing could not be configured.");
+  assert.deepEqual(safeResult.failures, result.failures);
 });
 
 test("fails transcript acquisition without falling back to heatmap selection", async (t) => {
