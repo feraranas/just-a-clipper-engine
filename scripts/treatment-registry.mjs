@@ -1,3 +1,4 @@
+import { classicDefaults } from "../src/templates/catalog.mjs";
 import { safePathPart } from "./path-components.mjs";
 
 const treatmentKey = (id, version) => `${id}@${version}`;
@@ -80,6 +81,7 @@ export const audiogramBasicTreatment = Object.freeze({
     assertRequiredAssets(audiogramBasicTreatment, clipPackage);
     const assets = assetPathsByRole(clipPackage);
     return {
+      ...structuredClone(classicDefaults),
       title: clipPackage.title,
       audioFileName: toPublicFileName(assets.get("audio")),
       captionsFileName: toPublicFileName(assets.get("captions")),

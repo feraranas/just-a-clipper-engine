@@ -1,3 +1,4 @@
+import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { createServer } from "node:http";
@@ -56,6 +57,9 @@ const projectRoot = resolve(
 );
 const playlistTitle =
   process.env.AUDIOGRAM_YOUTUBE_PLAYLIST ?? "Audiogram Inbox";
+const templateChoice = resolveTemplateSelectionConfig({
+  environment: process.env,
+});
 const selectionConfig = resolveSelectionConfig(process.env);
 const selectionRecipe = buildSelectionRecipe(selectionConfig);
 const { packageVersion } = selectionConfig;
@@ -260,13 +264,16 @@ const executePipeline = async () => {
         processClipPackages({
           ledger,
           registry: treatmentRegistry,
-          treatments: [{ id: "audiogram-basic", version: "1" }],
+          treatments: [templateChoice.treatment],
           loadTranscriptForPackage: (packageId) =>
             ledger.getTranscriptForPackage(packageId),
           acquireAssets: (clipPackage) =>
             acquireClipPackageAssets(clipPackage, { projectRoot }),
           renderTreatment: ({ clipPackage, treatment }) =>
-            renderTreatmentRun({ clipPackage, treatment }, { projectRoot }),
+            renderTreatmentRun(
+              { clipPackage, treatment, selection: templateChoice.selection },
+              { projectRoot },
+            ),
           projectRoot,
           onArtifactComplete: publishingLedger
             ? ({
@@ -301,7 +308,7 @@ const executePipeline = async () => {
         {
           playlist,
           packageVersion,
-          treatments: ["audiogram-basic@1"],
+          treatments: [templateChoice.renderKey],
           ledgerPath,
           videosFound: selectedVideos.length,
           ...pipeline,

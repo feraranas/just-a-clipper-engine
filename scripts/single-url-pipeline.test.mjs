@@ -50,8 +50,10 @@ const transcriptSelection = {
       insightCueId: cueId(2),
       payoffCueId: cueId(3),
       endCueId: cueId(4),
-      contextSummary: "Provides setup for a new listener to understand the idea.",
-      insightSummary: "States the substantive insight grounded in transcript cues.",
+      contextSummary:
+        "Provides setup for a new listener to understand the idea.",
+      insightSummary:
+        "States the substantive insight grounded in transcript cues.",
       payoffSummary: "Completes the thought with its practical consequence.",
       score: 1 - rank / 10,
       editorialChecks: {
@@ -65,7 +67,10 @@ const transcriptSelection = {
   }),
 };
 
-const createOptions = async (directory, { media = metadata, transcriptError } = {}) => {
+const createOptions = async (
+  directory,
+  { media = metadata, transcriptError } = {},
+) => {
   const databaseDirectory = join(directory, "state");
   await mkdir(databaseDirectory, { recursive: true });
   const environment = {
@@ -117,11 +122,21 @@ const createOptions = async (directory, { media = metadata, transcriptError } = 
             },
           };
         },
-        acquireAssets: async (clipPackage) => [
-          { role: "audio", relativePath: `public/generated/${videoId}/audio.wav` },
-          { role: "captions", relativePath: `public/generated/${videoId}/captions.json` },
-          { role: "thumbnail", relativePath: `public/generated/${videoId}/thumbnail.jpg` },
-        ].map((asset) => ({ ...asset, clipPackageId: clipPackage.id })),
+        acquireAssets: async (clipPackage) =>
+          [
+            {
+              role: "audio",
+              relativePath: `public/generated/${videoId}/audio.wav`,
+            },
+            {
+              role: "captions",
+              relativePath: `public/generated/${videoId}/captions.json`,
+            },
+            {
+              role: "thumbnail",
+              relativePath: `public/generated/${videoId}/thumbnail.jpg`,
+            },
+          ].map((asset) => ({ ...asset, clipPackageId: clipPackage.id })),
         renderTreatment: async ({ clipPackage, treatment }) => {
           const relativePath = `out/treatments/${treatment.id}/${treatment.version}/${videoId}/transcript-llm-v1/clip-${clipPackage.rank}.mp4`;
           const artifactPath = join(directory, relativePath);
@@ -156,8 +171,12 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   assert.equal(getProviderRequestCount(), 1);
   assert.equal(options.environment.AUDIOGRAM_CLIP_SELECTOR, undefined);
   assert.equal(result.status, "complete");
-  assert.deepEqual(result.source, { videoId, title: metadata.title, url: sourceUrl });
-  assert.deepEqual(result.artifactPaths, renderedPaths);
+  assert.deepEqual(result.source, {
+    videoId,
+    title: metadata.title,
+    url: sourceUrl,
+  });
+  assert.deepEqual([...result.artifactPaths].sort(), [...renderedPaths].sort());
 
   const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
   try {
@@ -183,7 +202,10 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   } finally {
     approvalLedger.close();
   }
-  assert.equal((await readFile(join(directory, renderedPaths[0]))).length > 0, true);
+  assert.equal(
+    (await readFile(join(directory, renderedPaths[0]))).length > 0,
+    true,
+  );
 });
 
 test("passes safe stage events through the dependency callback", async (t) => {
@@ -193,13 +215,33 @@ test("passes safe stage events through the dependency callback", async (t) => {
   const events = [];
   options.dependencies.onEvent = async (event) => events.push(event);
   await runSingleUrlPipeline(options);
-  const orderedStages = ["intake", "metadata", "transcript", "selection", "jev", "assets", "render", "artifact_verification"];
-  const firstIndexes = orderedStages.map((stage) => events.findIndex((event) => event.stage === stage));
+  const orderedStages = [
+    "intake",
+    "metadata",
+    "transcript",
+    "selection",
+    "jev",
+    "assets",
+    "render",
+    "artifact_verification",
+  ];
+  const firstIndexes = orderedStages.map((stage) =>
+    events.findIndex((event) => event.stage === stage),
+  );
   assert.ok(firstIndexes.every((index) => index >= 0));
-  assert.deepEqual(firstIndexes, [...firstIndexes].sort((a, b) => a - b));
+  assert.deepEqual(
+    firstIndexes,
+    [...firstIndexes].sort((a, b) => a - b),
+  );
   assert.equal(events.find((event) => event.stage === "jev").status, "skipped");
-  assert.equal(events.find((event) => event.stage === "artifact_verification").status, "started");
-  assert.equal(events.findLast((event) => event.stage === "artifact_verification").status, "completed");
+  assert.equal(
+    events.find((event) => event.stage === "artifact_verification").status,
+    "started",
+  );
+  assert.equal(
+    events.findLast((event) => event.stage === "artifact_verification").status,
+    "completed",
+  );
   assert.equal(JSON.stringify(events).includes("Transcript cue"), false);
 });
 
@@ -250,7 +292,10 @@ test("reports post-metadata configuration errors as setup failures", async (t) =
 
   assert.equal(result.failures[0].stage, "setup");
   assert.equal(result.failures[0].code, "PIPELINE_SETUP_FAILED");
-  assert.equal(result.failures[0].message, "Audiogram processing could not be configured.");
+  assert.equal(
+    result.failures[0].message,
+    "Audiogram processing could not be configured.",
+  );
   assert.deepEqual(safeResult.failures, result.failures);
 });
 
@@ -274,7 +319,9 @@ test("fails transcript acquisition without falling back to heatmap selection", a
 });
 
 test("retries failed transcript work when the caller marks a job as a retry", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "single-url-retry-transcript-"));
+  const directory = await mkdtemp(
+    join(tmpdir(), "single-url-retry-transcript-"),
+  );
   t.after(() => rm(directory, { recursive: true, force: true }));
   const { options } = await createOptions(directory);
   let failTranscript = true;
@@ -309,12 +356,14 @@ test("reports partial rendering failure with only verified finished clips", asyn
   assert.equal(result.status, "partial");
   assert.equal(result.error.code, "PROCESSING_FAILED");
   assert.equal(result.failures[0].stage, "render");
-  assert.deepEqual(result.artifactPaths, renderedPaths);
+  assert.deepEqual([...result.artifactPaths].sort(), [...renderedPaths].sort());
   assert.equal(result.artifactPaths.length, 2);
 });
 
 test("reports artifact verification failure when rendering records no verified files", async (t) => {
-  const directory = await mkdtemp(join(tmpdir(), "single-url-unverified-artifact-"));
+  const directory = await mkdtemp(
+    join(tmpdir(), "single-url-unverified-artifact-"),
+  );
   t.after(() => rm(directory, { recursive: true, force: true }));
   const { options } = await createOptions(directory);
   options.dependencies.renderTreatment = async ({ clipPackage, treatment }) =>
@@ -324,9 +373,143 @@ test("reports artifact verification failure when rendering records no verified f
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "NO_VERIFIED_ARTIFACTS");
-  assert.deepEqual(result.failures, [{
-    stage: "artifact_verification",
-    code: "NO_VERIFIED_ARTIFACTS",
-    message: "Processing did not produce a verified MP4 artifact.",
-  }]);
+  assert.deepEqual(result.failures, [
+    {
+      stage: "artifact_verification",
+      code: "NO_VERIFIED_ARTIFACTS",
+      message: "Processing did not produce a verified MP4 artifact.",
+    },
+  ]);
+});
+
+test("invalid template fails before metadata or database work", async () => {
+  let calls = 0;
+  const result = await runSingleUrlPipeline({
+    url: sourceUrl,
+    templateSelection: { templateId: "missing" },
+    dependencies: {
+      fetchMetadata: async () => {
+        calls++;
+        return metadata;
+      },
+      openLedger: () => {
+        calls++;
+        throw Error("must not open");
+      },
+    },
+  });
+  assert.equal(calls, 0);
+  assert.equal(result.error.code, "INVALID_TEMPLATE_SELECTION");
+});
+test("unrelated failed treatment does not fail a completed selected result", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-selected-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  assert.equal((await runSingleUrlPipeline(options)).status, "complete");
+  const { openAudiogramLedger } = await import("./audiogram-ledger.mjs");
+  const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
+  const job = ledger.getPackageJob(videoId, "transcript-llm-v1");
+  for (const pkg of ledger.listClipPackages(job.id)) {
+    const run = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "other",
+      treatmentVersion: "1",
+    });
+    ledger.markTreatmentRunFailed(run.id, "Other style failed");
+  }
+  ledger.close();
+  assert.equal((await runSingleUrlPipeline(options)).status, "complete");
+});
+
+test("returns only the requested treatment artifacts when another treatment exists", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "selected-results-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const first = await runSingleUrlPipeline(options);
+  assert.equal(first.status, "complete");
+  const { createTreatmentRegistry, audiogramBasicTreatment } =
+    await import("./treatment-registry.mjs");
+  options.dependencies.registry = createTreatmentRegistry([
+    audiogramBasicTreatment,
+    { ...audiogramBasicTreatment, id: "test-only" },
+  ]);
+  options.dependencies.resolveTemplateSelectionConfig = () => ({
+    selection: {
+      templateId: "test-only",
+      templateVersion: "1",
+      variationId: "default",
+    },
+    treatment: { id: "test-only", version: "1" },
+    compositionId: "AudiogramBasic",
+    renderKey: "test-only@1",
+  });
+  const second = await runSingleUrlPipeline(options);
+  assert.equal(second.status, "complete");
+  assert.equal(second.artifactPaths.length, 3);
+  assert.ok(
+    second.artifactPaths.every((p) =>
+      p.startsWith("out/treatments/test-only/1/"),
+    ),
+  );
+  assert.ok(
+    second.artifactPaths.every((p) => !first.artifactPaths.includes(p)),
+  );
+  await rm(join(directory, second.artifactPaths[0]));
+  const missing = await runSingleUrlPipeline(options);
+  assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
+  assert.equal(missing.status, "partial");
+  assert.equal(missing.artifactPaths.length, 2);
+});
+
+test("explicit retry recovers only the failed render and preserves completed clips", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-retry-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const render = options.dependencies.renderTreatment;
+  const attempts = [];
+  let shouldFail = true;
+  options.dependencies.renderTreatment = async (input) => {
+    attempts.push(input.clipPackage.rank);
+    if (input.clipPackage.rank === 2 && shouldFail)
+      throw Error("synthetic render failure");
+    return render(input);
+  };
+  assert.equal((await runSingleUrlPipeline(options)).status, "partial");
+  assert.deepEqual(attempts, [1, 2, 3]);
+  assert.equal((await runSingleUrlPipeline(options)).status, "partial");
+  assert.deepEqual(attempts, [1, 2, 3]);
+  assert.equal(
+    (await runSingleUrlPipeline({ ...options, retryFailedRenders: true }))
+      .status,
+    "partial",
+  );
+  assert.deepEqual(attempts, [1, 2, 3, 2]);
+  shouldFail = false;
+  const result = await runSingleUrlPipeline({
+    ...options,
+    retryFailedRenders: true,
+  });
+  assert.equal(result.status, "complete");
+  assert.equal(result.artifactPaths.length, 3);
+  assert.deepEqual(attempts, [1, 2, 3, 2, 2]);
+  assert.equal(
+    (await runSingleUrlPipeline({ ...options, retryFailedRenders: true }))
+      .status,
+    "complete",
+  );
+  assert.deepEqual(attempts, [1, 2, 3, 2, 2]);
+  const ledger = openAudiogramLedger(options.environment.AUDIOGRAM_DB_PATH);
+  try {
+    const job = ledger.getPackageJob(videoId, "transcript-llm-v1");
+    const pkg = ledger.listClipPackages(job.id).find((p) => p.rank === 2);
+    const run = ledger.listTreatmentRuns(pkg.id)[0];
+    const retries = ledger.listTreatmentRunRetries(run.id);
+    assert.equal(retries.length, 2);
+    assert.ok(
+      retries.every((r) => r.previous_error === "synthetic render failure"),
+    );
+    assert.equal(run.status, "rendered");
+  } finally {
+    ledger.close();
+  }
 });

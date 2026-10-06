@@ -17,7 +17,8 @@ Run before implementation.
 1. Identify the feature boundary and create or update
    `docs/features/<feature>.md`.
 2. Add machine-readable frontmatter with `feature`, `status: DESIGN`,
-   `design-reviewed: true`, and `implementation-reconciled: false`.
+   `design-reviewed: false`, and `implementation-reconciled: false`.
+   Set design-reviewed true after review, before implementation.
 3. Include a Mermaid `flowchart` showing major actors, inputs,
    transformations, persistence points, and outcomes.
 4. Include a Mermaid `stateDiagram-v2` when the feature has lifecycle states,
@@ -25,6 +26,10 @@ Run before implementation.
 5. Document the human approval and external-side-effect boundary,
    failure/retry paths, invariants, and a brief changed/unchanged summary.
 6. Do not begin implementation until the DESIGN note has been reviewed.
+7. Set status IN_PROGRESS when implementation starts; retain
+   implementation-reconciled false until reconciliation finishes.
+8. Commit and push notes at any stage. Keep the same path. Use a pending
+   statement in the reconciliation section until that work is complete.
 
 ## Phase 2: RECONCILE
 
@@ -65,3 +70,18 @@ Each completed note must contain headings for Mermaid flowchart,
 Lifecycle/state diagram, Human approval and external-side-effect boundaries,
 Failure and retry paths, Invariants, and Implementation reconciliation and
 deviations. Include a brief changed/unchanged summary as well.
+
+
+## Push validation and merge readiness
+
+All stages require the documented sections. The verifier accepts DESIGN,
+IN_PROGRESS and COMPLETE with consistent metadata. A successful push is not
+an implementation-completion claim. Documentation-only PRs can merge with
+DESIGN notes. Implementation PRs must declare their feature paths in one body
+line: `Feature-docs: docs/features/<feature>.md` (comma-separated for several).
+Only declared notes must be COMPLETE for PR readiness. Keep incomplete
+implementation PRs in draft. Unrelated future designs do not block readiness.
+For maintenance with no feature behavior, use `Feature-docs: none` and a
+`Feature-docs-reason:` line; a reviewer must assess the exemption.
+Do not falsely mark notes complete or bypass hooks to push unfinished work.
+See AGENTS.md for the documentation-only path policy and enforcement boundary.

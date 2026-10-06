@@ -10,7 +10,7 @@ const REQUIRED_SECTIONS = [
   'Implementation reconciliation and deviations',
 ];
 
-function parseFrontmatter(content) {
+export function parseFrontmatter(content) {
   const match = content.match(/^---\n([\s\S]*?)\n---\n/);
   if (!match) return {};
   return Object.fromEntries(match[1].split('\n').flatMap((line) => {
@@ -34,9 +34,17 @@ export function verifyFeatureDocs(root = process.cwd()) {
     const content = readFileSync(join(directory, file), 'utf8');
     const metadata = parseFrontmatter(content);
     if (!metadata.feature) errors.push(`${relative}: feature is required`);
-    if (metadata['design-reviewed'] !== 'true') errors.push(`${relative}: design-reviewed must be true`);
-    if (metadata['implementation-reconciled'] !== 'true') errors.push(`${relative}: implementation-reconciled must be true`);
-    if (metadata.status !== 'COMPLETE') errors.push(`${relative}: status must be COMPLETE`);
+    if (!['DESIGN', 'IN_PROGRESS', 'COMPLETE'].includes(metadata.status)) {
+      errors.push(`${relative}: status must be DESIGN, IN_PROGRESS or COMPLETE`);
+    }
+    const reviewValues = metadata.status === 'DESIGN' ? ['true', 'false'] : ['true'];
+    if (!reviewValues.includes(metadata['design-reviewed'])) {
+      errors.push(`${relative}: design-reviewed must be ${reviewValues.join(' or ')}`);
+    }
+    const expectedReconciliation = metadata.status === 'COMPLETE' ? 'true' : 'false';
+    if (metadata['implementation-reconciled'] !== expectedReconciliation) {
+      errors.push(`${relative}: implementation-reconciled must be ${expectedReconciliation} for ${metadata.status}`);
+    }
     for (const section of REQUIRED_SECTIONS) {
       if (!new RegExp(`^## ${section.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`, 'm').test(content)) {
         errors.push(`${relative}: missing required section "${section}"`);

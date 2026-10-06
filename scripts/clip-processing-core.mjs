@@ -13,13 +13,21 @@ export const processClipPackages = async ({
   projectRoot = process.cwd(),
   videoId,
   onEvent,
+  retryFailedRenders = false,
 }) => {
+  if (typeof retryFailedRenders !== "boolean")
+    throw new Error("retryFailedRenders must be boolean");
+  if (retryFailedRenders && !videoId)
+    throw new Error("retryFailedRenders requires videoId");
   const result = {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
     failures: [],
   };
   const transcriptsById = new Map();
+  const requestedKeys = new Set(
+    treatments.map(({ id, version }) => `${id}@${version}`),
+  );
 
   const matchesVideo = (item) => !videoId || item.videoId === videoId;
   for (const clipPackage of ledger
@@ -54,17 +62,24 @@ export const processClipPackages = async ({
   for (const clipPackage of ledger.listReadyPackages().filter(matchesVideo)) {
     for (const { id, version } of treatments) {
       registry.get(id, version);
-      ledger.ensureTreatmentRun({
+      const run = ledger.ensureTreatmentRun({
         packageId: clipPackage.id,
         treatmentId: id,
         treatmentVersion: version,
       });
+      if (retryFailedRenders && run.status === "failed") {
+        ledger.retryFailedTreatmentRun(run.id);
+      }
     }
   }
 
   for (const run of ledger
     .listPendingTreatmentRuns()
-    .filter((item) => !videoId || item.videoId === videoId)) {
+    .filter(
+      (item) =>
+        (!videoId || item.videoId === videoId) &&
+        requestedKeys.has(`${item.treatmentId}@${item.treatmentVersion}`),
+    )) {
     try {
       const treatment = registry.get(run.treatmentId, run.treatmentVersion);
       const clipPackage = ledger.getClipPackage(run.clipPackageId);

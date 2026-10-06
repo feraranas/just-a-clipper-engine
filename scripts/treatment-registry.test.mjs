@@ -32,6 +32,18 @@ test("registers audiogram-basic@1 and builds public-relative render props", () =
   assert.equal(treatment.compositionId, "AudiogramBasic");
   assert.deepEqual(treatment.output, { extension: "mp4", codec: "h264" });
   assert.deepEqual(treatment.buildProps(clipPackage), {
+    titleColor: "rgba(186, 186, 186, 0.93)",
+    captionsTextColor: "rgba(255, 255, 255, 0.93)",
+    onlyDisplayCurrentSentence: true,
+    visualizer: {
+      type: "oscilloscope",
+      color: "#6B6B6B",
+      numberOfSamples: "32",
+      windowInSeconds: 0.1,
+      posterization: 3,
+      amplitude: 4,
+      padding: 50,
+    },
     title: "A useful clip",
     audioFileName: "generated/video-1/v1/clip-1/audio.wav",
     captionsFileName: "generated/video-1/v1/clip-1/captions.json",

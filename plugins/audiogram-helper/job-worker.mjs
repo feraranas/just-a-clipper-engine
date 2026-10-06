@@ -1,3 +1,4 @@
+import { resolveTemplateSelection } from "../../src/templates/catalog.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, openSync, writeSync } from "node:fs";
 import { parseArgs } from "node:util";
@@ -155,6 +156,7 @@ function executeCli({
 export async function runJobWorker({
   jobId,
   sourceUrl,
+  templateSelection,
   projectRoot,
   jobStorePath,
   diagnosticsRoot,
@@ -164,10 +166,19 @@ export async function runJobWorker({
   isWorkerOutputIncomplete = () => false,
 }) {
   const store = createJobStore(jobStorePath);
-  let diagnosticsIncomplete = environment.AUDIOGRAM_DIAGNOSTICS_INCOMPLETE === "1";
+  let diagnosticsIncomplete =
+    environment.AUDIOGRAM_DIAGNOSTICS_INCOMPLETE === "1";
   try {
     const job = store.getJob(jobId);
     if (!job) throw new Error("Job does not exist.");
+    const resolved = resolveTemplateSelection(job.selection);
+    if (
+      job.renderKey !== resolved.renderKey ||
+      (templateSelection !== undefined &&
+        resolveTemplateSelection(templateSelection).renderKey !==
+          resolved.renderKey)
+    )
+      throw new Error("Worker selection does not match stored job");
     const diagnostics = createJobDiagnostics({
       projectRoot,
       diagnosticsRoot,
@@ -181,12 +192,22 @@ export async function runJobWorker({
       "--job-id",
       jobId,
     ];
+    args.push(
+      "--template",
+      resolved.selection.templateId,
+      "--template-version",
+      resolved.selection.templateVersion,
+      "--variation",
+      resolved.selection.variationId,
+    );
     if (job.retryOfJobId) args.push("--retry");
     const childEnvironment = {
       ...environment,
       AUDIOGRAM_PROJECT_ROOT: projectRoot,
       AUDIOGRAM_DIAGNOSTICS_ROOT: diagnostics.root,
-      ...(diagnosticsIncomplete ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: "1" } : {}),
+      ...(diagnosticsIncomplete
+        ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: "1" }
+        : {}),
     };
     try {
       const output = await (runCommand
@@ -263,7 +284,13 @@ if (
   path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)
 ) {
   const { values } = parseArgs({
-    options: { "job-id": { type: "string" }, url: { type: "string" } },
+    options: {
+      "job-id": { type: "string" },
+      url: { type: "string" },
+      template: { type: "string" },
+      "template-version": { type: "string" },
+      variation: { type: "string" },
+    },
     strict: true,
   });
   const projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
@@ -273,7 +300,17 @@ if (
   const isWorkerOutputIncomplete = boundProcessOutput({
     maxFileBytes: boundedLimit(process.env),
   });
+  const templateSelection = {};
+  for (const [flag, key] of [
+    ["template", "templateId"],
+    ["template-version", "templateVersion"],
+    ["variation", "variationId"],
+  ])
+    if (values[flag] !== undefined) templateSelection[key] = values[flag];
   await runJobWorker({
+    templateSelection: Object.keys(templateSelection).length
+      ? templateSelection
+      : undefined,
     jobId: values["job-id"],
     sourceUrl: values.url,
     projectRoot,

@@ -1,14 +1,15 @@
 import "./index.css";
 import { ALL_FORMATS, Input, UrlSource } from "mediabunny";
-import { Composition, staticFile } from "remotion";
+import { Composition, Folder, staticFile } from "remotion";
 import { AudiogramBasic } from "./Audiogram/Main";
 import { audiogramSchema } from "./Audiogram/schema";
 import { getSubtitles } from "./helpers/fetch-captions";
+import { classicDefaults, listTemplates } from "./templates/catalog.mjs";
 import { FPS } from "./helpers/ms-to-frame";
 
 export const RemotionRoot: React.FC = () => {
   return (
-    <>
+    <Folder name={listTemplates()[0].label}>
       <Composition
         id="AudiogramBasic"
         component={AudiogramBasic}
@@ -21,22 +22,9 @@ export const RemotionRoot: React.FC = () => {
           // podcast data
           title: "Ep 550 - Supper Club × Remotion React",
           coverImageFileName: "podcast-cover.jpeg",
-          titleColor: "rgba(186, 186, 186, 0.93)",
-          // captions settings
           captions: null,
           captionsFileName: "captions.json",
-          onlyDisplayCurrentSentence: true,
-          captionsTextColor: "rgba(255, 255, 255, 0.93)",
-          // visualizer settings
-          visualizer: {
-            type: "oscilloscope",
-            color: "#6B6B6B",
-            numberOfSamples: "32",
-            windowInSeconds: 0.1,
-            posterization: 3,
-            amplitude: 4,
-            padding: 50,
-          },
+          ...classicDefaults,
         }}
         // Determine the length of the video based on the duration of the audio file
         calculateMetadata={async ({ props }) => {
@@ -63,6 +51,6 @@ export const RemotionRoot: React.FC = () => {
           }
         }}
       />
-    </>
+    </Folder>
   );
 };

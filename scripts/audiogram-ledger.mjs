@@ -987,6 +987,14 @@ export const openAudiogramLedger = (
       database.exec("PRAGMA foreign_keys = ON");
     }
     database.exec("PRAGMA journal_mode = WAL");
+    database.exec(`
+      CREATE TABLE IF NOT EXISTS treatment_run_retries (
+        id INTEGER PRIMARY KEY,
+        treatment_run_id INTEGER NOT NULL REFERENCES treatment_runs(id) ON DELETE CASCADE,
+        previous_error TEXT,
+        created_at TEXT NOT NULL
+      ) STRICT;
+    `);
   } catch (error) {
     database.close();
     throw error;
@@ -1581,30 +1589,66 @@ export const openAudiogramLedger = (
         )
         .run(sanitizeErrorDiagnostic(error), now(), packageId);
     },
-    resetFailedWorkForRetry: ({ videoId, packageVersion }) => {
+    resetFailedWorkForRetry: ({ videoId, packageVersion, treatment }) => {
       const job = getPackageJobStatement.get(videoId, packageVersion);
-      if (!job) throw new Error("Cannot retry pipeline work without an existing package job.");
+      if (!job)
+        throw new Error(
+          "Cannot retry pipeline work without an existing package job.",
+        );
       const timestamp = now();
       database.exec("BEGIN IMMEDIATE");
       try {
-        const packageJob = database.prepare(`
+        const packageJob = database
+          .prepare(
+            `
           UPDATE package_jobs
           SET status = 'discovered', last_error = NULL, updated_at = ?
           WHERE id = ? AND status = 'failed'
-        `).run(timestamp, job.id);
-        const packages = database.prepare(`
+        `,
+          )
+          .run(timestamp, job.id);
+        const packages = database
+          .prepare(
+            `
           UPDATE clip_packages
           SET status = 'selected', last_error = NULL, updated_at = ?
           WHERE package_job_id = ? AND status = 'failed'
-        `).run(timestamp, job.id);
-        const treatments = database.prepare(`
+        `,
+          )
+          .run(timestamp, job.id);
+        database
+          .prepare(
+            `INSERT INTO treatment_run_retries (treatment_run_id, previous_error, created_at)
+          SELECT id, last_error, ? FROM treatment_runs
+          WHERE status = 'failed' AND (? IS NULL OR (treatment_id = ? AND treatment_version = ?))
+          AND clip_package_id IN (SELECT id FROM clip_packages WHERE package_job_id = ?)
+        `,
+          )
+          .run(
+            timestamp,
+            treatment?.id ?? null,
+            treatment?.id ?? null,
+            treatment?.version ?? null,
+            job.id,
+          );
+        const treatments = database
+          .prepare(
+            `
           UPDATE treatment_runs
           SET status = 'pending', artifact_relative_path = NULL,
               last_error = NULL, updated_at = ?
           WHERE status = 'failed' AND clip_package_id IN (
             SELECT id FROM clip_packages WHERE package_job_id = ?
+          ) AND (? IS NULL OR (treatment_id = ? AND treatment_version = ?))
+        `,
           )
-        `).run(timestamp, job.id);
+          .run(
+            timestamp,
+            job.id,
+            treatment?.id ?? null,
+            treatment?.id ?? null,
+            treatment?.version ?? null,
+          );
         database.exec("COMMIT");
         return {
           packageJobs: packageJob.changes,
@@ -1661,6 +1705,50 @@ export const openAudiogramLedger = (
           )
           .run(timestamp, packageId);
         database.exec("COMMIT");
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    listTreatmentRunRetries: (runId) =>
+      database
+        .prepare(
+          "SELECT * FROM treatment_run_retries WHERE treatment_run_id = ? ORDER BY id",
+        )
+        .all(runId),
+    retryFailedTreatmentRun: (runId) => {
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const run = database
+          .prepare(
+            `
+          SELECT treatment_runs.* FROM treatment_runs
+          JOIN clip_packages ON clip_packages.id = treatment_runs.clip_package_id
+          WHERE treatment_runs.id = ? AND treatment_runs.status = 'failed'
+            AND clip_packages.status = 'ready'
+        `,
+          )
+          .get(runId);
+        if (!run) {
+          database.exec("COMMIT");
+          return false;
+        }
+        const timestamp = now();
+        database
+          .prepare(
+            `INSERT INTO treatment_run_retries
+          (treatment_run_id, previous_error, created_at) VALUES (?, ?, ?)`,
+          )
+          .run(runId, run.last_error, timestamp);
+        database
+          .prepare(
+            `UPDATE treatment_runs SET status = 'pending',
+          last_error = NULL, artifact_relative_path = NULL, updated_at = ?
+          WHERE id = ? AND status = 'failed'`,
+          )
+          .run(timestamp, runId);
+        database.exec("COMMIT");
+        return true;
       } catch (error) {
         database.exec("ROLLBACK");
         throw error;

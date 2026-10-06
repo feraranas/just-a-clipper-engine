@@ -1,0 +1,55 @@
+{
+  "baselineCommit": "9f48744711ea1af4f5eaa6560fdea93b94425365",
+  "remotion": "4.0.525",
+  "browser": "Chrome Headless Shell 149.0.7790.0",
+  "dimensions": [
+    1080,
+    1920
+  ],
+  "fps": 30,
+  "frames": "0-179",
+  "concurrency": 1,
+  "codec": "h264",
+  "imageFormat": "jpeg",
+  "fonts": {
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxTKYbABA.woff2": {
+      "file": "out/classic-regression/fonts/7d0037a170882a49e65a45c38ef195237bb07b1cc791d078379f0ac0d7ae1935.woff2",
+      "sha256": "7d0037a170882a49e65a45c38ef195237bb07b1cc791d078379f0ac0d7ae1935"
+    },
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxaKYbABA.woff2": {
+      "file": "out/classic-regression/fonts/9409ee21811f0f5272b7e1d828fe8838005b0573481ef906e7e55b63f6610ab0.woff2",
+      "sha256": "9409ee21811f0f5272b7e1d828fe8838005b0573481ef906e7e55b63f6610ab0"
+    },
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxdKYbABA.woff2": {
+      "file": "out/classic-regression/fonts/f598dd0700f155e2facfaa8ecfacace397d4c2c153e9ce37ab7ad310e8505bc2.woff2",
+      "sha256": "f598dd0700f155e2facfaa8ecfacace397d4c2c153e9ce37ab7ad310e8505bc2"
+    },
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxRKYbABA.woff2": {
+      "file": "out/classic-regression/fonts/73e7f7b1c980416ae0c2461268b14c7cfcce0668e683dc43fbb11a82a227b9f2.woff2",
+      "sha256": "73e7f7b1c980416ae0c2461268b14c7cfcce0668e683dc43fbb11a82a227b9f2"
+    },
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxQKYbABA.woff2": {
+      "file": "out/classic-regression/fonts/d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81.woff2",
+      "sha256": "d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81"
+    },
+    "https://fonts.gstatic.com/s/ibmplexsans/v23/zYXzKVElMYYaJe8bpLHnCwDKr932-G7dytD-Dmu1syxeKYY.woff2": {
+      "file": "out/classic-regression/fonts/e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470.woff2",
+      "sha256": "e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470"
+    }
+  },
+  "fileHashes": {
+    "tests/fixtures/classic-v1/audio.wav": "982a8e12cba2a28967089cb3a1e605a5fcfc1abf2c6a38203b09a7c16847571d",
+    "tests/fixtures/classic-v1/thumbnail.svg": "5ac5f61f64d79afe53158bcfe3c105d35c6b800ce4132876770803efd9fb529a",
+    "tests/fixtures/classic-v1/captions.json": "ff51e533e7abc98c47c95b985005d8c7556d19e25547e34ac08e48241321e160",
+    "tests/fixtures/classic-v1/props.json": "89875f8ede06ce6065b6abd0470a4574364775fcce8f34d2b2d32a9942781cb7",
+    "package-lock.json": "c18ba7097ea814978bfb31d488a9c8b4e7bd9bb4a964be224b5e0cbce390539d",
+    "remotion.config.ts": "22beb54e7dc3e01fc2b479471d7317ede7797c993b50fac658356187916bc59d",
+    "out/classic-regression/fonts/7d0037a170882a49e65a45c38ef195237bb07b1cc791d078379f0ac0d7ae1935.woff2": "7d0037a170882a49e65a45c38ef195237bb07b1cc791d078379f0ac0d7ae1935",
+    "out/classic-regression/fonts/9409ee21811f0f5272b7e1d828fe8838005b0573481ef906e7e55b63f6610ab0.woff2": "9409ee21811f0f5272b7e1d828fe8838005b0573481ef906e7e55b63f6610ab0",
+    "out/classic-regression/fonts/f598dd0700f155e2facfaa8ecfacace397d4c2c153e9ce37ab7ad310e8505bc2.woff2": "f598dd0700f155e2facfaa8ecfacace397d4c2c153e9ce37ab7ad310e8505bc2",
+    "out/classic-regression/fonts/73e7f7b1c980416ae0c2461268b14c7cfcce0668e683dc43fbb11a82a227b9f2.woff2": "73e7f7b1c980416ae0c2461268b14c7cfcce0668e683dc43fbb11a82a227b9f2",
+    "out/classic-regression/fonts/d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81.woff2": "d160e20920ae4d6556518d352d3af27a74e9b0de3d8fe17b1c1044fc75aa2f81",
+    "out/classic-regression/fonts/e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470.woff2": "e2291e842cf5af167122a22881a740c7f2dda7716f1e8cd76680264f4a859470"
+  },
+  "baselineSha256": "7df0903c9cc96031fbb51d8e32e818af7d814948fbc5dcb4062a778fc78f0969"
+}

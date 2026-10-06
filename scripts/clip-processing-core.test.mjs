@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import test from "node:test";
+import { DatabaseSync } from "node:sqlite";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
@@ -46,7 +47,10 @@ test("a completed package and treatment are skipped on the next run", async (t) 
   let renders = 0;
   const events = [];
   const dependencies = {
-    onEvent: async (event) => { events.push(event); throw Error("logging unavailable"); },
+    onEvent: async (event) => {
+      events.push(event);
+      throw Error("logging unavailable");
+    },
     ledger,
     registry: createTreatmentRegistry([audiogramBasicTreatment]),
     treatments: [{ id: "audiogram-basic", version: "1" }],
@@ -71,7 +75,15 @@ test("a completed package and treatment are skipped on the next run", async (t) 
 
   assert.equal(acquisitions, 1);
   assert.equal(renders, 1);
-  assert.deepEqual(events.map(({ stage, status }) => [stage, status]), [["assets", "started"], ["assets", "completed"], ["render", "started"], ["render", "completed"]]);
+  assert.deepEqual(
+    events.map(({ stage, status }) => [stage, status]),
+    [
+      ["assets", "started"],
+      ["assets", "completed"],
+      ["render", "started"],
+      ["render", "completed"],
+    ],
+  );
   assert.deepEqual(first, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 1, failed: 0 },
@@ -111,7 +123,9 @@ test("a failed package does not prevent another package from rendering", async (
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 1 },
     treatments: { rendered: 1, failed: 0 },
-    failures: [{ stage: "assets", code: "ASSET_FAILED", packageId: packages[0].id }],
+    failures: [
+      { stage: "assets", code: "ASSET_FAILED", packageId: packages[0].id },
+    ],
   });
   assert.equal(ledger.getClipPackage(packages[0].id).status, "failed");
   assert.equal(ledger.getClipPackage(packages[1].id).status, "ready");
@@ -144,7 +158,9 @@ test("a render failure leaves the reusable package ready", async (t) => {
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 0, failed: 1 },
-    failures: [{ stage: "render", code: "RENDER_FAILED", packageId: clipPackage.id }],
+    failures: [
+      { stage: "render", code: "RENDER_FAILED", packageId: clipPackage.id },
+    ],
   });
   assert.equal(ledger.getClipPackage(clipPackage.id).status, "ready");
   assert.equal(ledger.listTreatmentRuns(clipPackage.id)[0].status, "failed");
@@ -332,4 +348,158 @@ test("reopens persisted transcript selections and reuses one transcript for part
     { commands: commands.length, renders, transcriptLoads },
     beforeSecond,
   );
+});
+
+test("does not execute a different treatment pending for the same video", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "selected-treatment-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const ledger = openAudiogramLedger(join(directory, "ledger.sqlite"));
+  t.after(() => ledger.close());
+  const [pkg] = seedPackages(ledger);
+  ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+  const other = ledger.ensureTreatmentRun({
+    packageId: pkg.id,
+    treatmentId: "other",
+    treatmentVersion: "1",
+  });
+  const first = { ...audiogramBasicTreatment, requiredAssetRoles: [] };
+  const second = { ...first, id: "other" };
+  const rendered = [];
+  const result = await processClipPackages({
+    ledger,
+    registry: createTreatmentRegistry([first, second]),
+    treatments: [{ id: first.id, version: first.version }],
+    videoId: "video-1",
+    renderTreatment: async ({ treatment }) => {
+      rendered.push(treatment.id);
+      return `out/${treatment.id}.mp4`;
+    },
+  });
+  assert.deepEqual(rendered, ["audiogram-basic"]);
+  assert.equal(result.treatments.rendered, 1);
+  assert.equal(
+    ledger.listPendingTreatmentRuns().some((run) => run.id === other.id),
+    true,
+  );
+});
+
+test("retry leaves completed runs and unselected templates and videos unchanged", async () => {
+  const ledger = openAudiogramLedger(":memory:");
+  try {
+    const [pkg] = seedPackages(ledger);
+    ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+    const selected = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "audiogram-basic",
+      treatmentVersion: "1",
+    });
+    const other = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "other",
+      treatmentVersion: "1",
+    });
+    ledger.markTreatmentRunFailed(selected.id, "selected failed");
+    ledger.markTreatmentRunFailed(other.id, "other failed");
+    const input = {
+      ledger,
+      registry: createTreatmentRegistry([audiogramBasicTreatment]),
+      treatments: [{ id: "audiogram-basic", version: "1" }],
+      retryFailedRenders: true,
+      renderTreatment: async () => "out/test.mp4",
+    };
+    await processClipPackages({ ...input, videoId: "other-video" });
+    assert.equal(ledger.listTreatmentRuns(pkg.id)[0].status, "failed");
+    await processClipPackages({ ...input, videoId: "video-1" });
+    const runs = ledger.listTreatmentRuns(pkg.id);
+    assert.equal(runs.find((r) => r.id === selected.id).status, "rendered");
+    assert.equal(runs.find((r) => r.id === other.id).status, "failed");
+    assert.equal(ledger.retryFailedTreatmentRun(selected.id), false);
+    assert.equal(ledger.listTreatmentRunRetries(selected.id).length, 1);
+    assert.equal(ledger.listTreatmentRunRetries(other.id).length, 0);
+    await assert.rejects(
+      processClipPackages({ ...input, videoId: undefined }),
+      /videoId/,
+    );
+  } finally {
+    ledger.close();
+  }
+});
+
+test("retry audit and reset are atomic and survive reopening an existing database", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "retry-audit-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const path = join(directory, "ledger.sqlite");
+  let ledger = openAudiogramLedger(path);
+  const [pkg] = seedPackages(ledger);
+  ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+  const run = ledger.ensureTreatmentRun({
+    packageId: pkg.id,
+    treatmentId: "audiogram-basic",
+    treatmentVersion: "1",
+  });
+  ledger.markTreatmentRunFailed(run.id, "saved error");
+  ledger.close();
+  const db = new DatabaseSync(path);
+  // Simulate a pre-extension database without its additive audit table.
+  db.exec("DROP TABLE treatment_run_retries");
+  ledger = openAudiogramLedger(path);
+  try {
+    db.exec(`CREATE TRIGGER fail_reset BEFORE UPDATE OF status ON treatment_runs
+    WHEN NEW.status = 'pending' BEGIN SELECT RAISE(ABORT, 'synthetic reset failure'); END`);
+    assert.throws(
+      () => ledger.retryFailedTreatmentRun(run.id),
+      /synthetic reset failure/,
+    );
+    assert.equal(ledger.listTreatmentRunRetries(run.id).length, 0);
+    assert.equal(ledger.listTreatmentRuns(pkg.id)[0].status, "failed");
+    db.exec("DROP TRIGGER fail_reset");
+    assert.equal(ledger.retryFailedTreatmentRun(run.id), true);
+    assert.equal(ledger.retryFailedTreatmentRun(run.id), false);
+    assert.equal(
+      ledger.listTreatmentRunRetries(run.id)[0].previous_error,
+      "saved error",
+    );
+  } finally {
+    ledger.close();
+    db.close();
+  }
+  ledger = openAudiogramLedger(path);
+  try {
+    assert.equal(ledger.listTreatmentRunRetries(run.id).length, 1);
+    assert.equal(ledger.listTreatmentRuns(pkg.id)[0].status, "pending");
+  } finally {
+    ledger.close();
+  }
+});
+
+test("full pipeline retry scopes render resets and audit records to the selected treatment", () => {
+  const ledger = openAudiogramLedger(":memory:");
+  try {
+    const [pkg] = seedPackages(ledger);
+    ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+    const a = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "audiogram-basic",
+      treatmentVersion: "1",
+    });
+    const b = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "other",
+      treatmentVersion: "1",
+    });
+    ledger.markTreatmentRunFailed(a.id, "a");
+    ledger.markTreatmentRunFailed(b.id, "b");
+    ledger.resetFailedWorkForRetry({
+      videoId: "video-1",
+      packageVersion: "v1",
+      treatment: { id: "audiogram-basic", version: "1" },
+    });
+    const runs = ledger.listTreatmentRuns(pkg.id);
+    assert.equal(runs.find((r) => r.id === a.id).status, "pending");
+    assert.equal(runs.find((r) => r.id === b.id).status, "failed");
+    assert.equal(ledger.listTreatmentRunRetries(a.id).length, 1);
+    assert.equal(ledger.listTreatmentRunRetries(b.id).length, 0);
+  } finally {
+    ledger.close();
+  }
 });
