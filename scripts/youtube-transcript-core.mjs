@@ -23,8 +23,10 @@ const formatSrtTime = (milliseconds) => {
   return String(hours).padStart(2, "0") + ":" + String(minutes).padStart(2, "0") + ":" + String(seconds).padStart(2, "0") + "," + String(millis).padStart(3, "0");
 };
 
-const defaultRunCommand = (command, args) =>
-  execFileAsync(command, args, { maxBuffer: 10 * 1024 * 1024 });
+// yt-dlp caption metadata can exceed 10 MiB when many translated tracks exist.
+// Match the bounded initial metadata lookup; transcript text has its own limit.
+export const runTranscriptCommand = (command, args) =>
+  execFileAsync(command, args, { maxBuffer: 64 * 1024 * 1024 });
 
 const normalizedLanguage = (language) =>
   language.toLowerCase().replaceAll("_", "-");
@@ -132,7 +134,7 @@ const captionArgs = ({ sourceUrl, outputTemplate, track }) => [
 
 export const fetchYoutubeTranscript = async (
   sourceUrl,
-  { runCommand = defaultRunCommand, tempRoot = tmpdir() } = {},
+  { runCommand = runTranscriptCommand, tempRoot = tmpdir() } = {},
 ) => {
   const temporaryDirectory = await mkdtemp(
     join(tempRoot, "youtube-transcript-"),

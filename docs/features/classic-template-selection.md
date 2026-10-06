@@ -417,3 +417,22 @@ This check identifies the inputs; it does not archive them or reconstruct delete
 Before/after checks cannot detect a temporary change restored before the final check.
 Immutable render-input snapshots remain outside this bounded change.
 The helper-job diagram comment is outside this change.
+
+
+## Large caption metadata compatibility
+
+Design (2026-10-06): transcript acquisition stopped before clip selection for
+_U-O5lYhJ7Q because yt-dlp metadata exceeded its 10 MiB stdout limit.
+A read-only metadata lookup returned 10,590,936 bytes. The existing initial
+metadata lookup accepts 64 MiB. Align transcript command output with that
+bounded limit. Keep the canonical transcript limit unchanged at 524,288 bytes.
+Flow: public metadata lookup → bounded command output → caption selection → transcript.
+Oversized command output still fails. Do not change credentials, provider,
+render retry policy or the user's database.
+Reconciled: command output is bounded at 64 MiB and transcript text retains its
+524,288-byte limit. A real subprocess regression emitted 11 MiB of JSON.
+All 25 transcript, analysis and single-URL tests passed; lint and TypeScript passed.
+The live check fetched public metadata only. No AI selection or rendering was rerun.
+Failed analysis jobs remain terminal under the existing behavior. For this manual
+test, a new AUDIOGRAM_PACKAGE_VERSION starts a separate attempt and preserves
+the failed job history; retry-failed-renders does not reset analysis failures.

@@ -238,3 +238,11 @@ test("rejects transcripts over the canonical UTF-8 byte limit without echoing te
   assert.ok(!error.message.includes("SECRET"));
   assert.deepEqual(await readdir(tempRoot), []);
 });
+
+
+test("transcript command accepts metadata larger than the former 10 MiB limit", async () => {
+  const { runTranscriptCommand } = await import('./youtube-transcript-core.mjs');
+  const {stdout} = await runTranscriptCommand(process.execPath, ['-e',
+    'process.stdout.write(JSON.stringify({padding:"x".repeat(11 * 1024 * 1024)}))']);
+  assert.equal(JSON.parse(stdout).padding.length, 11 * 1024 * 1024);
+});
