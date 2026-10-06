@@ -303,6 +303,11 @@ export const runSingleUrlPipeline = async ({
         source: contractSource,
         code: "NO_VERIFIED_ARTIFACTS",
         message: "Processing did not produce a verified MP4 artifact.",
+        failures: [{
+          stage: "artifact_verification",
+          code: "NO_VERIFIED_ARTIFACTS",
+          message: "Processing did not produce a verified MP4 artifact.",
+        }],
       });
     }
 
