@@ -206,6 +206,7 @@ export async function runJobWorker({
         ...result,
         diagnosticsIncomplete: Boolean(
           output.diagnosticsIncomplete ||
+          result.diagnosticsIncomplete ||
           diagnosticsIncomplete ||
           diagnostics.diagnosticsIncomplete ||
           isWorkerOutputIncomplete(),

@@ -200,6 +200,17 @@ test('worker marks a linked retry for the CLI pipeline', async () => {
   store.close();
 });
 
+test('worker keeps the CLI diagnostics-incomplete flag', async () => {
+  const dir = await tempDir();
+  const storePath = path.join(dir, 'jobs.sqlite');
+  const store = createJobStore(storePath);
+  const { job } = store.createOrGetJob({ videoId: 'abcdefghijk', sourceUrl: 'https://youtu.be/abcdefghijk' });
+  await runJobWorker({ jobId: job.jobId, sourceUrl: job.sourceUrl, projectRoot: dir, jobStorePath: storePath,
+    runCommand: async () => ({ stdout: JSON.stringify({ contractVersion: 1, status: 'no_clips', source: { videoId: 'abcdefghijk', title: 'Talk' }, artifactPaths: [], diagnosticsIncomplete: true }), stderr: '', diagnosticsIncomplete: false }) });
+  assert.equal(store.getJob(job.jobId).result.diagnosticsIncomplete, true);
+  store.close();
+});
+
 test('worker records malformed CLI output as failed', async () => {
   const dir = await tempDir();
   const storePath = path.join(dir, 'jobs.sqlite');
