@@ -87,10 +87,12 @@ test("a completed package and treatment are skipped on the next run", async (t) 
   assert.deepEqual(first, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 1, failed: 0 },
+    failures: [],
   });
   assert.deepEqual(second, {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
+    failures: [],
   });
 });
 
@@ -121,6 +123,9 @@ test("a failed package does not prevent another package from rendering", async (
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 1 },
     treatments: { rendered: 1, failed: 0 },
+    failures: [
+      { stage: "assets", code: "ASSET_FAILED", packageId: packages[0].id },
+    ],
   });
   assert.equal(ledger.getClipPackage(packages[0].id).status, "failed");
   assert.equal(ledger.getClipPackage(packages[1].id).status, "ready");
@@ -153,6 +158,9 @@ test("a render failure leaves the reusable package ready", async (t) => {
   assert.deepEqual(result, {
     packages: { ready: 1, failed: 0 },
     treatments: { rendered: 0, failed: 1 },
+    failures: [
+      { stage: "render", code: "RENDER_FAILED", packageId: clipPackage.id },
+    ],
   });
   assert.equal(ledger.getClipPackage(clipPackage.id).status, "ready");
   assert.equal(ledger.listTreatmentRuns(clipPackage.id)[0].status, "failed");
@@ -263,6 +271,7 @@ test("reopens persisted transcript selections and reuses one transcript for part
   assert.deepEqual(first, {
     packages: { ready: 3, failed: 0 },
     treatments: { rendered: 3, failed: 0 },
+    failures: [],
   });
   assert.equal(transcriptLoads, 3);
   assert.equal(acquiredTranscripts.length, 3);
@@ -333,6 +342,7 @@ test("reopens persisted transcript selections and reuses one transcript for part
   assert.deepEqual(second, {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
+    failures: [],
   });
   assert.deepEqual(
     { commands: commands.length, renders, transcriptLoads },
@@ -457,6 +467,38 @@ test("retry audit and reset are atomic and survive reopening an existing databas
   try {
     assert.equal(ledger.listTreatmentRunRetries(run.id).length, 1);
     assert.equal(ledger.listTreatmentRuns(pkg.id)[0].status, "pending");
+  } finally {
+    ledger.close();
+  }
+});
+
+test("full pipeline retry scopes render resets and audit records to the selected treatment", () => {
+  const ledger = openAudiogramLedger(":memory:");
+  try {
+    const [pkg] = seedPackages(ledger);
+    ledger.markPackageReady({ packageId: pkg.id, assets: [] });
+    const a = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "audiogram-basic",
+      treatmentVersion: "1",
+    });
+    const b = ledger.ensureTreatmentRun({
+      packageId: pkg.id,
+      treatmentId: "other",
+      treatmentVersion: "1",
+    });
+    ledger.markTreatmentRunFailed(a.id, "a");
+    ledger.markTreatmentRunFailed(b.id, "b");
+    ledger.resetFailedWorkForRetry({
+      videoId: "video-1",
+      packageVersion: "v1",
+      treatment: { id: "audiogram-basic", version: "1" },
+    });
+    const runs = ledger.listTreatmentRuns(pkg.id);
+    assert.equal(runs.find((r) => r.id === a.id).status, "pending");
+    assert.equal(runs.find((r) => r.id === b.id).status, "failed");
+    assert.equal(ledger.listTreatmentRunRetries(a.id).length, 1);
+    assert.equal(ledger.listTreatmentRunRetries(b.id).length, 0);
   } finally {
     ledger.close();
   }

@@ -133,3 +133,24 @@ test("invalid selection creates no job and cannot poison a later valid request",
     true,
   );
 });
+
+test("retry job preserves the prior template identity and active-video exclusion", async (t) => {
+  const file = await setup(t);
+  const store = createJobStore(file, { resolveSelection });
+  try {
+    const { job: prior } = store.createOrGetJob({
+      videoId: "video",
+      sourceUrl: "https://youtu.be/video",
+      selection: alternate,
+    });
+    store.setFailed(prior.jobId, "failed");
+    const { job: retry } = store.createRetryJob({ priorJobId: prior.jobId });
+    assert.deepEqual(retry.selection, alternate);
+    assert.equal(retry.renderKey, "test-only@1");
+    assert.equal(retry.retryOfJobId, prior.jobId);
+    assert.throws(() => store.createRetryJob({ priorJobId: prior.jobId }));
+    assert.equal(store.getJob(prior.jobId).status, "failed");
+  } finally {
+    store.close();
+  }
+});

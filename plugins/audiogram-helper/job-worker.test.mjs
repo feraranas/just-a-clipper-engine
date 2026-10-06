@@ -30,6 +30,8 @@ test("worker sends stored default flags to the real CLI subprocess", async (t) =
   assert.deepEqual(args, [
     "--url",
     job.sourceUrl,
+    "--job-id",
+    job.jobId,
     "--template",
     "classic",
     "--template-version",

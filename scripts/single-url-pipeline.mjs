@@ -4,6 +4,7 @@ import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
+import { runLoggedStage } from "./pipeline-logger.mjs";
 import { acquireClipPackageAssets } from "./clip-package-assets.mjs";
 import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
@@ -40,11 +41,13 @@ const failedResult = ({
   code,
   message,
   artifactPaths = [],
+  failures,
 }) => ({
   contractVersion: 1,
-  status: "failed",
+  status: artifactPaths.length > 0 ? "partial" : "failed",
   source,
   artifactPaths,
+  ...(failures?.length ? { failures } : {}),
   error: { code, message },
 });
 
@@ -140,26 +143,55 @@ export const runSingleUrlPipeline = async ({
       message: safeErrorMessage(error, root),
     });
   }
+
+  const eventLogger = { event: dependencies.onEvent };
+  let activeStage = "intake";
   let parsedUrl;
   try {
-    parsedUrl = parseYouTubeVideoUrl(url);
+    parsedUrl = await runLoggedStage({
+      logger: eventLogger,
+      stage: "intake",
+      operation: () => parseYouTubeVideoUrl(url),
+    });
   } catch (error) {
     return failedResult({
       code: error.code ?? "INVALID_URL",
       message: safeErrorMessage(error, root),
+      failures: [
+        {
+          stage: "intake",
+          code: error.code ?? "INVALID_URL",
+          message: "The video URL is not valid.",
+        },
+      ],
     });
   }
 
   const fetchMetadata = dependencies.fetchMetadata ?? fetchYtDlpMetadata;
   let source;
   let sourceMetadata;
+  activeStage = "metadata";
   try {
-    sourceMetadata = await fetchMetadata(parsedUrl.sourceUrl);
-    source = validateYouTubeMetadata(sourceMetadata, parsedUrl.videoId);
+    source = await runLoggedStage({
+      logger: eventLogger,
+      stage: "metadata",
+      videoId: parsedUrl.videoId,
+      operation: async () => {
+        sourceMetadata = await fetchMetadata(parsedUrl.sourceUrl);
+        return validateYouTubeMetadata(sourceMetadata, parsedUrl.videoId);
+      },
+    });
   } catch (error) {
     return failedResult({
       code: error.code ?? "METADATA_FAILED",
       message: safeErrorMessage(error, root),
+      failures: [
+        {
+          stage: "metadata",
+          code: error.code ?? "METADATA_FAILED",
+          message: "Video metadata could not be read.",
+        },
+      ],
     });
   }
   const contractSource = {
@@ -167,6 +199,7 @@ export const runSingleUrlPipeline = async ({
     title: source.title,
     url: source.sourceUrl,
   };
+  activeStage = "setup";
 
   let ledger;
   let publishingLedger;
@@ -216,6 +249,16 @@ export const runSingleUrlPipeline = async ({
         })
       : undefined;
 
+    if (dependencies.retryFailedPipeline) {
+      ledger.resetFailedWorkForRetry({
+        videoId: source.videoId,
+        packageVersion,
+        treatment: resolved.treatment,
+      });
+    }
+
+    activeStage =
+      selectConfig.selectorId === "transcript-llm" ? "transcript" : "selection";
     const pipeline = await (
       dependencies.syncAndAnalyzeInbox ?? syncAndAnalyzeInbox
     )({
@@ -240,6 +283,7 @@ export const runSingleUrlPipeline = async ({
       ...(dependencies.createProvider
         ? { createProvider: dependencies.createProvider }
         : {}),
+      ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
       ...(jevClient ? { jevClient } : {}),
     });
     analysisFailures = pipeline.analyzed.filter(
@@ -264,6 +308,7 @@ export const runSingleUrlPipeline = async ({
         ),
       projectRoot: root,
       videoId: source.videoId,
+      ...(dependencies.onEvent ? { onEvent: dependencies.onEvent } : {}),
       onArtifactComplete: async ({
         artifactRelativePath,
         artifactHash,
@@ -290,18 +335,46 @@ export const runSingleUrlPipeline = async ({
           title: clipPackage.title,
         }),
     };
+    activeStage = "assets";
     processing = await (
       dependencies.processClipPackages ?? processClipPackages
     )(treatmentDeps);
 
-    const artifactPaths = await listRenderedArtifacts({
-      ledger,
+    const artifactPaths = await runLoggedStage({
+      logger: eventLogger,
+      stage: "artifact_verification",
       videoId: source.videoId,
-      packageVersion,
-      treatment: resolved.treatment,
-      projectRoot: root,
+      operation: () =>
+        listRenderedArtifacts({
+          ledger,
+          videoId: source.videoId,
+          packageVersion,
+          treatment: resolved.treatment,
+          projectRoot: root,
+        }),
     });
     const job = ledger.getPackageJob(source.videoId, packageVersion);
+    const failures = [
+      ...analysisFailures
+        .map(({ failure }) => failure)
+        .filter(Boolean)
+        .map((failure) => ({
+          ...failure,
+          message:
+            failure.stage === "transcript"
+              ? "Transcript acquisition failed."
+              : failure.stage === "jev"
+                ? "Jev analysis failed."
+                : "Clip selection failed.",
+        })),
+      ...(processing.failures ?? []).map((failure) => ({
+        ...failure,
+        message:
+          failure.stage === "assets"
+            ? "Clip assets could not be prepared."
+            : "Clip rendering failed.",
+      })),
+    ];
     const hasProcessingFailures =
       analysisFailures.length > 0 ||
       processing.packages.failed > 0 ||
@@ -324,11 +397,21 @@ export const runSingleUrlPipeline = async ({
         );
 
     if (hasProcessingFailures) {
+      activeStage = "artifact_verification";
       return failedResult({
         source: contractSource,
         code: "PROCESSING_FAILED",
-        message: "One or more analysis, asset, or render steps failed.",
+        message: failures[0]?.message ?? "Audiogram processing failed.",
         artifactPaths,
+        failures: failures.length
+          ? failures
+          : [
+              {
+                stage: activeStage,
+                code: "PROCESSING_FAILED",
+                message: "Audiogram processing failed.",
+              },
+            ],
       });
     }
     if (
@@ -346,12 +429,22 @@ export const runSingleUrlPipeline = async ({
         },
       };
     }
-    if (artifactPaths.length < ledger.listClipPackages(job.id).length) {
+    if (
+      artifactPaths.length === 0 ||
+      artifactPaths.length < ledger.listClipPackages(job.id).length
+    ) {
       return failedResult({
         source: contractSource,
         code: "NO_VERIFIED_ARTIFACTS",
         message: "One or more selected clips have no verified MP4 artifact.",
         artifactPaths,
+        failures: [
+          {
+            stage: "artifact_verification",
+            code: "NO_VERIFIED_ARTIFACTS",
+            message: "Processing did not produce a verified MP4 artifact.",
+          },
+        ],
       });
     }
 
@@ -378,9 +471,27 @@ export const runSingleUrlPipeline = async ({
     }
     return failedResult({
       source: source ? contractSource : null,
-      code: "PROCESSING_FAILED",
+      code:
+        activeStage === "setup" ? "PIPELINE_SETUP_FAILED" : "PROCESSING_FAILED",
       message: safeErrorMessage(error, root),
       artifactPaths,
+      failures: [
+        {
+          stage: activeStage,
+          code:
+            activeStage === "metadata"
+              ? "METADATA_FAILED"
+              : activeStage === "setup"
+                ? "PIPELINE_SETUP_FAILED"
+                : "PROCESSING_FAILED",
+          message:
+            activeStage === "metadata"
+              ? "Video metadata could not be read."
+              : activeStage === "setup"
+                ? "Audiogram processing could not be configured."
+                : "Audiogram processing failed.",
+        },
+      ],
     });
   } finally {
     publishingLedger?.close();

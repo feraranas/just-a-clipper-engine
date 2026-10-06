@@ -4,9 +4,13 @@ import { fileURLToPath } from "node:url";
 import { resolve } from "node:path";
 
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
+import {
+  createJobDiagnostics,
+  validateJobId,
+} from "../plugins/audiogram-helper/job-diagnostics.mjs";
 
 const usage =
-  "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default] [--retry-failed-renders]";
+  "Usage: node scripts/audiogram-url.mjs --url <youtube-video-url> [--template classic --template-version 1 --variation default] [--retry-failed-renders | --retry]";
 
 export const runAudiogramUrlCli = async (
   args = process.argv.slice(2),
@@ -19,6 +23,8 @@ export const runAudiogramUrlCli = async (
       args,
       options: {
         url: { type: "string" },
+        "job-id": { type: "string" },
+        retry: { type: "boolean" },
         template: { type: "string" },
         "template-version": { type: "string" },
         variation: { type: "string" },
@@ -38,33 +44,53 @@ export const runAudiogramUrlCli = async (
     return 2;
   }
 
+  const jobId = parsed.values["job-id"];
+  if (jobId !== undefined) {
+    try {
+      validateJobId(jobId);
+    } catch (error) {
+      io.stderr.write(`${error.message}\n${usage} [--job-id <UUID>]\n`);
+      return 2;
+    }
+  }
+
   let result;
+  let diagnostics;
   try {
+    const projectRoot =
+      dependencies.projectRoot ??
+      process.env.AUDIOGRAM_PROJECT_ROOT ??
+      process.cwd();
+    const environment = dependencies.environment ?? process.env;
     const request = {};
-    for (const [flag, field] of [
+    for (const [flag, key] of [
       ["template", "templateId"],
       ["template-version", "templateVersion"],
       ["variation", "variationId"],
-    ]) {
-      if (parsed.values[flag] !== undefined)
-        request[field] = parsed.values[flag];
-    }
-    const resolved = resolveTemplateSelectionConfig({
-      request,
-      environment: dependencies.environment ?? process.env,
-    });
+    ])
+      if (parsed.values[flag] !== undefined) request[key] = parsed.values[flag];
+    const resolved = resolveTemplateSelectionConfig({ request, environment });
+    diagnostics =
+      jobId === undefined
+        ? null
+        : createJobDiagnostics({
+            projectRoot,
+            diagnosticsRoot: environment.AUDIOGRAM_DIAGNOSTICS_ROOT,
+            jobId,
+          });
+    await diagnostics?.ready;
+    const pipelineDependencies = {
+      ...(dependencies.pipelineDependencies ?? {}),
+    };
+    if (diagnostics) pipelineDependencies.onEvent = diagnostics.logger.event;
+    if (parsed.values.retry) pipelineDependencies.retryFailedPipeline = true;
     result = await (dependencies.runPipeline ?? runSingleUrlPipeline)({
       url,
       templateSelection: resolved.selection,
       retryFailedRenders: parsed.values["retry-failed-renders"],
-      projectRoot:
-        dependencies.projectRoot ??
-        process.env.AUDIOGRAM_PROJECT_ROOT ??
-        process.cwd(),
-      environment: dependencies.environment ?? process.env,
-      ...(dependencies.pipelineDependencies
-        ? { dependencies: dependencies.pipelineDependencies }
-        : {}),
+      projectRoot,
+      environment,
+      dependencies: pipelineDependencies,
     });
   } catch (error) {
     result = {
@@ -84,6 +110,9 @@ export const runAudiogramUrlCli = async (
       },
     };
   }
+
+  if (diagnostics?.diagnosticsIncomplete)
+    result = { ...result, diagnosticsIncomplete: true };
 
   io.stdout.write(`${JSON.stringify(result)}\n`);
   return 0;

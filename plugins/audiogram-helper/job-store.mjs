@@ -35,6 +35,8 @@ export function createJobStore(
       db.exec(
         `ALTER TABLE jobs ADD COLUMN selection_json TEXT NOT NULL DEFAULT '${JSON.stringify(resolveTemplateSelection().selection)}'`,
       );
+    if (!columns.has("retry_of_job_id"))
+      db.exec("ALTER TABLE jobs ADD COLUMN retry_of_job_id TEXT");
     db.exec("COMMIT");
   } catch (error) {
     try {
@@ -51,6 +53,7 @@ export function createJobStore(
       status: row.status,
       selection: JSON.parse(row.selection_json),
       renderKey: row.render_key,
+      ...(row.retry_of_job_id ? { retryOfJobId: row.retry_of_job_id } : {}),
       pid: row.pid,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -97,6 +100,34 @@ export function createJobStore(
         );
         db.exec("COMMIT");
         return { job, created: true };
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    createRetryJob({ priorJobId }) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const prior = db
+          .prepare("SELECT * FROM jobs WHERE job_id=?")
+          .get(priorJobId);
+        if (!prior) throw new Error("Audiogram job was not found.");
+        if (!["failed", "partial"].includes(prior.status))
+          throw new Error("Retry requires a terminal failed or partial job.");
+        const jobId = randomUUID();
+        db.prepare(
+          "INSERT INTO jobs(job_id,video_id,source_url,status,retry_of_job_id,render_key,selection_json) VALUES(?,?,?,'queued',?,?,?)",
+        ).run(
+          jobId,
+          prior.video_id,
+          prior.source_url,
+          priorJobId,
+          prior.render_key,
+          prior.selection_json,
+        );
+        const job = db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId);
+        db.exec("COMMIT");
+        return { job: decode(job), created: true };
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;

@@ -9,6 +9,7 @@ import { buildSelectionRecipe } from "./clip-selection-contract.mjs";
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
+import { validateCliResult } from "../plugins/audiogram-helper/result-validation.mjs";
 
 const videoId = "dQw4w9WgXcQ";
 const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -207,6 +208,43 @@ test("defaults direct URL processing to transcript-llm and queues outputs locall
   );
 });
 
+test("passes safe stage events through the dependency callback", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-events-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  const events = [];
+  options.dependencies.onEvent = async (event) => events.push(event);
+  await runSingleUrlPipeline(options);
+  const orderedStages = [
+    "intake",
+    "metadata",
+    "transcript",
+    "selection",
+    "jev",
+    "assets",
+    "render",
+    "artifact_verification",
+  ];
+  const firstIndexes = orderedStages.map((stage) =>
+    events.findIndex((event) => event.stage === stage),
+  );
+  assert.ok(firstIndexes.every((index) => index >= 0));
+  assert.deepEqual(
+    firstIndexes,
+    [...firstIndexes].sort((a, b) => a - b),
+  );
+  assert.equal(events.find((event) => event.stage === "jev").status, "skipped");
+  assert.equal(
+    events.find((event) => event.stage === "artifact_verification").status,
+    "started",
+  );
+  assert.equal(
+    events.findLast((event) => event.stage === "artifact_verification").status,
+    "completed",
+  );
+  assert.equal(JSON.stringify(events).includes("Transcript cue"), false);
+});
+
 test("rejects an invalid URL before metadata lookup or ledger creation", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "single-url-invalid-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
@@ -219,6 +257,7 @@ test("rejects an invalid URL before metadata lookup or ledger creation", async (
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "INVALID_HOST");
+  assert.equal(result.failures[0].stage, "intake");
   assert.equal(result.source, null);
   assert.deepEqual(metadataRequests, []);
 });
@@ -234,9 +273,30 @@ test("rejects metadata for another video before creating a ledger job", async (t
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "VIDEO_ID_MISMATCH");
+  assert.equal(result.failures[0].stage, "metadata");
   await assert.rejects(readFile(options.environment.AUDIOGRAM_DB_PATH), {
     code: "ENOENT",
   });
+});
+
+test("reports post-metadata configuration errors as setup failures", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "single-url-setup-failure-"));
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  options.dependencies.resolveSelectionConfig = () => {
+    throw new Error("private configuration detail");
+  };
+
+  const result = await runSingleUrlPipeline(options);
+  const safeResult = await validateCliResult(result, directory);
+
+  assert.equal(result.failures[0].stage, "setup");
+  assert.equal(result.failures[0].code, "PIPELINE_SETUP_FAILED");
+  assert.equal(
+    result.failures[0].message,
+    "Audiogram processing could not be configured.",
+  );
+  assert.deepEqual(safeResult.failures, result.failures);
 });
 
 test("fails transcript acquisition without falling back to heatmap selection", async (t) => {
@@ -251,10 +311,34 @@ test("fails transcript acquisition without falling back to heatmap selection", a
 
   assert.equal(result.status, "failed");
   assert.equal(result.error.code, "PROCESSING_FAILED");
+  assert.equal(result.failures[0].stage, "transcript");
   assert.deepEqual(result.artifactPaths, []);
   assert.deepEqual(metadataRequests, [sourceUrl]);
   assert.deepEqual(transcriptRequests, [sourceUrl]);
   assert.deepEqual(providerConfigs, []);
+});
+
+test("retries failed transcript work when the caller marks a job as a retry", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "single-url-retry-transcript-"),
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  let failTranscript = true;
+  options.dependencies.fetchTranscript = async () => {
+    if (failTranscript) throw new Error("temporary transcript failure");
+    return transcript;
+  };
+
+  const first = await runSingleUrlPipeline(options);
+  failTranscript = false;
+  const retried = await runSingleUrlPipeline({
+    ...options,
+    dependencies: { ...options.dependencies, retryFailedPipeline: true },
+  });
+
+  assert.equal(first.status, "failed");
+  assert.equal(retried.status, "complete");
 });
 
 test("reports partial rendering failure with only verified finished clips", async (t) => {
@@ -269,10 +353,33 @@ test("reports partial rendering failure with only verified finished clips", asyn
 
   const result = await runSingleUrlPipeline(options);
 
-  assert.equal(result.status, "failed");
+  assert.equal(result.status, "partial");
   assert.equal(result.error.code, "PROCESSING_FAILED");
+  assert.equal(result.failures[0].stage, "render");
   assert.deepEqual([...result.artifactPaths].sort(), [...renderedPaths].sort());
   assert.equal(result.artifactPaths.length, 2);
+});
+
+test("reports artifact verification failure when rendering records no verified files", async (t) => {
+  const directory = await mkdtemp(
+    join(tmpdir(), "single-url-unverified-artifact-"),
+  );
+  t.after(() => rm(directory, { recursive: true, force: true }));
+  const { options } = await createOptions(directory);
+  options.dependencies.renderTreatment = async ({ clipPackage, treatment }) =>
+    `out/treatments/${treatment.id}/${treatment.version}/${videoId}/transcript-llm-v1/clip-${clipPackage.rank}.mp4`;
+
+  const result = await runSingleUrlPipeline(options);
+
+  assert.equal(result.status, "failed");
+  assert.equal(result.error.code, "NO_VERIFIED_ARTIFACTS");
+  assert.deepEqual(result.failures, [
+    {
+      stage: "artifact_verification",
+      code: "NO_VERIFIED_ARTIFACTS",
+      message: "Processing did not produce a verified MP4 artifact.",
+    },
+  ]);
 });
 
 test("invalid template fails before metadata or database work", async () => {
@@ -350,7 +457,7 @@ test("returns only the requested treatment artifacts when another treatment exis
   await rm(join(directory, second.artifactPaths[0]));
   const missing = await runSingleUrlPipeline(options);
   assert.ok(!missing.artifactPaths.includes(second.artifactPaths[0]));
-  assert.equal(missing.status, "failed");
+  assert.equal(missing.status, "partial");
   assert.equal(missing.artifactPaths.length, 2);
 });
 
@@ -367,14 +474,14 @@ test("explicit retry recovers only the failed render and preserves completed cli
       throw Error("synthetic render failure");
     return render(input);
   };
-  assert.equal((await runSingleUrlPipeline(options)).status, "failed");
+  assert.equal((await runSingleUrlPipeline(options)).status, "partial");
   assert.deepEqual(attempts, [1, 2, 3]);
-  assert.equal((await runSingleUrlPipeline(options)).status, "failed");
+  assert.equal((await runSingleUrlPipeline(options)).status, "partial");
   assert.deepEqual(attempts, [1, 2, 3]);
   assert.equal(
     (await runSingleUrlPipeline({ ...options, retryFailedRenders: true }))
       .status,
-    "failed",
+    "partial",
   );
   assert.deepEqual(attempts, [1, 2, 3, 2]);
   shouldFail = false;

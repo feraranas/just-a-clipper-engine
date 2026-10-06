@@ -436,3 +436,21 @@ The live check fetched public metadata only. No AI selection or rendering was re
 Failed analysis jobs remain terminal under the existing behavior. For this manual
 test, a new AUDIOGRAM_PACKAGE_VERSION starts a separate attempt and preserves
 the failed job history; retry-failed-renders does not reset analysis failures.
+
+
+## Reconciliation with main diagnostics and retry changes
+
+Merged main at 6750861. Preserve per-job diagnostics, safe failure details,
+partial results, job IDs and the explicit full-pipeline retry from main.
+Template selection remains checked before processing and stored with each job.
+A linked helper retry copies the prior selection and render identity.
+The full-pipeline retry resets analysis and asset failures for the video/package,
+but resets and audits only failed renders for the selected treatment.
+The narrower --retry-failed-renders option remains available.
+Completed renders and unrelated treatments remain unchanged.
+Partial output now uses main's `partial` status rather than `failed`.
+Earlier notes that helper retries are deferred or failed analysis requires a new
+package version are superseded by main's --retry and retry_audiogram support.
+The helper-job diagram expansion remains deferred as requested.
+All 92 focused tests for the combined paths passed, including linked selection
+preservation, active-video exclusion and treatment-scoped retry audit history.

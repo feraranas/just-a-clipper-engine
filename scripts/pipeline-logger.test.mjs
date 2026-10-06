@@ -24,6 +24,7 @@ test("logger preserves structured metadata but excludes arbitrary payloads", asy
   await logger.event({
     stage: "render",
     status: "completed",
+    jobId: "7bb07aec-e580-4ca4-a2fe-d96bc02b8035",
     clipPackageId: 42,
     durationMs: 50,
     message: "secret",
@@ -34,6 +35,7 @@ test("logger preserves structured metadata but excludes arbitrary payloads", asy
       timestamp: "2026-10-02T12:00:00Z",
       stage: "render",
       status: "completed",
+      jobId: "7bb07aec-e580-4ca4-a2fe-d96bc02b8035",
       clipPackageId: 42,
       durationMs: 50,
     },
@@ -66,6 +68,7 @@ test("reader tolerates malformed and interrupted records and resumes after appen
   await createPipelineLogger({ logPath }).event({
     stage: "render",
     status: "completed",
+    jobId: "7bb07aec-e580-4ca4-a2fe-d96bc02b8035",
     runId: "new",
   });
   assert.deepEqual(

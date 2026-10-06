@@ -22,6 +22,11 @@ The Secure MCP Tunnel is a private development bridge, not hosting. The tunnel c
 
 - `create_audiogram({ url })`: validate the supported YouTube URL, create or reuse an active local job for that video, and return its opaque job ID.
 - `get_audiogram_status({ jobId })`: return status and, only after verification, local artifact paths.
+- `retry_audiogram({ jobId })`: start a new linked attempt for a failed or partial job. ChatGPT must ask the user before calling it.
+
+## Local diagnostics
+
+Each job keeps structured stage events and separate worker/CLI stdout and stderr files under `.local/audiogram-helper/runs/<jobId>/`. Each stream file is capped at 2 MiB by default; set `AUDIOGRAM_DIAGNOSTICS_MAX_FILE_BYTES` to a value from 1 KiB through 50 MiB to change that limit. The default retention period is 30 days; set `AUDIOGRAM_DIAGNOSTICS_RETENTION_DAYS` to a whole number from 1 through 3650 to change it. The next job creation removes older job folders. Run `npm run audiogram:logs -- --job-id <UUID>` to print safe structured events for one job. This command does not print local paths or raw process output. Raw stream files stay local and do not appear in MCP results. A `partial` result means at least one verified artifact exists; the `failures` list identifies failed stages or packages. Retry creates a new job ID and does not retry automatically.
 
 ## Template choice
 

@@ -1589,6 +1589,77 @@ export const openAudiogramLedger = (
         )
         .run(sanitizeErrorDiagnostic(error), now(), packageId);
     },
+    resetFailedWorkForRetry: ({ videoId, packageVersion, treatment }) => {
+      const job = getPackageJobStatement.get(videoId, packageVersion);
+      if (!job)
+        throw new Error(
+          "Cannot retry pipeline work without an existing package job.",
+        );
+      const timestamp = now();
+      database.exec("BEGIN IMMEDIATE");
+      try {
+        const packageJob = database
+          .prepare(
+            `
+          UPDATE package_jobs
+          SET status = 'discovered', last_error = NULL, updated_at = ?
+          WHERE id = ? AND status = 'failed'
+        `,
+          )
+          .run(timestamp, job.id);
+        const packages = database
+          .prepare(
+            `
+          UPDATE clip_packages
+          SET status = 'selected', last_error = NULL, updated_at = ?
+          WHERE package_job_id = ? AND status = 'failed'
+        `,
+          )
+          .run(timestamp, job.id);
+        database
+          .prepare(
+            `INSERT INTO treatment_run_retries (treatment_run_id, previous_error, created_at)
+          SELECT id, last_error, ? FROM treatment_runs
+          WHERE status = 'failed' AND (? IS NULL OR (treatment_id = ? AND treatment_version = ?))
+          AND clip_package_id IN (SELECT id FROM clip_packages WHERE package_job_id = ?)
+        `,
+          )
+          .run(
+            timestamp,
+            treatment?.id ?? null,
+            treatment?.id ?? null,
+            treatment?.version ?? null,
+            job.id,
+          );
+        const treatments = database
+          .prepare(
+            `
+          UPDATE treatment_runs
+          SET status = 'pending', artifact_relative_path = NULL,
+              last_error = NULL, updated_at = ?
+          WHERE status = 'failed' AND clip_package_id IN (
+            SELECT id FROM clip_packages WHERE package_job_id = ?
+          ) AND (? IS NULL OR (treatment_id = ? AND treatment_version = ?))
+        `,
+          )
+          .run(
+            timestamp,
+            job.id,
+            treatment?.id ?? null,
+            treatment?.id ?? null,
+            treatment?.version ?? null,
+          );
+        database.exec("COMMIT");
+        return {
+          packageJobs: packageJob.changes,
+          packages: packages.changes,
+          treatments: treatments.changes,
+        };
+      } catch (error) {
+        database.exec("ROLLBACK");
+        throw error;
+      }
+    },
     markPackageJobFailed: (jobId, error) => {
       database
         .prepare(

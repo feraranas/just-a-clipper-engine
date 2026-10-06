@@ -1,4 +1,4 @@
-import { appendFile, mkdir, open } from "node:fs/promises";
+import { appendFile, mkdir, open, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SafeDiagnosticError } from "./error-diagnostics.mjs";
 
@@ -8,6 +8,7 @@ const bytesPerRequestedEvent = 16 * 1024;
 
 const identifiers = [
   "runId",
+  "jobId",
   "stage",
   "status",
   "videoId",
@@ -42,17 +43,25 @@ export const createPipelineLogger = ({
   logPath,
   now = () => new Date().toISOString(),
   onError,
+  maxFileBytes = Number.POSITIVE_INFINITY,
 } = {}) => {
   if (typeof logPath !== "string" || !logPath.trim())
     throw new Error("logPath is required");
+  let writeChain = Promise.resolve();
   return Object.freeze({
-    event: async (input) => {
+    event: (input) => {
+      const write = async () => {
       try {
         const event = normalizePipelineEvent(input, now());
         if (!event) return;
         await mkdir(dirname(logPath), { recursive: true, mode: 0o700 });
+        const record = `\n${JSON.stringify(event)}\n`;
+        let currentBytes = 0;
+        try { currentBytes = (await stat(logPath)).size; } catch (error) { if (error.code !== "ENOENT") throw error; }
+        if (currentBytes + Buffer.byteLength(record) > maxFileBytes)
+          throw Object.assign(new Error("Structured diagnostic file reached its size limit."), { code: "DIAGNOSTICS_SIZE_LIMIT" });
         // Isolate an earlier interrupted append from the new record.
-        await appendFile(logPath, "\n" + JSON.stringify(event) + "\n", {
+        await appendFile(logPath, record, {
           mode: 0o600,
         });
         return event;
@@ -63,6 +72,9 @@ export const createPipelineLogger = ({
           /* Observability is best effort. */
         }
       }
+      };
+      writeChain = writeChain.then(write, write);
+      return writeChain;
     },
   });
 };

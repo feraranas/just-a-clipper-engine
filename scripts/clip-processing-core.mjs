@@ -22,6 +22,7 @@ export const processClipPackages = async ({
   const result = {
     packages: { ready: 0, failed: 0 },
     treatments: { rendered: 0, failed: 0 },
+    failures: [],
   };
   const transcriptsById = new Map();
   const requestedKeys = new Set(
@@ -54,6 +55,7 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markPackageFailed(clipPackage.id, sanitizeErrorDiagnostic(error));
       result.packages.failed += 1;
+      result.failures.push({ stage: "assets", code: "ASSET_FAILED", packageId: clipPackage.id });
     }
   }
 
@@ -121,6 +123,7 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markTreatmentRunFailed(run.id, sanitizeErrorDiagnostic(error));
       result.treatments.failed += 1;
+      result.failures.push({ stage: "render", code: "RENDER_FAILED", packageId: run.clipPackageId });
     }
   }
 
