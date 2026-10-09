@@ -34,6 +34,7 @@ const outputShape = {
           "worker",
           "intake",
           "metadata",
+          "setup",
           "transcript",
           "selection",
           "jev",
