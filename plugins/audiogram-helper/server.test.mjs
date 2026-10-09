@@ -727,6 +727,29 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
       arguments: { jobId: statusId },
     });
     assert.equal(status.structuredContent.jobId, statusId);
+    runner.getStatus = async () => ({
+      jobId: statusId,
+      status: "failed",
+      artifacts: [],
+      failures: [
+        {
+          stage: "setup",
+          code: "PIPELINE_SETUP_FAILED",
+          message: "Audiogram processing could not be configured.",
+        },
+      ],
+    });
+    const setupFailure = await client.callTool({
+      name: "get_audiogram_status",
+      arguments: { jobId: statusId },
+    });
+    assert.deepEqual(setupFailure.structuredContent.failures, [
+      {
+        stage: "setup",
+        code: "PIPELINE_SETUP_FAILED",
+        message: "Audiogram processing could not be configured.",
+      },
+    ]);
     const retried = await client.callTool({
       name: "retry_audiogram",
       arguments: { jobId: statusId },
