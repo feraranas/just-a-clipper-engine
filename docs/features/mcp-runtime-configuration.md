@@ -63,6 +63,14 @@ stateDiagram-v2
 
 ## Implementation reconciliation and deviations
 
+Review fixes leave optional Jev settings disabled in the example and use the
+default external OAuth credential path. Startup rejects relative, unnormalized,
+or repository-contained OAuth paths and invalid Jev values before listening.
+The README requires Node 22.13.0 or newer. Tests start with the actual example
+configuration and check invalid Jev and OAuth settings. These checks do not
+read credentials or contact providers. Credential file access checks still run
+when the worker opens the credentials.
+
 The `audiogram:mcp` command loads `.env` when the file exists. The MCP entry
 point validates the selector/provider configuration and the Jev endpoint/key
 pair before it starts the HTTP listener. It reports safe setting errors without

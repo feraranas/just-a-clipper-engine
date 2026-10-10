@@ -14,6 +14,8 @@ const projectRoot = path.resolve(
 );
 const providerKeys = [
   "AUDIOGRAM_LLM_PROVIDER",
+  "AUDIOGRAM_CLIP_SELECTOR",
+  "AUDIOGRAM_CHATGPT_AUTH_PATH",
   "OPENAI_API_KEY",
   "TYPESAFE_JEV_ENDPOINT",
   "TYPESAFE_JEV_API_KEY",
@@ -87,7 +89,7 @@ test("MCP startup loads local env, validates settings, and accepts cloud env", a
       /AUDIOGRAM_LLM_PROVIDER must explicitly select openai-api or chatgpt-oauth/,
     );
 
-    await writeFile(envFile, "AUDIOGRAM_LLM_PROVIDER=chatgpt-oauth\n", {
+    await writeFile(envFile, await readFile(path.join(projectRoot, ".env.example"), "utf8"), {
       flag: "wx",
       mode: 0o600,
     });
@@ -118,6 +120,19 @@ test("MCP startup loads local env, validates settings, and accepts cloud env", a
       incompleteJev.output,
       /TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together/,
     );
+    for (const [overrides, expectedError] of [
+      [{ TYPESAFE_JEV_ENDPOINT: "http://jev.example.test", TYPESAFE_JEV_API_KEY: "synthetic-key" }, /TYPESAFE_JEV_ENDPOINT must be an HTTPS URL/],
+      [{ TYPESAFE_JEV_ENDPOINT: "https://", TYPESAFE_JEV_API_KEY: "synthetic-key" }, /TYPESAFE_JEV_ENDPOINT must be an HTTPS URL/],
+      [{ TYPESAFE_JEV_ENDPOINT: "https://jev.example.test", TYPESAFE_JEV_API_KEY: "   " }, /TYPESAFE_JEV_API_KEY must be nonblank/],
+      [{ AUDIOGRAM_CHATGPT_AUTH_PATH: "./.credentials/chatgpt-auth.json" }, /AUDIOGRAM_CHATGPT_AUTH_PATH must be an absolute normalized path/],
+      [{ AUDIOGRAM_CHATGPT_AUTH_PATH: path.join(tempRoot, "auth.json") }, /AUDIOGRAM_CHATGPT_AUTH_PATH must be an absolute normalized path/],
+    ]) {
+      const invalid = await runMcp(cleanEnvironment(tempRoot, { AUDIOGRAM_LLM_PROVIDER: "chatgpt-oauth", ...overrides }), tempRoot);
+      assert.equal(invalid.sawListening, false);
+      assert.equal(invalid.code, 1);
+      assert.match(invalid.output, expectedError);
+      assert.ok(!invalid.output.includes("synthetic-key"));
+    }
   } finally {
     await unlink(envFile).catch(() => {});
     await rm(tempRoot, { recursive: true, force: true });
