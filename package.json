@@ -46,9 +46,9 @@
     "verify:feature-docs": "node scripts/verify-feature-docs.mjs",
     "youtube:inbox": "node scripts/youtube-pipeline.mjs",
     "audiogram:url": "node scripts/audiogram-url.mjs",
-    "audiogram:mcp": "node plugins/audiogram-helper/server.mjs",
+    "audiogram:mcp": "node --env-file-if-exists=.env plugins/audiogram-helper/server.mjs",
     "audiogram:logs": "node scripts/audiogram-job-logs.mjs",
-    "test:audiogram-plugin": "node --test plugins/audiogram-helper/server.test.mjs",
+    "test:audiogram-plugin": "node --test plugins/audiogram-helper/server.test.mjs scripts/audiogram-mcp.test.mjs",
     "youtube:login": "node scripts/youtube-login.mjs",
     "chatgpt:login": "node scripts/chatgpt-oauth-login.mjs",
     "test:selector:live": "node scripts/clip-selector-smoke.mjs",
@@ -56,7 +56,8 @@
     "test:youtube": "node --test scripts/*.test.mjs",
     "publishing:run": "node scripts/publishing-run.mjs",
     "test:publishing": "node --test scripts/publishing-*.test.mjs scripts/instagram-client.test.mjs public/publishing/app.test.mjs",
-    "youtube:discover": "node scripts/youtube-inbox.mjs"
+    "youtube:discover": "node scripts/youtube-inbox.mjs",
+    "artifacts:migrate": "node scripts/migrate-artifact-storage.mjs"
   },
   "sideEffects": [
     "*.css"

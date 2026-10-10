@@ -1,7 +1,8 @@
+import { resolveStorageConfig } from "./storage-config.mjs";
+import { artifactLocation } from "./artifact-store.mjs";
 import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
-import { mkdir, realpath, stat } from "node:fs/promises";
-import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { mkdir, stat } from "node:fs/promises";
+import { dirname, isAbsolute, resolve } from "node:path";
 
 import { openAudiogramLedger } from "./audiogram-ledger.mjs";
 import { runLoggedStage } from "./pipeline-logger.mjs";
@@ -16,7 +17,6 @@ import {
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import {
   resolvePublishingAccountId,
-  resolvePublishingLedgerPath,
 } from "./publishing-config.mjs";
 import { processClipPackages } from "./clip-processing-core.mjs";
 import { treatmentRegistry } from "./treatment-registry.mjs";
@@ -28,13 +28,6 @@ import {
   parseYouTubeVideoUrl,
   validateYouTubeMetadata,
 } from "./youtube-url-core.mjs";
-
-const defaultApplicationSupport = join(
-  homedir(),
-  "Library",
-  "Application Support",
-  "Audiogram Inbox",
-);
 
 const failedResult = ({
   source = null,
@@ -64,6 +57,7 @@ const listRenderedArtifacts = async ({
   packageVersion,
   projectRoot,
   treatment,
+  artifactRoot,
 }) => {
   const job = ledger.getPackageJob(videoId, packageVersion);
   if (!job) return [];
@@ -80,36 +74,21 @@ const listRenderedArtifacts = async ({
         continue;
       }
 
-      const artifactPath = run.artifactRelativePath;
-      const resolvedPath = resolve(projectRoot, artifactPath);
-      const relativePath = relative(projectRoot, resolvedPath);
-      if (
-        isAbsolute(artifactPath) ||
-        relativePath === ".." ||
-        relativePath.startsWith(`..${sep}`) ||
-        !relativePath.split(sep).join("/").startsWith("out/treatments/") ||
-        !artifactPath.toLowerCase().endsWith(".mp4")
-      ) {
-        continue;
-      }
-
       try {
-        const details = await stat(resolvedPath);
-        const [canonicalRoot, canonicalArtifact] = await Promise.all([
-          realpath(projectRoot),
-          realpath(resolvedPath),
-        ]);
-        const canonicalRelative = relative(canonicalRoot, canonicalArtifact);
+        const location = await artifactLocation(
+          projectRoot,
+          run.artifactRelativePath,
+          { artifactRoot },
+        );
         if (
-          details.isFile() &&
-          details.size > 0 &&
-          canonicalRelative !== ".." &&
-          !canonicalRelative.startsWith(`..${sep}`)
-        ) {
-          artifacts.push(relativePath.split(sep).join("/"));
-        }
+          !location.durable &&
+          !run.artifactRelativePath.startsWith("out/treatments/")
+        )
+          continue;
+        if ((await stat(location.path)).size > 0)
+          artifacts.push(location.reference);
       } catch (error) {
-        if (error?.code !== "ENOENT") throw error;
+        if (error?.code !== "ARTIFACT_UNAVAILABLE") throw error;
       }
     }
   }
@@ -204,6 +183,7 @@ export const runSingleUrlPipeline = async ({
   let ledger;
   let publishingLedger;
   let packageVersion;
+  let storage;
   let analysisFailures = [];
   let processing;
   try {
@@ -215,12 +195,9 @@ export const runSingleUrlPipeline = async ({
     )(selectConfig);
     packageVersion = selectConfig.packageVersion;
 
-    const ledgerPath =
-      environment.AUDIOGRAM_DB_PATH ??
-      join(defaultApplicationSupport, "audiograms.sqlite");
-    const approvalLedgerPath =
-      environment.INSTAGRAM_PUBLISHING_DB_PATH ??
-      resolvePublishingLedgerPath(environment);
+    storage = resolveStorageConfig(environment);
+    const ledgerPath = storage.processingDb;
+    const approvalLedgerPath = storage.publishingDb;
     await Promise.all([
       mkdir(dirname(ledgerPath), { recursive: true, mode: 0o700 }),
       mkdir(dirname(approvalLedgerPath), { recursive: true, mode: 0o700 }),
@@ -295,6 +272,7 @@ export const runSingleUrlPipeline = async ({
       registry: dependencies.registry ?? treatmentRegistry,
       treatments: [resolved.treatment],
       retryFailedRenders,
+      artifactRoot: storage.artifactRoot,
       loadTranscriptForPackage: (packageId) =>
         ledger.getTranscriptForPackage(packageId),
       acquireAssets: (clipPackage) =>
@@ -304,7 +282,7 @@ export const runSingleUrlPipeline = async ({
       renderTreatment: ({ clipPackage, treatment }) =>
         (dependencies.renderTreatment ?? renderTreatmentRun)(
           { clipPackage, treatment, selection: resolved.selection },
-          { projectRoot: root },
+          { projectRoot: root, artifactRoot: storage.artifactRoot },
         ),
       projectRoot: root,
       videoId: source.videoId,
@@ -320,12 +298,14 @@ export const runSingleUrlPipeline = async ({
         )({
           ledger: publishingLedger,
           projectRoot: root,
+          artifactRoot: storage.artifactRoot,
           artifactRelativePath,
           artifactHash:
             artifactHash ??
             (await (dependencies.hashArtifact ?? hashArtifact)(
               root,
               artifactRelativePath,
+              { artifactRoot: storage.artifactRoot },
             )),
           accountId: resolvePublishingAccountId(environment),
           sourceVideoId: source.videoId,
@@ -350,6 +330,7 @@ export const runSingleUrlPipeline = async ({
           videoId: source.videoId,
           packageVersion,
           treatment: resolved.treatment,
+          artifactRoot: storage.artifactRoot,
           projectRoot: root,
         }),
     });
@@ -463,6 +444,7 @@ export const runSingleUrlPipeline = async ({
           videoId: source.videoId,
           packageVersion,
           treatment: resolved.treatment,
+          artifactRoot: storage.artifactRoot,
           projectRoot: root,
         });
       } catch {

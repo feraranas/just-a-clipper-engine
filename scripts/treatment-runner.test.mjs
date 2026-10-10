@@ -16,7 +16,12 @@ import { renderTreatmentRun } from "./treatment-runner.mjs";
 
 test("renders any registry treatment to its deterministic artifact path", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-runner-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   const calls = [];
   const runCommand = async (command, args) => {
     calls.push({ command, args });
@@ -42,12 +47,12 @@ test("renders any registry treatment to its deterministic artifact path", async 
       },
       treatment,
     },
-    { projectRoot, runCommand },
+    { projectRoot, artifactRoot: projectRoot + "-durable", runCommand },
   );
 
-  assert.equal(
+  assert.match(
     artifactRelativePath,
-    "out/treatments/future-treatment/2/video-1/v2/clip-3.mp4",
+    /^artifacts\/[a-f0-9]{64}\/[a-f0-9]{64}\/video\.mp4$/,
   );
   assert.deepEqual(calls[0], {
     command: "npx",
@@ -90,7 +95,12 @@ test("renders any registry treatment to its deterministic artifact path", async 
 
 test("does not publish an empty partial render", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-runner-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   const treatment = {
     id: "audiogram-basic",
     version: "1",
@@ -108,6 +118,7 @@ test("does not publish an empty partial render", async (t) => {
       },
       {
         projectRoot,
+        artifactRoot: projectRoot + "-durable",
         runCommand: async (_command, args) => writeFile(args[3], ""),
       },
     ),
@@ -117,7 +128,12 @@ test("does not publish an empty partial render", async (t) => {
 
 test("missing required assets stop rendering before the process starts", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-runner-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   let processCalls = 0;
   await assert.rejects(
     renderTreatmentRun(
@@ -139,6 +155,7 @@ test("missing required assets stop rendering before the process starts", async (
       },
       {
         projectRoot,
+        artifactRoot: projectRoot + "-durable",
         runCommand: async () => {
           processCalls += 1;
         },
@@ -151,7 +168,12 @@ test("missing required assets stop rendering before the process starts", async (
 
 test("rejects navigation render path components before creating treatment output", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-paths-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   const validClipPackage = {
     videoId: "video-1",
     packageVersion: "v1",
@@ -185,6 +207,7 @@ test("rejects navigation render path components before creating treatment output
           { clipPackage, treatment },
           {
             projectRoot,
+            artifactRoot: projectRoot + "-durable",
             runCommand: async () => {
               processCalls += 1;
               throw new Error("render command should not run");
@@ -202,7 +225,12 @@ test("rejects navigation render path components before creating treatment output
 
 test("requires a package version before creating treatment output", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "treatment-paths-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   let processCalls = 0;
 
   for (const packageVersion of [undefined, null]) {
@@ -226,6 +254,7 @@ test("requires a package version before creating treatment output", async (t) =>
         },
         {
           projectRoot,
+          artifactRoot: projectRoot + "-durable",
           runCommand: async () => {
             processCalls += 1;
           },
@@ -241,7 +270,12 @@ test("requires a package version before creating treatment output", async (t) =>
 
 test("records resolved selection and artifact hash alongside the rendered video", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "manifest-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   const { audiogramBasicTreatment } = await import("./treatment-registry.mjs");
   const { createHash } = await import("node:crypto");
   const clipPackage = {
@@ -267,11 +301,18 @@ test("records resolved selection and artifact hash alongside the rendered video"
         variationId: "default",
       },
     },
-    { projectRoot, runCommand: async (_, args) => writeFile(args[3], "video") },
+    {
+      projectRoot,
+      artifactRoot: projectRoot + "-durable",
+      runCommand: async (_, args) => writeFile(args[3], "video"),
+    },
   );
   const manifest = JSON.parse(
     await readFile(
-      join(projectRoot, output.replace(/\.mp4$/, ".manifest.json")),
+      join(
+        projectRoot + "-durable",
+        output.replace(/\.mp4$/, ".manifest.json"),
+      ),
       "utf8",
     ),
   );
@@ -301,7 +342,12 @@ test("records resolved selection and artifact hash alongside the rendered video"
 
 test("manifest failure does not return a successful artifact", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "manifest-fail-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   const { mkdir } = await import("node:fs/promises");
   await mkdir(
     join(
@@ -330,6 +376,7 @@ test("manifest failure does not return a successful artifact", async (t) => {
       },
       {
         projectRoot,
+        artifactRoot: projectRoot + "-durable",
         runCommand: async (_, args) => writeFile(args[3], "video"),
       },
     ),
@@ -358,7 +405,12 @@ const inputPackage = (relativePath = "public/audio.wav") => ({
 for (const change of ["replace", "delete"]) {
   test(`rejects input ${change} during rendering before accepting output`, async (t) => {
     const projectRoot = await mkdtemp(join(tmpdir(), "input-change-"));
-    t.after(() => rm(projectRoot, { recursive: true, force: true }));
+    t.after(() =>
+      Promise.all([
+        rm(projectRoot, { recursive: true, force: true }),
+        rm(projectRoot + "-durable", { recursive: true, force: true }),
+      ]),
+    );
     await mkdir(join(projectRoot, "public"));
     const audio = join(projectRoot, "public/audio.wav");
     await writeFile(audio, "before");
@@ -367,6 +419,7 @@ for (const change of ["replace", "delete"]) {
         { clipPackage: inputPackage(), treatment: inputTreatment },
         {
           projectRoot,
+          artifactRoot: projectRoot + "-durable",
           runCommand: async (_, args) => {
             await writeFile(args[3], "video");
             if (change === "replace") await writeFile(audio, "after!");
@@ -391,7 +444,12 @@ for (const change of ["replace", "delete"]) {
 
 test("same input path with different contents gets a different manifest hash", async (t) => {
   const projectRoot = await mkdtemp(join(tmpdir(), "input-replace-"));
-  t.after(() => rm(projectRoot, { recursive: true, force: true }));
+  t.after(() =>
+    Promise.all([
+      rm(projectRoot, { recursive: true, force: true }),
+      rm(projectRoot + "-durable", { recursive: true, force: true }),
+    ]),
+  );
   await mkdir(join(projectRoot, "public"));
   const hashes = [];
   for (const content of ["before", "after!"]) {
@@ -400,12 +458,16 @@ test("same input path with different contents gets a different manifest hash", a
       { clipPackage: inputPackage(), treatment: inputTreatment },
       {
         projectRoot,
+        artifactRoot: projectRoot + "-durable",
         runCommand: async (_, args) => writeFile(args[3], "video"),
       },
     );
     const manifest = JSON.parse(
       await readFile(
-        join(projectRoot, output.replace(".mp4", ".manifest.json")),
+        join(
+          projectRoot + "-durable",
+          output.replace(".mp4", ".manifest.json"),
+        ),
         "utf8",
       ),
     );
@@ -442,6 +504,7 @@ test("invalid input files stop the render command", async (t) => {
         { clipPackage: inputPackage(relativePath), treatment: inputTreatment },
         {
           projectRoot,
+          artifactRoot: projectRoot + "-durable",
           runCommand: async () => {
             calls++;
           },
@@ -457,6 +520,7 @@ test("invalid input files stop the render command", async (t) => {
       { clipPackage: duplicate, treatment: inputTreatment },
       {
         projectRoot,
+        artifactRoot: projectRoot + "-durable",
         runCommand: async () => {
           calls++;
         },
