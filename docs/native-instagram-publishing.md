@@ -58,6 +58,27 @@ codec/duration with `ffprobe` and the current Meta media specification first.
 
 ## Outcomes and recovery
 
+### Detailed upload diagnostics
+
+The client reads `status_code` and the upload and processing phases in
+`video_status`. A top-level `IN_PROGRESS` result can contain an upload error.
+Phase errors stop the worker with `safeToRetry: false`. Missing completion
+details defer publication. Neither case starts another upload or grants retry
+permission. An operator must decide recovery separately.
+
+The execution store appends sanitized observations to `publishing_diagnostics`.
+Each record links to an attempt and has a local observation timestamp. It retains
+known operation and error categories, HTTP status, numeric provider codes,
+phase enums and byte counts. It never retains raw provider messages, tokens,
+authorization headers, upload URLs or the free-text `status` field.
+`execution.getDiagnostics(itemId)` reads the latest 100 records in chronological
+order. There is no new dashboard endpoint or retention cleanup in this change.
+
+Recognized timeout exceptions use `REQUEST_TIMEOUT`; other transport exceptions
+use `NETWORK_ERROR`. Historical attempts cannot recover discarded errors.
+The table is created when the execution store next opens the selected database.
+Implementation tests use temporary databases, not the live ledger.
+
 - Exit 0 / `published`: Meta media ID persisted, or previously published no-op.
 - Exit 2 / `pending`: upload/status work needs later inspection. A later one-shot
   invocation reads the same container; it does not blindly resend bytes.

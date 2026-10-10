@@ -136,10 +136,14 @@ export const runPublishingOnce = async ({
     checkpoint("unknown", { errorCode });
     return result("unknown", { containerId: attempt.containerId, errorCode });
   };
-  const fail = (errorCode) => {
-    checkpoint("failed", { errorCode, safeToRetry: true });
+  const fail = (errorCode, safeToRetry = true) => {
+    checkpoint("failed", { errorCode, safeToRetry });
     return result("failed", { errorCode });
   };
+  const recordError = (operation, error) => execution.recordDiagnostic(attempt.id, {
+    operation, errorCode: error?.code, httpStatus: error?.httpStatus,
+    providerCode: error?.providerCode, providerSubcode: error?.providerSubcode,
+  });
   if (attempt.phase === "create_requested")
     return unknown("CREATE_OUTCOME_UNCERTAIN");
   if (attempt.phase === "publish_requested") {
@@ -174,6 +178,7 @@ export const runPublishingOnce = async ({
           caption: item.approvedCaption,
         });
       } catch (error) {
+        recordError("create_container", error);
         return error.ambiguous === false
           ? fail("CREATE_REJECTED")
           : unknown("CREATE_OUTCOME_UNCERTAIN");
@@ -193,6 +198,7 @@ export const runPublishingOnce = async ({
           size: Number(artifact.info.size),
         });
       } catch (error) {
+        recordError("upload_video", error);
         if (error.ambiguous === false) return fail("UPLOAD_REJECTED");
         // Intent is durable. Next run reads status; it must not resend bytes.
         return result("pending", {
@@ -215,20 +221,27 @@ export const runPublishingOnce = async ({
     }
     for (let poll = 0; poll < 5; poll++) {
       await lock.assertOwned();
-      let status;
+      let detail;
       try {
-        status = (await client.getContainerStatus(attempt.containerId))
-          .statusCode;
-      } catch {
+        detail = await client.getContainerStatus(attempt.containerId);
+      } catch (error) {
+        recordError("container_status", error);
         return result("pending", {
           containerId: attempt.containerId,
           errorCode: "STATUS_UNAVAILABLE",
         });
       }
+      execution.recordDiagnostic(attempt.id, { ...detail, operation: "container_status" });
+      const status = detail.statusCode;
       if (status === "PUBLISHED") return unknown("PUBLISHED_ID_UNCONFIRMED");
+      if (detail.uploadPhase === "error") return fail("UPLOAD_PHASE_ERROR", false);
+      if (detail.processingPhase === "error") return fail("PROCESSING_PHASE_ERROR", false);
       if (status === "ERROR" || status === "EXPIRED")
         return fail(`CONTAINER_${status}`);
       if (status === "FINISHED") {
+        if (detail.uploadPhase !== "complete" || detail.processingPhase !== "complete") {
+          return result("pending", { containerId: attempt.containerId, errorCode: "READINESS_DETAILS_INCOMPLETE" });
+        }
         if (attempt.phase === "upload_requested") checkpoint("processing");
         await lock.assertOwned();
         checkpoint("publish_requested");
@@ -238,7 +251,8 @@ export const runPublishingOnce = async ({
             accountId: config.accountId,
             containerId: attempt.containerId,
           });
-        } catch {
+        } catch (error) {
+          recordError("publish_container", error);
           return unknown("PUBLISH_OUTCOME_UNCERTAIN");
         }
         // If this commit fails, durable intent still forbids duplicate publication.

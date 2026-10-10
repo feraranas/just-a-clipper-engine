@@ -101,7 +101,7 @@ test("render, queue, helper validation and HTTP playback survive producer checko
         await fileHandle.read(bytes, 0, size, 0);
         assert.equal(bytes.toString(), "synthetic-video");
       },
-      getContainerStatus: async () => ({ statusCode: "FINISHED" }),
+      getContainerStatus: async () => ({ statusCode: "FINISHED", uploadPhase: "complete", processingPhase: "complete" }),
       publishContainer: async () => ({ id: "456" }),
     };
     const result = await runPublishingOnce({
