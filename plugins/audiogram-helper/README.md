@@ -4,7 +4,7 @@ This development adapter accepts one YouTube video URL, queues the existing Audi
 
 ## Prerequisites
 
-- Node.js 22 or newer (the local ledger uses Node's built-in SQLite module)
+- Node.js 22.13.0 or newer (supports optional env-file loading and the built-in SQLite module without an extra flag)
 - Install repository dependencies with `npm ci`
 - The existing Audiograms prerequisites for fetching and rendering: `yt-dlp`, FFmpeg, and ffprobe
 - OpenAI Secure MCP Tunnel available in your ChatGPT Developer Mode environment
@@ -12,7 +12,7 @@ This development adapter accepts one YouTube video URL, queues the existing Audi
 ## Start and connect
 
 1. Copy `.env.example` to `.env` in the Audiograms repository root.
-2. Set `AUDIOGRAM_LLM_PROVIDER` to `chatgpt-oauth` or `openai-api`. The `openai-api` provider also requires `OPENAI_API_KEY`. If you use Jev, set both `TYPESAFE_JEV_ENDPOINT` and `TYPESAFE_JEV_API_KEY`.
+2. Set `AUDIOGRAM_LLM_PROVIDER` to `chatgpt-oauth` or `openai-api`. The `openai-api` provider also requires `OPENAI_API_KEY`. For `chatgpt-oauth`, use the default external credential location from `npm run chatgpt:login`; a custom `AUDIOGRAM_CHATGPT_AUTH_PATH` must be absolute and outside the repository. If you use Jev, set an HTTPS `TYPESAFE_JEV_ENDPOINT` and a nonblank `TYPESAFE_JEV_API_KEY`. Otherwise, leave both Jev values empty.
 3. From the repository root, run `npm run audiogram:mcp`. The command loads `.env` when that file exists. It checks required settings before it opens the MCP port. It prints setting names in errors, never secret values.
 4. Confirm the terminal reports `http://127.0.0.1:7331/mcp`. The process binds only to loopback; do not change the bind address or expose the port publicly.
 5. In ChatGPT, enable Developer Mode and add a custom MCP app using the Secure MCP Tunnel workflow. Select this local service at `http://127.0.0.1:7331/mcp` as the tunnel target, then finish the connection in the developer UI.
