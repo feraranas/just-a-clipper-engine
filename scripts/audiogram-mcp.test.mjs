@@ -93,7 +93,14 @@ test("MCP startup loads local env, validates settings, and accepts cloud env", a
       flag: "wx",
       mode: 0o600,
     });
-    const localEnv = await runMcp(cleanEnvironment(tempRoot), tempRoot);
+    const copiedExample = await runMcp(cleanEnvironment(tempRoot), tempRoot);
+    assert.equal(copiedExample.sawListening, false);
+    assert.equal(copiedExample.code, 1);
+    assert.match(copiedExample.output, /TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together/);
+    const localEnv = await runMcp(cleanEnvironment(tempRoot, {
+      TYPESAFE_JEV_ENDPOINT: "https://jev.example.test/v1/judge",
+      TYPESAFE_JEV_API_KEY: "synthetic-key",
+    }), tempRoot);
     assert.equal(localEnv.sawListening, true);
     assert.ok(localEnv.code === 0 || localEnv.signal === "SIGTERM");
     await unlink(envFile);

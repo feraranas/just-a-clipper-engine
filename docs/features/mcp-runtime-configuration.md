@@ -63,7 +63,12 @@ stateDiagram-v2
 
 ## Implementation reconciliation and deviations
 
-Review fixes leave optional Jev settings disabled in the example and use the
+Jev is enabled in the example through its endpoint placeholder. Users must
+supply their endpoint and key before startup. Tests confirm that the copied
+example stops before listening until Jev settings are provided, then starts
+with configured settings. Disabling Jev requires explicitly clearing both values.
+
+Review fixes use the
 default external OAuth credential path. Startup rejects relative, unnormalized,
 or repository-contained OAuth paths and invalid Jev values before listening.
 The README requires Node 22.13.0 or newer. Tests start with the actual example
@@ -78,6 +83,6 @@ printing values. The worker continues to inherit the server environment.
 
 The plugin README now documents local setup and the cloud environment boundary.
 The integration test verifies missing settings stop startup, local `.env`
-settings start the server, platform-injected settings start the server without
+settings with configured Jev start the server, platform-injected settings start the server without
 `.env`, and an incomplete Jev pair stops startup. No cloud deployment or
 multi-user OAuth behavior was added. No other deviations remain.
