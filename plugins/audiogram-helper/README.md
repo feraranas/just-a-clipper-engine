@@ -12,7 +12,7 @@ This development adapter accepts one YouTube video URL, queues the existing Audi
 ## Start and connect
 
 1. Copy `.env.example` to `.env` in the Audiograms repository root.
-2. Set `AUDIOGRAM_LLM_PROVIDER` to `chatgpt-oauth` or `openai-api`. The `openai-api` provider also requires `OPENAI_API_KEY`. For `chatgpt-oauth`, use the default external credential location from `npm run chatgpt:login`; a custom `AUDIOGRAM_CHATGPT_AUTH_PATH` must be absolute and outside the repository. If you use Jev, set an HTTPS `TYPESAFE_JEV_ENDPOINT` and a nonblank `TYPESAFE_JEV_API_KEY`. Otherwise, leave both Jev values empty.
+2. Set `AUDIOGRAM_LLM_PROVIDER` to `chatgpt-oauth` or `openai-api`. The `openai-api` provider also requires `OPENAI_API_KEY`. For `chatgpt-oauth`, use the default external credential location from `npm run chatgpt:login`; a custom `AUDIOGRAM_CHATGPT_AUTH_PATH` must be absolute and outside the repository. Jev is enabled in the example: replace the placeholder with your HTTPS `TYPESAFE_JEV_ENDPOINT` and supply your `TYPESAFE_JEV_API_KEY`. The server will not start until these settings are configured. To explicitly opt out of Jev, clear both values.
 3. From the repository root, run `npm run audiogram:mcp`. The command loads `.env` when that file exists. It checks required settings before it opens the MCP port. It prints setting names in errors, never secret values.
 4. Confirm the terminal reports `http://127.0.0.1:7331/mcp`. The process binds only to loopback; do not change the bind address or expose the port publicly.
 5. In ChatGPT, enable Developer Mode and add a custom MCP app using the Secure MCP Tunnel workflow. Select this local service at `http://127.0.0.1:7331/mcp` as the tunnel target, then finish the connection in the developer UI.
