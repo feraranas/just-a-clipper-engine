@@ -30,14 +30,17 @@ const parseResponse = async (response) => {
   }
   if (!response.ok) {
     throw new Error(
-      typeof payload.error === "string" ? payload.error : `Request failed (${response.status})`,
+      typeof payload.error === "string"
+        ? payload.error
+        : `Request failed (${response.status})`,
     );
   }
   return payload;
 };
 
 export const mutationRequest = async (fetchImpl, path, body) => {
-  if (typeof fetchImpl !== "function") throw new Error("fetch implementation is required");
+  if (typeof fetchImpl !== "function")
+    throw new Error("fetch implementation is required");
   const response = await fetchImpl(path, {
     method: "POST",
     headers: { "content-type": "application/json" },
@@ -55,21 +58,34 @@ export const loadQueue = async (fetchImpl) => {
 };
 
 export const loadLogs = async (fetchImpl, limit = 50, signal) => {
-  const response = await fetchImpl("/api/logs?limit=" + limit, { signal, cache: "no-store" });
+  const response = await fetchImpl("/api/logs?limit=" + limit, {
+    signal,
+    cache: "no-store",
+  });
   const payload = await parseResponse(response);
-  if (!payload || !Array.isArray(payload.events)) throw new Error("Invalid logs payload");
+  if (!payload || !Array.isArray(payload.events))
+    throw new Error("Invalid logs payload");
   return payload.events;
 };
 
 export const saveCaption = (fetchImpl, itemId, caption) =>
   mutationRequest(fetchImpl, itemPath(itemId, "caption"), { caption });
 
-export const saveCaptionAndReload = async (fetchImpl, itemId, caption, reload, setMessage) => {
+export const saveCaptionAndReload = async (
+  fetchImpl,
+  itemId,
+  caption,
+  reload,
+  setMessage,
+) => {
   const result = await saveCaption(fetchImpl, itemId, caption);
   await reload();
-  setMessage(result.item?.state === "queued"
-    ? "Caption saved. Review and approve before publishing."
-    : "Caption unchanged; approval preserved.", "success");
+  setMessage(
+    result.item?.state === "queued"
+      ? "Caption saved. Review and approve before publishing."
+      : "Caption unchanged; approval preserved.",
+    "success",
+  );
 };
 
 export const approveItem = (fetchImpl, itemId, scheduledAt) =>
@@ -112,7 +128,13 @@ const renderItem = (item, reload, setMessage) => {
     src: buildPreviewUrl(item.id),
   });
   preview.addEventListener("error", () => {
-    setMessage(`Preview unavailable for ${metadata.title}`, "error");
+    const message =
+      "Video file unavailable. Restore the saved artifact or render this clip again.";
+    if (!card.querySelector(".preview-error"))
+      preview.after(
+        element("p", { className: "preview-error", textContent: message }),
+      );
+    setMessage(`${metadata.title}: ${message}`, "error");
   });
   const details = element("p", {
     className: "queue-details",
@@ -133,7 +155,10 @@ const renderItem = (item, reload, setMessage) => {
     type: "text",
     placeholder: "Reason for rejection",
   });
-  const save = element("button", { type: "button", textContent: "Save caption" });
+  const save = element("button", {
+    type: "button",
+    textContent: "Save caption",
+  });
   const approve = element("button", {
     type: "button",
     className: "button-primary",
@@ -145,9 +170,14 @@ const renderItem = (item, reload, setMessage) => {
     textContent: "Reject",
   });
   const controls = element("div", { className: "queue-controls" }, [
-    element("label", { textContent: "Caption" }), caption, save,
-    element("label", { textContent: "Schedule" }), schedule, approve,
-    rejectionReason, reject,
+    element("label", { textContent: "Caption" }),
+    caption,
+    save,
+    element("label", { textContent: "Schedule" }),
+    schedule,
+    approve,
+    rejectionReason,
+    reject,
   ]);
   const run = async (action, handlesReload = false) => {
     for (const button of [save, approve, reject]) button.disabled = true;
@@ -163,13 +193,21 @@ const renderItem = (item, reload, setMessage) => {
       for (const button of [save, approve, reject]) button.disabled = false;
     }
   };
-  save.addEventListener("click", () => run(() => saveCaptionAndReload(fetch, item.id, caption.value, reload, setMessage), true));
+  save.addEventListener("click", () =>
+    run(
+      () =>
+        saveCaptionAndReload(fetch, item.id, caption.value, reload, setMessage),
+      true,
+    ),
+  );
   approve.addEventListener("click", () => {
     if (!schedule.value) {
       setMessage("Choose a schedule before approving", "error");
       return;
     }
-    return run(() => approveItem(fetch, item.id, new Date(schedule.value).toISOString()));
+    return run(() =>
+      approveItem(fetch, item.id, new Date(schedule.value).toISOString()),
+    );
   });
   reject.addEventListener("click", () => {
     if (!rejectionReason.value.trim()) {
@@ -187,7 +225,9 @@ export const initializePublishingPage = (root = document) => {
   const message = root.querySelector("#queue-message");
   const refresh = root.querySelector("#refresh-queue");
   if (!list || !message || !refresh) return;
-  const disposeActivity = initializeActivity(root, (signal) => loadLogs(fetch, 500, signal));
+  const disposeActivity = initializeActivity(root, (signal) =>
+    loadLogs(fetch, 500, signal),
+  );
   const setMessage = (text, kind = "") => {
     message.textContent = text;
     message.className = `queue-message ${kind}`.trim();
@@ -198,9 +238,15 @@ export const initializePublishingPage = (root = document) => {
       const items = await loadQueue(fetch);
       list.replaceChildren();
       if (items.length === 0) {
-        list.append(element("p", { className: "empty-state", textContent: "No publishing candidates yet." }));
+        list.append(
+          element("p", {
+            className: "empty-state",
+            textContent: "No publishing candidates yet.",
+          }),
+        );
       } else {
-        for (const item of items) list.append(renderItem(item, reload, setMessage));
+        for (const item of items)
+          list.append(renderItem(item, reload, setMessage));
       }
       setMessage(`${items.length} candidate${items.length === 1 ? "" : "s"}`);
     } catch (error) {
@@ -218,7 +264,9 @@ export const initializePublishingPage = (root = document) => {
 
 if (typeof document !== "undefined") {
   let dispose;
-  document.addEventListener("DOMContentLoaded", () => { dispose = initializePublishingPage(); });
+  document.addEventListener("DOMContentLoaded", () => {
+    dispose = initializePublishingPage();
+  });
   window.addEventListener("pagehide", () => dispose?.());
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) dispose = initializePublishingPage();

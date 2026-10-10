@@ -1,3 +1,4 @@
+import { resolveStorageConfig } from "../../scripts/storage-config.mjs";
 import { resolveTemplateSelection } from "../../src/templates/catalog.mjs";
 import { spawn } from "node:child_process";
 import { closeSync, openSync, writeSync } from "node:fs";
@@ -224,7 +225,9 @@ export async function runJobWorker({
       const contract = JSON.parse(output.stdout.trim());
       let result;
       try {
-        result = await validateCliResult(contract, projectRoot);
+        result = await validateCliResult(contract, projectRoot, {
+          artifactRoot: resolveStorageConfig(environment).artifactRoot,
+        });
       } catch {
         throw Object.assign(new Error("CLI result validation failed."), {
           code: "CLI_CONTRACT_INVALID",

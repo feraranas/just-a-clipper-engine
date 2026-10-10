@@ -61,10 +61,10 @@ test("rejects missing, empty, non-MP4, and outside-repository artifacts", async 
   const { directory, ledger } = await setup(t);
   await mkdir(join(directory, "out"));
   const cases = [
-    ["out/missing.mp4", /ENOENT/],
+    ["out/missing.mp4", /missing or invalid/],
     ["out/empty.mp4", /non-empty/],
-    ["out/clip.mov", /MP4/],
-    ["../outside.mp4", /inside the project repository/],
+    ["out/clip.mov", /missing or invalid/],
+    ["../outside.mp4", /missing or invalid/],
   ];
   await writeFile(join(directory, "out/empty.mp4"), "");
   await writeFile(join(directory, "out/clip.mov"), "media");
@@ -84,6 +84,9 @@ test("hashArtifact returns a content hash for the completed MP4", async (t) => {
   const { directory, ledger } = await setup(t);
   await mkdir(join(directory, "out"));
   await writeFile(join(directory, "out/clip.mp4"), "media");
-  assert.match(await hashArtifact(directory, "out/clip.mp4"), /^sha256:[0-9a-f]{64}$/);
+  assert.match(
+    await hashArtifact(directory, "out/clip.mp4"),
+    /^sha256:[0-9a-f]{64}$/,
+  );
   assert.equal(ledger.getQueue().length, 0);
 });

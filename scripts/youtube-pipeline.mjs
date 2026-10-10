@@ -1,3 +1,4 @@
+import { resolveStorageConfig } from "./storage-config.mjs";
 import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
 import { randomBytes } from "node:crypto";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
@@ -43,9 +44,7 @@ const clientPath =
 const tokenPath =
   process.env.AUDIOGRAM_GOOGLE_TOKEN_PATH ??
   join(appSupportDirectory, "google-oauth-token.json");
-const ledgerPath =
-  process.env.AUDIOGRAM_DB_PATH ??
-  join(appSupportDirectory, "audiograms.sqlite");
+const ledgerPath = resolveStorageConfig().processingDb;
 const publishingAccountId = resolvePublishingAccountId(process.env);
 const publishingLedgerPath = resolvePublishingLedgerPath(process.env);
 const pipelineLogger = createPipelineLogger({
@@ -272,7 +271,10 @@ const executePipeline = async () => {
           renderTreatment: ({ clipPackage, treatment }) =>
             renderTreatmentRun(
               { clipPackage, treatment, selection: templateChoice.selection },
-              { projectRoot },
+              {
+                projectRoot,
+                artifactRoot: resolveStorageConfig().artifactRoot,
+              },
             ),
           projectRoot,
           onArtifactComplete: publishingLedger
