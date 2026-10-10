@@ -9,6 +9,7 @@ import { z } from "zod";
 import path from "node:path";
 import { createJobStore } from "./job-store.mjs";
 import { createLocalRunner, parseAndValidateUrl } from "./local-runner.mjs";
+import { validateMcpRuntimeConfig } from "./runtime-config.mjs";
 
 const HOST = "127.0.0.1";
 const JOB_STORE_PATH = (root) =>
@@ -276,16 +277,25 @@ if (
   process.argv[1] &&
   path.resolve(process.argv[1]) === new URL(import.meta.url).pathname
 ) {
-  const projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
-  const server = await startMcpServer({
-    projectRoot,
-    port: Number(process.env.AUDIOGRAM_MCP_PORT ?? 7331),
-  });
-  process.stdout.write(`Audiogram MCP listening on ${server.url}\n`);
-  const shutdown = async () => {
-    await server.close();
-    process.exit(0);
-  };
-  process.once("SIGINT", shutdown);
-  process.once("SIGTERM", shutdown);
+  try {
+    validateMcpRuntimeConfig(process.env);
+  } catch (error) {
+    process.stderr.write(`Audiogram MCP configuration error: ${error.message}\n`);
+    process.exitCode = 1;
+  }
+
+  if (process.exitCode !== 1) {
+    const projectRoot = process.env.AUDIOGRAM_PROJECT_ROOT ?? process.cwd();
+    const server = await startMcpServer({
+      projectRoot,
+      port: Number(process.env.AUDIOGRAM_MCP_PORT ?? 7331),
+    });
+    process.stdout.write(`Audiogram MCP listening on ${server.url}\n`);
+    const shutdown = async () => {
+      await server.close();
+      process.exit(0);
+    };
+    process.once("SIGINT", shutdown);
+    process.once("SIGTERM", shutdown);
+  }
 }

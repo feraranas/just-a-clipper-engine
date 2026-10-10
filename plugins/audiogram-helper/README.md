@@ -11,12 +11,20 @@ This development adapter accepts one YouTube video URL, queues the existing Audi
 
 ## Start and connect
 
-1. From the Audiograms repository root, run `npm run audiogram:mcp`.
-2. Confirm the terminal reports `http://127.0.0.1:7331/mcp`. The process binds only to loopback; do not change the bind address or expose the port publicly.
-3. In ChatGPT, enable Developer Mode and add a custom MCP app using the Secure MCP Tunnel workflow. Select this local service at `http://127.0.0.1:7331/mcp` as the tunnel target, then finish the connection in the developer UI.
-4. In ChatGPT, submit one public YouTube video URL. The `create_audiogram` tool returns a job ID; call `get_audiogram_status` with that ID until it is terminal. Completed results contain repository-relative local artifact paths, not public download links.
+1. Copy `.env.example` to `.env` in the Audiograms repository root.
+2. Set `AUDIOGRAM_LLM_PROVIDER` to `chatgpt-oauth` or `openai-api`. The `openai-api` provider also requires `OPENAI_API_KEY`. If you use Jev, set both `TYPESAFE_JEV_ENDPOINT` and `TYPESAFE_JEV_API_KEY`.
+3. From the repository root, run `npm run audiogram:mcp`. The command loads `.env` when that file exists. It checks required settings before it opens the MCP port. It prints setting names in errors, never secret values.
+4. Confirm the terminal reports `http://127.0.0.1:7331/mcp`. The process binds only to loopback; do not change the bind address or expose the port publicly.
+5. In ChatGPT, enable Developer Mode and add a custom MCP app using the Secure MCP Tunnel workflow. Select this local service at `http://127.0.0.1:7331/mcp` as the tunnel target, then finish the connection in the developer UI.
+6. In ChatGPT, submit one public YouTube video URL. The `create_audiogram` tool returns a job ID; call `get_audiogram_status` with that ID until it is terminal. Completed results contain repository-relative local artifact paths, not public download links.
 
-The Secure MCP Tunnel is a private development bridge, not hosting. The tunnel configuration and credentials remain in the user/account environment and are not stored by this project. A service restart preserves recorded job outcomes; a worker that disappears before recording its result is reported as failed. A future cloud deployment would replace the local runner and artifact store while retaining the MCP contract; it is not configured here.
+The Secure MCP Tunnel is a private development bridge, not hosting. The tunnel configuration and credentials remain in the user/account environment and are not stored by this project. A service restart preserves recorded job outcomes; a worker that disappears before recording its result is reported as failed.
+
+## Cloud runtime boundary
+
+The same command can run in a cloud host. The host must provide runtime settings as environment variables and secrets through its secret manager. The `.env` file is optional and must not be copied into a container image or committed. Startup validation uses the environment that the host provides before the service accepts jobs.
+
+This does not deploy Cloud Run or configure its secrets. The local `chatgpt-oauth` credentials are not suitable for a shared server. A public service needs a separate per-user OAuth design before it can use that provider for multiple users. The cloud runner and artifact store also remain future work.
 
 ## Tools
 
