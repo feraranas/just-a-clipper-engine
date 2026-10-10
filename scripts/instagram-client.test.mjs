@@ -46,7 +46,7 @@ test("reads retry transient failures three times, honor rate hints and stop on a
   }
   let calls = 0; const waits = [];
   const client = make(async () => ++calls === 1 ? Response.json({}, { status: 429, headers: { "retry-after": "3" } }) : Response.json({ status_code: "FINISHED" }), async (ms) => waits.push(ms));
-  assert.deepEqual(await client.getContainerStatus("123"), { statusCode: "FINISHED" });
+  assert.equal((await client.getContainerStatus("123")).statusCode, "FINISHED");
   assert.deepEqual(waits, [3000]);
   for (const response of [Response.json({ error: { code: 190 } }, { status: 400 }), Response.json({}, { status: 429, headers: { "retry-after": "120" } })]) {
     calls = 0;
@@ -83,4 +83,45 @@ test("binary uploads stream bounded chunks from the open descriptor and keep it 
 });
 test("invalid client configuration fails before any request", () => {
   for (const options of [{ token: "", version: "v26.0" }, { token: "a\nb", version: "v26.0" }, { token: "ok", version: "../x" }]) assert.throws(() => createInstagramClient(options));
+});
+
+test("detailed status retains only safe fields including zero-byte upload errors", async () => {
+  const result = await make(async (url) => {
+    assert.equal(new URL(url).searchParams.get("fields"), "id,status,status_code,video_status");
+    return Response.json({status_code: "IN_PROGRESS", status: "test-token", video_status: {
+      uploading_phase: {status: "error", bytes_transferred: 0, source_file_size: 0,
+        errors: [{code: 1363008, message: "test-token", url: "https://secret"}]},
+      processing_phase: {status: "error"},
+    }});
+  }).getContainerStatus("123");
+  assert.deepEqual(result, {statusCode: "IN_PROGRESS", uploadPhase: "error", processingPhase: "error",
+    bytesTransferred: 0, sourceFileSize: 0, providerCodes: [1363008]});
+});
+
+test("missing and hostile phase fields do not imply completion or leak content", async () => {
+  for (const video_status of [undefined, {uploading_phase: {status: "test-token", bytes_transferred: -1}, processing_phase: {status: "test-token"}}]) {
+    const result = await make(async () => Response.json({status_code: "FINISHED", video_status})).getContainerStatus("123");
+    assert.equal(result.uploadPhase, null);
+    assert.equal(result.processingPhase, null);
+    assert.ok(!JSON.stringify(result).includes("test-token"));
+  }
+});
+
+test("timeout differs from network failure without retaining exception secrets", async () => {
+  for (const [name, code] of [["TimeoutError", "REQUEST_TIMEOUT"], ["TypeError", "NETWORK_ERROR"]]) {
+    await assert.rejects(make(async () => {const error = new Error("test-token"); error.name = name; throw error;})
+      .publishContainer({accountId:"2", containerId:"123"}), error => {
+        assert.equal(error.code, code); assert.equal(error.ambiguous, true);
+        assert.ok(!JSON.stringify(error).includes("test-token")); return true;
+      });
+  }
+});
+
+test("timeout while reading the response body remains a timeout", async () => {
+  await assert.rejects(make(async () => ({ok:true, status:200, json:async()=>{
+    throw new DOMException("test-token", "TimeoutError");
+  }})).publishContainer({accountId:"2",containerId:"123"}), error => {
+    assert.equal(error.code,"REQUEST_TIMEOUT");
+    assert.ok(!JSON.stringify(error).includes("test-token")); return true;
+  });
 });

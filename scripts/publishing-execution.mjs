@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { sanitizePublishingDiagnostic } from "./publishing-diagnostics.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { mkdir, open, readFile, unlink, rmdir, realpath } from "node:fs/promises";
 
@@ -22,7 +23,13 @@ export const createPublishingExecution = (dbPath) => {
       item_id TEXT NOT NULL REFERENCES publishing_items(id), phase TEXT NOT NULL,
       container_id TEXT, upload_uri TEXT, media_id TEXT, error_code TEXT,
       safe_to_retry INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, updated_at TEXT NOT NULL
-    ) STRICT;`);
+    ) STRICT;
+    CREATE TABLE IF NOT EXISTS publishing_diagnostics (
+      sequence INTEGER PRIMARY KEY AUTOINCREMENT,
+      attempt_id TEXT NOT NULL REFERENCES publishing_attempts(id),
+      observed_at TEXT NOT NULL, data_json TEXT NOT NULL
+    ) STRICT;
+    CREATE INDEX IF NOT EXISTS publishing_diagnostics_attempt_idx ON publishing_diagnostics(attempt_id, sequence);`);
   const transaction = (fn) => {
     db.exec("BEGIN IMMEDIATE");
     try { const result = fn(); db.exec("COMMIT"); return result; }
@@ -31,6 +38,18 @@ export const createPublishingExecution = (dbPath) => {
   const getAttempt = (itemId) => map(db.prepare("SELECT * FROM publishing_attempts WHERE item_id = ? ORDER BY sequence DESC LIMIT 1").get(itemId));
   return {
     close: () => db.close(), getAttempt,
+    getDiagnostics: (itemId) => db.prepare(`SELECT d.sequence, d.attempt_id, d.observed_at, d.data_json
+      FROM publishing_diagnostics d JOIN publishing_attempts a ON a.id=d.attempt_id
+      WHERE a.item_id=? ORDER BY d.sequence DESC LIMIT 100`).all(itemId).reverse().map(row => ({
+        sequence: row.sequence, attemptId: row.attempt_id, observedAt: row.observed_at, data: JSON.parse(row.data_json),
+      })),
+    recordDiagnostic: (attemptId, input) => transaction(() => {
+      const row = db.prepare("SELECT * FROM publishing_attempts WHERE id=?").get(attemptId);
+      if (!row || getAttempt(row.item_id).id !== attemptId) throw new Error("Diagnostic attempt mismatch");
+      const data = sanitizePublishingDiagnostic(input);
+      db.prepare("INSERT INTO publishing_diagnostics(attempt_id,observed_at,data_json) VALUES (?,?,?)")
+        .run(attemptId, new Date().toISOString(), JSON.stringify(data));
+    }),
     beginAttempt: (itemId) => transaction(() => {
       const item = db.prepare("SELECT * FROM publishing_items WHERE id = ?").get(itemId);
       if (!item || item.state !== "uploading") throw new Error("Cannot begin attempt in current state");

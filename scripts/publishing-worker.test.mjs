@@ -26,7 +26,7 @@ const fixture = async (t, changes = {}) => {
     verifyAccount: async (identity) => { assert.equal(identity.accountId, "2"); calls.push("verifyAccount"); },
     createContainer: async (input) => { calls.push("createContainer"); assert.equal(input.caption, "approved"); assert.equal(execution.getAttempt(item.id).phase, "create_requested"); return { id: "123", uri: "https://rupload.facebook.com/ig-api-upload/v26.0/123" }; },
     uploadVideo: async ({fileHandle, size}) => { calls.push("uploadVideo"); assert.equal(execution.getAttempt(item.id).phase, "upload_requested"); assert.equal(size, bytes.length); const buffer = Buffer.alloc(size); await fileHandle.read(buffer, 0, size, 0); assert.deepEqual(buffer, bytes); },
-    getContainerStatus: async () => { calls.push("getContainerStatus"); return { statusCode: "FINISHED" }; },
+    getContainerStatus: async () => { calls.push("getContainerStatus"); return { statusCode: "FINISHED", uploadPhase: "complete", processingPhase: "complete" }; },
     publishContainer: async ({containerId}) => { calls.push("publishContainer"); assert.equal(containerId, "123"); assert.equal(execution.getAttempt(item.id).phase, "publish_requested"); return { id: "456" }; },
   };
   const args = { ledger, execution, lock, client, config: { ...config, projectRoot: root }, itemId: item.id, now, sleep: async () => {} };
@@ -87,7 +87,7 @@ test("processing exhaustion stays pending, resumes by reading without resending 
   assert.equal((await runPublishingOnce({ ...f.args, sleep: async (ms) => waits.push(ms) })).status, "pending");
   assert.equal(reads, 5); assert.deepEqual(waits, [60000,60000,60000,60000]);
   assert.equal(f.ledger.getPublishingItem(f.id).state, "processing");
-  f.client.getContainerStatus = async () => ({ statusCode: "FINISHED" });
+  f.client.getContainerStatus = async () => ({ statusCode: "FINISHED", uploadPhase: "complete", processingPhase: "complete" });
   await runPublishingOnce(f.args);
   assert.equal(f.calls.filter((c) => c === "uploadVideo").length, 1);
 });
@@ -116,6 +116,84 @@ test("file mutation during upload is caught before publication", async (t) => {
   await runPublishingOnce(f.args);
   assert.equal(f.ledger.getPublishingItem(f.id).state, "failed");
   assert.equal(f.calls.includes("publishContainer"), false);
+});
+
+for (const statusCode of ["IN_PROGRESS", "FINISHED"]) {
+  test(`detailed upload error overrides ${statusCode} and cannot authorize retry`, async (t) => {
+    const f = await fixture(t);
+    f.client.getContainerStatus = async () => ({statusCode, uploadPhase:"error", processingPhase:"error", bytesTransferred:0, providerCodes:[1363008]});
+    const result = await runPublishingOnce(f.args);
+    assert.equal(result.status, "failed");
+    assert.equal(result.errorCode, "UPLOAD_PHASE_ERROR");
+    assert.equal(f.execution.getAttempt(f.id).safeToRetry, false);
+    assert.throws(() => f.ledger.retryFailedItem(f.id));
+    assert.equal(f.calls.includes("publishContainer"), false);
+    assert.equal(f.execution.getDiagnostics(f.id).at(-1).data.bytesTransferred, 0);
+    await runPublishingOnce(f.args);
+    assert.equal(f.calls.filter(c => c === "uploadVideo").length, 1);
+  });
+}
+
+test("missing details cannot publish and completed phases can publish", async (t) => {
+  const f = await fixture(t);
+  f.client.getContainerStatus = async () => ({statusCode:"FINISHED"});
+  assert.equal((await runPublishingOnce(f.args)).status, "pending");
+  assert.equal(f.calls.includes("publishContainer"), false);
+  f.client.getContainerStatus = async () => ({statusCode:"FINISHED", uploadPhase:"complete", processingPhase:"complete"});
+  assert.equal((await runPublishingOnce(f.args)).status, "published");
+});
+
+test("ambiguous upload retains sanitized error history without retry permission", async (t) => {
+  const f = await fixture(t);
+  f.client.uploadVideo = async () => {throw Object.assign(new Error("secret-token"), {
+    operation:"upload_video", code:"REQUEST_TIMEOUT", httpStatus:504, providerCode:1, token:"secret-token", ambiguous:true,
+  });};
+  assert.equal((await runPublishingOnce(f.args)).status, "pending");
+  assert.equal(f.execution.getAttempt(f.id).phase, "upload_requested");
+  const records = f.execution.getDiagnostics(f.id);
+  assert.equal(records[0].data.errorCode, "REQUEST_TIMEOUT");
+  assert.equal(records[0].data.httpStatus, 504);
+  assert.ok(!JSON.stringify(records).includes("secret-token"));
+  const reopened = createPublishingExecution(join(f.root, "queue.sqlite"));
+  try {assert.deepEqual(reopened.getDiagnostics(f.id), records);} finally {reopened.close();}
+});
+
+test("diagnostic persistence rejects secrets and bounds history without changing attempt state", async (t) => {
+  const f = await fixture(t);
+  f.ledger.claimDueApprovedItem(now(), {accountId:"2", itemId:f.id});
+  const id = f.execution.beginAttempt(f.id);
+  for (let i=0; i<105; i++) f.execution.recordDiagnostic(id, {
+    operation:"container_status", errorCode:"SECRET", statusCode:"SECRET", uploadPhase:"SECRET",
+    bytesTransferred:i, sourceFileSize:-1, httpStatus:999, providerCode:"SECRET",
+    providerCodes:[1363008, "SECRET", -1], token:"SECRET", status:"SECRET", url:"https://SECRET",
+  });
+  const records = f.execution.getDiagnostics(f.id);
+  assert.equal(records.length, 100);
+  assert.deepEqual(records[0].data, {operation:"container_status", bytesTransferred:5, providerCodes:[1363008]});
+  assert.ok(Number.isFinite(Date.parse(records[0].observedAt)));
+  assert.ok(!JSON.stringify(records).includes("SECRET"));
+  assert.equal(f.execution.getAttempt(f.id).phase,"claimed");
+  assert.throws(()=>f.execution.recordDiagnostic("missing", {}));
+});
+
+test("diagnostic write failure stops before publication", async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(runPublishingOnce({...f.args, execution:{...f.execution,
+    recordDiagnostic:()=>{throw new Error("disk unavailable");},
+  }}), /disk unavailable/);
+  assert.equal(f.calls.includes("publishContainer"),false);
+  assert.equal(f.execution.getAttempt(f.id).phase,"processing");
+});
+
+test("processing error stops without retry permission; PUBLISHED retains unknown safety", async (t) => {
+  const f = await fixture(t);
+  f.client.getContainerStatus=async()=>({statusCode:"FINISHED", uploadPhase:"complete", processingPhase:"error"});
+  assert.equal((await runPublishingOnce(f.args)).errorCode,"PROCESSING_PHASE_ERROR");
+  assert.equal(f.execution.getAttempt(f.id).safeToRetry,false);
+  const g = await fixture(t);
+  g.client.getContainerStatus=async()=>({statusCode:"PUBLISHED", uploadPhase:"error", processingPhase:"error"});
+  assert.equal((await runPublishingOnce(g.args)).status,"unknown");
+  assert.equal(g.calls.includes("publishContainer"),false);
 });
 
 test("ownership loss prevents the next external write", async (t) => {

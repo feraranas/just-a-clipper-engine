@@ -1,4 +1,5 @@
 import { setTimeout as delay } from "node:timers/promises";
+import { sanitizePublishingDiagnostic } from "./publishing-diagnostics.mjs";
 
 export class InstagramError extends Error {
   constructor(operation, code, { httpStatus = null, providerCode = null, providerSubcode = null, ambiguous = false } = {}) {
@@ -29,10 +30,13 @@ export const createInstagramClient = ({ token, version, fetchImpl = fetch, sleep
       let response, payload;
       try {
         response = await fetchImpl(url, { method, body, headers: { Authorization: `Bearer ${token}`, ...headers }, redirect: "error", signal: AbortSignal.timeout(timeoutMs), ...(duplex ? { duplex } : {}) });
-        try { payload = await response.json(); } catch { payload = null; }
-      } catch {
+        try { payload = await response.json(); } catch (error) {
+          if (error?.name === "TimeoutError") throw error;
+          payload = null;
+        }
+      } catch (error) {
         if (!write && attempt < 2) { await sleep(1000 * (attempt + 1)); continue; }
-        throw new InstagramError(operation, "NETWORK_ERROR", { ambiguous: write });
+        throw new InstagramError(operation, error?.name === "TimeoutError" ? "REQUEST_TIMEOUT" : "NETWORK_ERROR", { ambiguous: write });
       }
       const transient = response.status === 429 || response.status >= 500;
       if (!write && transient && attempt < 2) {
@@ -85,9 +89,17 @@ export const createInstagramClient = ({ token, version, fetchImpl = fetch, sleep
       }
     },
     getContainerStatus: async (containerId) => {
-      const result = await request("container_status", `${graph}/${numericId(containerId)}?fields=status_code`);
+      const result = await request("container_status", `${graph}/${numericId(containerId)}?fields=id,status,status_code,video_status`);
       if (!["FINISHED", "IN_PROGRESS", "ERROR", "EXPIRED", "PUBLISHED"].includes(result.status_code)) throw malformed("container_status");
-      return { statusCode: result.status_code };
+      const upload = result.video_status?.uploading_phase;
+      const processing = result.video_status?.processing_phase;
+      const detail = sanitizePublishingDiagnostic({statusCode: result.status_code,
+        uploadPhase: upload?.status, processingPhase: processing?.status,
+        bytesTransferred: upload?.bytes_transferred, sourceFileSize: upload?.source_file_size,
+        providerCodes: [...(Array.isArray(upload?.errors) ? upload.errors : []),
+          ...(Array.isArray(processing?.errors) ? processing.errors : [])].map(error => error?.code),
+      });
+      return {uploadPhase: null, processingPhase: null, ...detail};
     },
     publishContainer: async ({ accountId, containerId }) => {
       const result = await post("publish_container", `/${numericId(accountId)}/media_publish`, { creation_id: numericId(containerId) });
