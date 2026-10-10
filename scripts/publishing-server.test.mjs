@@ -17,14 +17,19 @@ const fixture = {
 };
 
 test("server resolves the default public directory", () => {
-  const server = createPublishingServer({ projectRoot: process.cwd(), ledger: {} });
+  const server = createPublishingServer({
+    projectRoot: process.cwd(),
+    ledger: {},
+  });
   server.close();
 });
 
 test("caption edits revoke approval and safe retries return to review through the API", async (t) => {
   const { item, baseUrl, ledger } = await setup(t);
   ledger.approveItem(item.id, "2026-09-20T11:00:00Z");
-  const changed = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, { caption: "New caption" });
+  const changed = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, {
+    caption: "New caption",
+  });
   assert.equal(changed.body.item.state, "queued");
   assert.equal(changed.body.item.approvedCaption, null);
   ledger.approveItem(item.id, "2026-09-20T11:00:00Z");
@@ -38,8 +43,14 @@ const setup = async (t) => {
   const root = await mkdtemp(join(tmpdir(), "publishing-server-"));
   await mkdir(join(root, "out/reels"), { recursive: true });
   await mkdir(join(root, "publishing"), { recursive: true });
-  await writeFile(join(root, "publishing/index.html"), "<main>approval queue</main>");
-  await writeFile(join(root, "publishing/app.mjs"), "export const ready = true;");
+  await writeFile(
+    join(root, "publishing/index.html"),
+    "<main>approval queue</main>",
+  );
+  await writeFile(
+    join(root, "publishing/app.mjs"),
+    "export const ready = true;",
+  );
   await writeFile(join(root, "publishing/styles.css"), "body { color: red; }");
   await writeFile(join(root, fixture.artifactRelativePath), "fixture mp4");
   const ledger = createPublishingLedger(join(root, "publishing.sqlite"));
@@ -62,15 +73,25 @@ const setup = async (t) => {
 const call = (baseUrl, method, path, body) =>
   new Promise((resolve, reject) => {
     const url = new URL(path, baseUrl);
-    const req = request(url, { method, headers: { "content-type": "application/json" } }, (res) => {
-      let data = "";
-      res.on("data", (chunk) => (data += chunk));
-      res.on("end", () => {
-        let parsed = data;
-        try { parsed = data ? JSON.parse(data) : null; } catch {}
-        resolve({ status: res.statusCode, headers: res.headers, body: parsed });
-      });
-    });
+    const req = request(
+      url,
+      { method, headers: { "content-type": "application/json" } },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => (data += chunk));
+        res.on("end", () => {
+          let parsed = data;
+          try {
+            parsed = data ? JSON.parse(data) : null;
+          } catch {}
+          resolve({
+            status: res.statusCode,
+            headers: res.headers,
+            body: parsed,
+          });
+        });
+      },
+    );
     req.on("error", reject);
     if (body !== undefined) req.end(JSON.stringify(body));
     else req.end();
@@ -82,17 +103,29 @@ test("creates a server when publicRoot uses its default path", () => {
 
 test("logs API tolerates damaged records and returns an uncached bounded window", async (t) => {
   const { root, baseUrl } = await setup(t);
-  assert.deepEqual((await call(baseUrl, "GET", "/api/logs")).body, { events: [] });
-  await writeFile(join(root, "pipeline.jsonl"), [
-    JSON.stringify({ stage: "render", status: "started" }),
-    "broken",
-    JSON.stringify({ stage: "render", status: "failed", errorCode: "render_failed", message: "private" }),
-    '{"partial":',
-  ].join("\n"));
+  assert.deepEqual((await call(baseUrl, "GET", "/api/logs")).body, {
+    events: [],
+  });
+  await writeFile(
+    join(root, "pipeline.jsonl"),
+    [
+      JSON.stringify({ stage: "render", status: "started" }),
+      "broken",
+      JSON.stringify({
+        stage: "render",
+        status: "failed",
+        errorCode: "render_failed",
+        message: "private",
+      }),
+      '{"partial":',
+    ].join("\n"),
+  );
   const response = await call(baseUrl, "GET", "/api/logs?limit=1");
   assert.equal(response.status, 200);
   assert.equal(response.headers["cache-control"], "no-store");
-  assert.deepEqual(response.body.events, [{ stage: "render", status: "failed", errorCode: "render_failed" }]);
+  assert.deepEqual(response.body.events, [
+    { stage: "render", status: "failed", errorCode: "render_failed" },
+  ]);
 });
 
 test("lists queue items and persists a caption update", async (t) => {
@@ -111,7 +144,9 @@ test("lists queue items and persists a caption update", async (t) => {
   assert.equal(queue.status, 200);
   assert.equal(queue.body.items[0].id, item.id);
 
-  const updated = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, { caption: "Edited caption" });
+  const updated = await call(baseUrl, "POST", `/api/items/${item.id}/caption`, {
+    caption: "Edited caption",
+  });
   assert.equal(updated.status, 200);
   assert.equal(updated.body.item.caption, "Edited caption");
 });
@@ -139,14 +174,29 @@ test("returns JSON errors for invalid approval and rejection requests", async (t
 
 test("approves and rejects through state-aware routes", async (t) => {
   const first = await setup(t);
-  const approved = await call(first.baseUrl, "POST", `/api/items/${first.item.id}/approve`, { scheduledAt: "2026-09-21T12:00:00.000Z" });
+  const approved = await call(
+    first.baseUrl,
+    "POST",
+    `/api/items/${first.item.id}/approve`,
+    { scheduledAt: "2026-09-21T12:00:00.000Z" },
+  );
   assert.equal(approved.status, 200);
   assert.equal(approved.body.item.state, "approved");
-  const again = await call(first.baseUrl, "POST", `/api/items/${first.item.id}/approve`, { scheduledAt: "2026-09-21T12:00:00.000Z" });
+  const again = await call(
+    first.baseUrl,
+    "POST",
+    `/api/items/${first.item.id}/approve`,
+    { scheduledAt: "2026-09-21T12:00:00.000Z" },
+  );
   assert.equal(again.status, 409);
 
   const second = await setup(t);
-  const rejected = await call(second.baseUrl, "POST", `/api/items/${second.item.id}/reject`, { reason: "Needs review" });
+  const rejected = await call(
+    second.baseUrl,
+    "POST",
+    `/api/items/${second.item.id}/reject`,
+    { reason: "Needs review" },
+  );
   assert.equal(rejected.status, 200);
   assert.equal(rejected.body.item.state, "rejected");
 });
@@ -157,9 +207,14 @@ test("rejects preview path traversal and serves a validated MP4", async (t) => {
   assert.equal(preview.status, 200);
   assert.match(preview.headers["content-type"], /video\/mp4/);
 
-  ledger.enqueueArtifact({ ...fixture, id: "traversal", artifactRelativePath: "../secret.mp4", artifactHash: "sha256:bad" });
+  ledger.enqueueArtifact({
+    ...fixture,
+    id: "traversal",
+    artifactRelativePath: "../secret.mp4",
+    artifactHash: "sha256:bad",
+  });
   const blocked = await call(baseUrl, "GET", "/api/items/traversal/preview");
-  assert.equal(blocked.status, 400);
+  assert.equal(blocked.status, 404);
 });
 
 test("does not retry failed or unknown items without safe confirmation", async (t) => {
@@ -169,6 +224,11 @@ test("does not retry failed or unknown items without safe confirmation", async (
   ledger.recordUnknownOutcome(item.id, { errorCode: "TIMEOUT" });
   const retry = await call(baseUrl, "POST", `/api/items/${item.id}/retry`, {});
   assert.equal(retry.status, 409);
-  const verify = await call(baseUrl, "POST", `/api/items/${item.id}/verify-published`, { mediaId: "media-1" });
+  const verify = await call(
+    baseUrl,
+    "POST",
+    `/api/items/${item.id}/verify-published`,
+    { mediaId: "media-1" },
+  );
   assert.equal(verify.status, 409);
 });

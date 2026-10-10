@@ -11,6 +11,7 @@ export const processClipPackages = async ({
   renderTreatment,
   onArtifactComplete,
   projectRoot = process.cwd(),
+  artifactRoot,
   videoId,
   onEvent,
   retryFailedRenders = false,
@@ -55,7 +56,11 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markPackageFailed(clipPackage.id, sanitizeErrorDiagnostic(error));
       result.packages.failed += 1;
-      result.failures.push({ stage: "assets", code: "ASSET_FAILED", packageId: clipPackage.id });
+      result.failures.push({
+        stage: "assets",
+        code: "ASSET_FAILED",
+        packageId: clipPackage.id,
+      });
     }
   }
 
@@ -106,6 +111,7 @@ export const processClipPackages = async ({
                 artifactHash: await hashArtifact(
                   projectRoot,
                   artifactRelativePath,
+                  { artifactRoot },
                 ),
                 run,
                 clipPackage,
@@ -123,7 +129,11 @@ export const processClipPackages = async ({
     } catch (error) {
       ledger.markTreatmentRunFailed(run.id, sanitizeErrorDiagnostic(error));
       result.treatments.failed += 1;
-      result.failures.push({ stage: "render", code: "RENDER_FAILED", packageId: run.clipPackageId });
+      result.failures.push({
+        stage: "render",
+        code: "RENDER_FAILED",
+        packageId: run.clipPackageId,
+      });
     }
   }
 

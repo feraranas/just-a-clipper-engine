@@ -1,3 +1,5 @@
+import { storeArtifact } from "./artifact-store.mjs";
+import { resolveStorageConfig } from "./storage-config.mjs";
 import { createHash } from "node:crypto";
 import { readFile, realpath } from "node:fs/promises";
 import { createReadStream } from "node:fs";
@@ -70,7 +72,11 @@ const hashInputAssets = async (projectRoot, assets) => {
 
 export const renderTreatmentRun = async (
   { clipPackage, treatment, selection },
-  { projectRoot = process.cwd(), runCommand = defaultRunCommand } = {},
+  {
+    projectRoot = process.cwd(),
+    runCommand = defaultRunCommand,
+    artifactRoot = resolveStorageConfig().artifactRoot,
+  } = {},
 ) => {
   const known = listTemplates()
     .flatMap((template) =>
@@ -186,7 +192,14 @@ export const renderTreatmentRun = async (
     manifestPartialPath,
     `${JSON.stringify(manifest, null, 2)}\n`,
   );
+  // Accept the durable bundle before exposing a successful render to its ledger.
+  const reference = await storeArtifact({
+    projectRoot,
+    videoPath: partialPath,
+    manifestPath: manifestPartialPath,
+    artifactRoot,
+  });
   await rename(manifestPartialPath, manifestPath);
   await rename(partialPath, outputPath);
-  return toProjectRelative(projectRoot, outputPath);
+  return reference;
 };

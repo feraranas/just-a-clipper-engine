@@ -258,3 +258,51 @@ This option is available through the single-URL CLI. It does not retry asset
 acquisition failures, restore missing completed videos, or publish videos.
 Do not run concurrent requests for the same video. The existing renderer has
 no cross-process claim for a pending render.
+
+
+### Shared storage and worktree cleanup
+
+Accepted videos are stored outside the source checkout. All production consumers
+use the same shared storage configuration. Defaults are:
+
+| Data | Default under ~/Library/Application Support/Audiogram Inbox |
+|---|---|
+| Processing ledger | audiograms.sqlite |
+| Publishing queue ledger | instagram-publishing.sqlite |
+| Accepted videos and manifests | artifacts/<video-hash>/<manifest-hash>/ |
+| Pipeline log | pipeline.jsonl |
+
+Set AUDIOGRAM_DATA_ROOT to an absolute directory to move these defaults together.
+AUDIOGRAM_ARTIFACT_ROOT selects an alternate absolute artifact reference root.
+It must be outside the checkout used for rendering. The processing and publishing
+DB overrides remain AUDIOGRAM_DB_PATH and INSTAGRAM_PUBLISHING_DB_PATH.
+PUBLISHING_DB is a legacy alias. Conflicting alias values fail configuration.
+Use the same configuration for the CLI, helper, queue server and publishing worker.
+
+The CLI returns durable references beginning with `artifacts/`. Resolve these
+under the configured artifact root. Intermediates, original input assets and
+props remain in the producing checkout. The accepted video and its manifest
+survive removal of that checkout. The copied manifest records input hashes;
+it does not archive the original inputs for a future rerender.
+
+Older out/... records still require their original checkout until migrated.
+Preview errors now identify missing files. Migration does not delete source files,
+change approvals or publish videos. Inspect a migration first:
+
+```sh
+npm run artifacts:migrate -- --source-root /absolute/path/to/original/checkout
+```
+
+Apply verified moves after the queue server and all consumers use this version:
+
+```sh
+npm run artifacts:migrate -- --source-root /absolute/path/to/original/checkout --apply
+```
+
+You may supply several --source-root options, including an archive backup root.
+Only bytes matching saved publishing hashes can move a queue record. If a source
+is missing or changed, migration reports it and leaves that record unresolved.
+Legacy files without manifests get an explicit legacy-import record with unknown
+input hashes. Migration checkpoints support reruns after interrupted DB updates.
+Historical helper job results are not rewritten by this command; their old paths
+still need the original checkout. New helper jobs use durable references.
