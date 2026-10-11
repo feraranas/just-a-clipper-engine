@@ -10,10 +10,13 @@ export const sanitizePublishingDiagnostic = (input = {}) => {
   for (const [key, values] of [["operation", operations], ["errorCode", errors], ["statusCode", statuses], ["uploadPhase", phases], ["processingPhase", phases]]) {
     if (values.has(input[key])) output[key] = input[key];
   }
-  for (const key of ["providerCode", "providerSubcode", "bytesTransferred", "sourceFileSize"]) {
+  for (const key of ["providerCode", "providerSubcode"]) {
+    if (Number.isSafeInteger(input[key])) output[key] = input[key];
+  }
+  for (const key of ["bytesTransferred", "sourceFileSize"]) {
     if (integer(input[key])) output[key] = input[key];
   }
   if (integer(input.httpStatus) && input.httpStatus >= 100 && input.httpStatus <= 599) output.httpStatus = input.httpStatus;
-  if (Array.isArray(input.providerCodes)) output.providerCodes = input.providerCodes.filter(integer).slice(0, 20);
+  if (Array.isArray(input.providerCodes)) output.providerCodes = input.providerCodes.filter(Number.isSafeInteger).slice(0, 20);
   return output;
 };

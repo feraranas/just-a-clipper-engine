@@ -169,7 +169,7 @@ test("diagnostic persistence rejects secrets and bounds history without changing
   });
   const records = f.execution.getDiagnostics(f.id);
   assert.equal(records.length, 100);
-  assert.deepEqual(records[0].data, {operation:"container_status", bytesTransferred:5, providerCodes:[1363008]});
+  assert.deepEqual(records[0].data, {operation:"container_status", bytesTransferred:5, providerCodes:[1363008, -1]});
   assert.ok(Number.isFinite(Date.parse(records[0].observedAt)));
   assert.ok(!JSON.stringify(records).includes("SECRET"));
   assert.equal(f.execution.getAttempt(f.id).phase,"claimed");
