@@ -14,10 +14,14 @@ export type TemplateCatalogEntry = {
   readonly id: string;
   readonly version: string;
   readonly label: string;
+  readonly name: string;
+  readonly description: string;
+  readonly supportedInput: string;
   readonly defaultVariationId: string;
   readonly variations: readonly {
     readonly id: string;
     readonly label: string;
+    readonly description: string;
     readonly treatment: { readonly id: string; readonly version: string };
     readonly compositionId: string;
   }[];

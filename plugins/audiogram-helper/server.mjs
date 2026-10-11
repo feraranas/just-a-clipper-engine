@@ -1,3 +1,7 @@
+import {
+  buildTemplateListing,
+  templateListingShape,
+} from "./template-listing.mjs";
 import { resolveTemplateSelection } from "../../src/templates/catalog.mjs";
 import { createServer } from "node:http";
 import { Buffer } from "node:buffer";
@@ -53,8 +57,53 @@ const outputShape = {
   diagnosticsIncomplete: z.boolean().optional(),
 };
 
-function makeMcpServer({ runner }) {
+function makeMcpServer({ runner, templateCatalog }) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
+  server.registerTool(
+    "list_video_templates",
+    {
+      description:
+        "List available video templates, their variations, and valid selections for create_audiogram. This tool does not start a job.",
+      inputSchema: z.strictObject({}),
+      outputSchema: templateListingShape,
+      annotations: {
+        readOnlyHint: true,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      },
+    },
+    async () => {
+      try {
+        const listing = buildTemplateListing(templateCatalog);
+        return {
+          structuredContent: listing,
+          content: [
+            {
+              type: "text",
+              text:
+                listing.templates
+                  .map(
+                    (t) =>
+                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.`,
+                  )
+                  .join("\n") || "No video templates are available.",
+            },
+          ],
+        };
+      } catch {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text: "The video template catalog is invalid or unavailable. Contact the server operator before choosing a template.",
+            },
+          ],
+        };
+      }
+    },
+  );
   server.registerTool(
     "create_audiogram",
     {
@@ -198,6 +247,7 @@ export async function startMcpServer({
   projectRoot,
   runner,
   port = 7331,
+  templateCatalog,
 } = {}) {
   if (!projectRoot) throw new Error("projectRoot is required.");
   let store;
@@ -239,7 +289,7 @@ export async function startMcpServer({
         .end(JSON.stringify({ error: error.message }));
       return;
     }
-    const mcp = makeMcpServer({ runner });
+    const mcp = makeMcpServer({ runner, templateCatalog });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
@@ -280,7 +330,9 @@ if (
   try {
     validateMcpRuntimeConfig(process.env);
   } catch (error) {
-    process.stderr.write(`Audiogram MCP configuration error: ${error.message}\n`);
+    process.stderr.write(
+      `Audiogram MCP configuration error: ${error.message}\n`,
+    );
     process.exitCode = 1;
   }
 
