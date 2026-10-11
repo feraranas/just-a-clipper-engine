@@ -47,8 +47,23 @@ export const createPublishingExecution = (dbPath) => {
       const row = db.prepare("SELECT * FROM publishing_attempts WHERE id=?").get(attemptId);
       if (!row || getAttempt(row.item_id).id !== attemptId) throw new Error("Diagnostic attempt mismatch");
       const data = sanitizePublishingDiagnostic(input);
+      const phaseError = data.operation === "container_status" && data.statusCode !== "PUBLISHED"
+        && ["upload_requested", "processing"].includes(row.phase)
+        ? data.uploadPhase === "error" ? "UPLOAD_PHASE_ERROR"
+          : data.processingPhase === "error" ? "PROCESSING_PHASE_ERROR" : null
+        : null;
+      const now = new Date().toISOString();
+      if (phaseError) {
+        const item = db.prepare("SELECT state FROM publishing_items WHERE id=?").get(row.item_id);
+        if (item?.state !== states[row.phase]) throw new Error("Execution state mismatch");
+        db.prepare("UPDATE publishing_attempts SET phase='failed',error_code=?,safe_to_retry=0,updated_at=? WHERE id=?")
+          .run(phaseError, now, attemptId);
+        db.prepare(`UPDATE publishing_items SET state='failed',error_code=?,
+          first_error_code=COALESCE(first_error_code,?),safe_to_retry=0,updated_at=? WHERE id=?`)
+          .run(phaseError, phaseError, now, row.item_id);
+      }
       db.prepare("INSERT INTO publishing_diagnostics(attempt_id,observed_at,data_json) VALUES (?,?,?)")
-        .run(attemptId, new Date().toISOString(), JSON.stringify(data));
+        .run(attemptId, now, JSON.stringify(data));
     }),
     beginAttempt: (itemId) => transaction(() => {
       const item = db.prepare("SELECT * FROM publishing_items WHERE id = ?").get(itemId);

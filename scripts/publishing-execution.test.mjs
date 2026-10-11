@@ -21,6 +21,30 @@ const setup = async (t) => {
   return { path, ledger, id: item.id };
 };
 
+test("phase-error transaction rolls back state when diagnostic insertion fails", async (t) => {
+  const {path,ledger,id} = await setup(t);
+  const execution=createPublishingExecution(path);
+  t.after(()=>execution.close());
+  const attempt=execution.beginAttempt(id);
+  execution.checkpoint(attempt,"create_requested");
+  execution.checkpoint(attempt,"container_created",{containerId:"123",uploadUri:"https://rupload.facebook.com/ig-api-upload/v26.0/123"});
+  execution.checkpoint(attempt,"upload_requested");
+  const db=new DatabaseSync(path);
+  try {
+    db.exec("CREATE TRIGGER reject_diagnostic BEFORE INSERT ON publishing_diagnostics BEGIN SELECT RAISE(ABORT, 'disk simulation'); END");
+    assert.throws(()=>execution.recordDiagnostic(attempt,{operation:"container_status",statusCode:"IN_PROGRESS",uploadPhase:"error"}),/disk simulation/);
+    assert.equal(execution.getAttempt(id).phase,"upload_requested");
+    assert.equal(ledger.getPublishingItem(id).state,"container_created");
+    assert.deepEqual(execution.getDiagnostics(id),[]);
+    db.exec("DROP TRIGGER reject_diagnostic");
+    execution.recordDiagnostic(attempt,{operation:"container_status",statusCode:"IN_PROGRESS",uploadPhase:"error"});
+    assert.equal(execution.getAttempt(id).phase,"failed");
+    assert.equal(ledger.getPublishingItem(id).state,"failed");
+    assert.equal(execution.getAttempt(id).safeToRetry,false);
+    assert.equal(execution.getDiagnostics(id).length,1);
+  } finally {db.close();}
+});
+
 test("checkpoints survive reopen, reject regressions and secret-bearing fields, and atomically publish", async (t) => {
   const { path, ledger, id } = await setup(t);
   let execution = createPublishingExecution(path);
