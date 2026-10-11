@@ -38,6 +38,15 @@ Each job keeps structured stage events and separate worker/CLI stdout and stderr
 
 ## Template choice
 
+Call `list_video_templates` with `{}` to discover the supported designs.
+It returns `contractVersion: 1`, descriptions, supported input types, variations,
+and a `defaultSelection` for each template. It reads the same catalog used by
+creation. It does not start a job or check provider readiness.
+Show the choices to the user, then pass their selection to `create_audiogram`.
+Classic V1 / Default is currently the only available design. Preview images
+and planned designs are not included. Restart the MCP server after deploying
+this change so clients can discover the new tool.
+
 `create_audiogram` accepts optional `templateId`, `templateVersion` and `variationId` fields.
 The current values are `classic`, `1` and `default`.
 Omitted fields use those defaults. Invalid choices fail before job creation.

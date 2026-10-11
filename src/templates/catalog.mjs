@@ -10,11 +10,16 @@ const catalog = freeze([
     id: "classic",
     version: "1",
     label: "Classic",
+    name: "Classic V1",
+    description:
+      "A thumbnail, title, sinusoidal animation, and timed transcript with the original speaker's audio.",
+    supportedInput: "public-youtube-url",
     defaultVariationId: "default",
     variations: [
       {
         id: "default",
         label: "Default",
+        description: "The preserved Classic V1 design.",
         treatment: { id: "audiogram-basic", version: "1" },
         compositionId: "AudiogramBasic",
       },

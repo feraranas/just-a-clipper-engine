@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { setImmediate } from "node:timers";
 import { mkdtemp, mkdir, readFile, writeFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -688,11 +689,45 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
       "create_audiogram",
       "get_audiogram_status",
+      "list_video_templates",
       "retry_audiogram",
     ]);
     assert.match(
       tools.tools.find((tool) => tool.name === "retry_audiogram").description,
       /Ask the user.*approval/i,
+    );
+    const listing = await client.callTool({
+      name: "list_video_templates",
+      arguments: {},
+    });
+    assert.equal(listing.structuredContent.contractVersion, 1);
+    assert.equal(listing.structuredContent.templates[0].name, "Classic V1");
+    assert.deepEqual(listing.structuredContent.templates[0].defaultSelection, {
+      templateId: "classic",
+      templateVersion: "1",
+      variationId: "default",
+    });
+    assert.match(listing.content[0].text, /Classic V1/);
+    assert.equal(calls.length, 0);
+    const repeatedListing = await client.callTool({
+      name: "list_video_templates",
+      arguments: {},
+    });
+    assert.deepEqual(
+      repeatedListing.structuredContent,
+      listing.structuredContent,
+    );
+    const unexpectedInput = await client.callTool({
+      name: "list_video_templates",
+      arguments: { url: "https://youtu.be/abcdefghijk" },
+    });
+    assert.equal(unexpectedInput.isError, true);
+    assert.equal(calls.length, 0);
+    assert.equal(JSON.stringify(listing).includes("compositionId"), false);
+    assert.equal(
+      tools.tools.find((t) => t.name === "list_video_templates").annotations
+        .readOnlyHint,
+      true,
     );
     const invalid = await client.callTool({
       name: "create_audiogram",
@@ -885,4 +920,34 @@ test("result artifact paths must be existing nonempty mp4 files under treatments
   });
   assert.equal((await runner.getStatus(job.jobId)).status, "failed");
   store.close();
+});
+
+test("MCP discovery fails safely for invalid catalog without runner calls", async () => {
+  const runner = {
+    start: () => assert.fail("listing started a job"),
+    getStatus: () => assert.fail("listing read job state"),
+    retry: () => assert.fail("listing retried a job"),
+  };
+  const server = await startMcpServer({
+    projectRoot: process.cwd(),
+    runner,
+    port: 0,
+    templateCatalog: [{ id: "private/path" }],
+  });
+  const client = new Client({ name: "discovery-test", version: "1" });
+  try {
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url)),
+    );
+    const result = await client.callTool({
+      name: "list_video_templates",
+      arguments: {},
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /catalog is invalid or unavailable/);
+    assert.equal(JSON.stringify(result).includes("private/path"), false);
+  } finally {
+    await client.close();
+    await server.close();
+  }
 });
