@@ -1,0 +1,14 @@
+
+{"timestamp":"2026-10-10T12:07:22.758Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"intake","status":"started"}
+
+{"timestamp":"2026-10-10T12:07:22.760Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"intake","status":"completed","durationMs":2}
+
+{"timestamp":"2026-10-10T12:07:22.760Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"metadata","status":"started","videoId":"s7KhLuc3Mck"}
+
+{"timestamp":"2026-10-10T12:07:25.818Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"metadata","status":"completed","videoId":"s7KhLuc3Mck","durationMs":3058}
+
+{"timestamp":"2026-10-10T12:07:25.835Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"videos-pending","status":"completed","count":0}
+
+{"timestamp":"2026-10-10T12:07:25.838Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"artifact_verification","status":"started","videoId":"s7KhLuc3Mck"}
+
+{"timestamp":"2026-10-10T12:07:25.838Z","runId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","jobId":"f462c564-c54f-4df3-a6fa-656767f9cdc1","stage":"artifact_verification","status":"completed","videoId":"s7KhLuc3Mck","durationMs":0}

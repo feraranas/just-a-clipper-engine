@@ -1,0 +1,8 @@
+
+{"timestamp":"2026-10-09T06:12:02.365Z","runId":"e91592d5-a59e-40c5-9c04-1c433ac10556","jobId":"e91592d5-a59e-40c5-9c04-1c433ac10556","stage":"intake","status":"started"}
+
+{"timestamp":"2026-10-09T06:12:02.368Z","runId":"e91592d5-a59e-40c5-9c04-1c433ac10556","jobId":"e91592d5-a59e-40c5-9c04-1c433ac10556","stage":"intake","status":"completed","durationMs":3}
+
+{"timestamp":"2026-10-09T06:12:02.368Z","runId":"e91592d5-a59e-40c5-9c04-1c433ac10556","jobId":"e91592d5-a59e-40c5-9c04-1c433ac10556","stage":"metadata","status":"started","videoId":"s7KhLuc3Mck"}
+
+{"timestamp":"2026-10-09T06:12:06.275Z","runId":"e91592d5-a59e-40c5-9c04-1c433ac10556","jobId":"e91592d5-a59e-40c5-9c04-1c433ac10556","stage":"metadata","status":"completed","videoId":"s7KhLuc3Mck","durationMs":3907}
