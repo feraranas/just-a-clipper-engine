@@ -185,6 +185,23 @@ test("diagnostic write failure stops before publication", async (t) => {
   assert.equal(f.execution.getAttempt(f.id).phase,"processing");
 });
 
+test("crash after recording a phase error cannot bypass operator review on restart", async (t) => {
+  const f = await fixture(t);
+  f.client.getContainerStatus = async () => ({statusCode:"IN_PROGRESS", uploadPhase:"error", processingPhase:"error",bytesTransferred:0});
+  const execution = {...f.execution, recordDiagnostic: (...args) => {
+    f.execution.recordDiagnostic(...args);
+    throw new Error("crash after diagnostic");
+  }};
+  await assert.rejects(runPublishingOnce({...f.args, execution}), /crash after diagnostic/);
+  f.client.getContainerStatus = async () => ({statusCode:"FINISHED",uploadPhase:"complete",processingPhase:"complete"});
+  const reopened = createPublishingExecution(join(f.root,"queue.sqlite"));
+  try {
+    assert.equal((await runPublishingOnce({...f.args,execution:reopened})).status,"failed");
+    assert.equal(reopened.getAttempt(f.id).safeToRetry,false);
+  } finally {reopened.close();}
+  assert.equal(f.calls.includes("publishContainer"),false);
+});
+
 test("processing error stops without retry permission; PUBLISHED retains unknown safety", async (t) => {
   const f = await fixture(t);
   f.client.getContainerStatus=async()=>({statusCode:"FINISHED", uploadPhase:"complete", processingPhase:"error"});

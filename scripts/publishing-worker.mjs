@@ -234,8 +234,9 @@ export const runPublishingOnce = async ({
       execution.recordDiagnostic(attempt.id, { ...detail, operation: "container_status" });
       const status = detail.statusCode;
       if (status === "PUBLISHED") return unknown("PUBLISHED_ID_UNCONFIRMED");
-      if (detail.uploadPhase === "error") return fail("UPLOAD_PHASE_ERROR", false);
-      if (detail.processingPhase === "error") return fail("PROCESSING_PHASE_ERROR", false);
+      // recordDiagnostic atomically persists the error and non-retryable failure.
+      if (detail.uploadPhase === "error") return result("failed", {errorCode:"UPLOAD_PHASE_ERROR"});
+      if (detail.processingPhase === "error") return result("failed", {errorCode:"PROCESSING_PHASE_ERROR"});
       if (status === "ERROR" || status === "EXPIRED")
         return fail(`CONTAINER_${status}`);
       if (status === "FINISHED") {

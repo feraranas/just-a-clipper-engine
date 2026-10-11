@@ -87,6 +87,11 @@ The reader returns the latest 100 records, oldest first. No retention cleanup
 or dashboard endpoint is added. Known timeout exceptions remain distinct even
 when they occur during response-body reads.
 
+The execution store atomically saves detailed phase errors and marks both the
+attempt and item failed with safeToRetry false. A crash cannot leave a durable
+phase error without its operator-review boundary. Numeric provider codes retain
+their sign; byte counts remain nonnegative.
+
 The worker saves allowlisted observations before readiness decisions. Upload
 and processing errors override IN_PROGRESS or FINISHED, but not PUBLISHED,
 which retains the existing unknown-publication safeguard. Missing completion
