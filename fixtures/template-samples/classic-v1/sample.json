@@ -1,0 +1,10 @@
+{
+  "title": "Classic V1 — Demonstration",
+  "voice": "Samantha",
+  "wordsPerMinute": 145,
+  "sentences": [
+    "This is a demonstration of the Classic video template.",
+    "Your artwork and title introduce the topic.",
+    "The waveform follows the voice, while captions help viewers follow each sentence."
+  ]
+}

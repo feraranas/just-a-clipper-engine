@@ -57,7 +57,9 @@
     "publishing:run": "node scripts/publishing-run.mjs",
     "test:publishing": "node --test scripts/publishing-*.test.mjs scripts/instagram-client.test.mjs public/publishing/app.test.mjs",
     "youtube:discover": "node scripts/youtube-inbox.mjs",
-    "artifacts:migrate": "node scripts/migrate-artifact-storage.mjs"
+    "artifacts:migrate": "node scripts/migrate-artifact-storage.mjs",
+    "samples:serve": "node --env-file-if-exists=.env scripts/template-sample-server.mjs",
+    "samples:render": "node --env-file-if-exists=.env scripts/render-template-sample.mjs"
   },
   "sideEffects": [
     "*.css"

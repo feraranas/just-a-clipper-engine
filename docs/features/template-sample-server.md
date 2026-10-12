@@ -1,6 +1,6 @@
 ---
 feature: template-sample-server
-status: DESIGN
+status: IN_PROGRESS
 design-reviewed: true
 implementation-reconciled: false
 ---
@@ -73,7 +73,7 @@ only its own resources and the configured video origin; no wildcard origins.
 Without a video URL, show the poster and “Sample video is not available yet.”
 With one, use native controls, `playsinline`, no autoplay, and conservative
 preloading. Display a readable playback failure message. Do not suggest that
-an configured URL guarantees availability. Viewing never creates a job.
+a configured URL guarantees availability. Viewing never creates a job.
 
 ## Mermaid flowchart
 
@@ -158,10 +158,40 @@ claim may imply that external video or ChatGPT card work was performed.
 
 ## Implementation reconciliation and deviations
 
-Pending reconciliation. This is an approved design, not an implemented server.
-After local implementation and tests, record actual behavior and deviations.
-Keep public rollout and hosted-video evidence explicitly separate. Set COMPLETE
-only when the defined local deliverable and reconciliation are verified.
+Local implementation review performed on 2026-10-12. The code implements the
+registered routes, loopback binding, startup validation, poster hashes, request
+revalidation, and optional external player described above. The generation
+command uses the catalog composition and Classic defaults without changing them.
+
+Verified evidence:
+
+- Focused sample tests and existing template/storage regression tests pass.
+- `npm run lint` and `npm run verify:feature-docs` pass.
+- The real sample is 11.093333 seconds at 1080 × 1920 with H.264 video and audio.
+- The decoded audio has mean volume -15.9 dB and maximum volume -2.0 dB.
+- The poster, a frame at seven seconds, and the local browser page were inspected.
+- Video SHA-256: `e5908aedddefe6a99c6bacb3b47a01107e28e6695a6b27d380926fe3f8b44d1f`.
+- Poster SHA-256: `8866da18e491a04bc16bbde9d82e26a146c96419f8e17e74062f16c6063823f9`.
+
+Implementation details and deviations:
+
+- Caption sentence boundaries use measured local audio durations. Word times
+  use proportional estimates so the existing Classic word layout can wrap text.
+  They are not speech-alignment results. The first sentence-based fixture clipped
+  text and was replaced with the inspected word-based fixture.
+- Generation uses a writer lock and atomic registry replacement. It retains old
+  revisions. Replacing a sample removes its previous external video URL.
+- The server loads registry configuration at startup. Restart after changing it.
+- The generator validates media before registration. Registration is technical
+  preparation and does not establish human acceptance or public availability.
+- Review was inline under the repository's no-delegation preference.
+
+Pending reconciliation: listening and subjective narration/timing acceptance
+remain unverified. The current tools can inspect media properties and frames,
+but no listening review has been claimed. Keep this note IN_PROGRESS and the
+implementation PR in draft until that review is recorded. Public HTTPS rollout,
+external video hosting/playback, background startup, and the ChatGPT card remain
+separate work and are not prerequisites for the local implementation scope.
 
 ## References
 

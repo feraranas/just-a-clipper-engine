@@ -40,40 +40,40 @@
 
 ### Task 1: Registry and durable asset validation
 
-- [ ] Inspect existing storage config, artifact store, and template selector; reuse their conventions.
-- [ ] Write failing tests for valid identities, duplicate identities, missing/changed posters, invalid URLs, checkout roots, and symlink/traversal escapes.
-- [ ] Run focused registry tests and confirm intended failures.
-- [ ] Implement the registry schema, absolute root configuration, explicit asset hashes/revisions, and optional HTTPS URL validation.
-- [ ] Verify all tests, including another caller checkout using the same asset root.
+- [x] Inspect existing storage config, artifact store, and template selector; reuse their conventions.
+- [x] Write failing tests for valid identities, duplicate identities, missing/changed posters, invalid URLs, checkout roots, and symlink/traversal escapes.
+- [x] Run focused registry tests and confirm intended failures.
+- [x] Implement the registry schema, absolute root configuration, explicit asset hashes/revisions, and optional HTTPS URL validation.
+- [x] Verify all tests, including another caller checkout using the same asset root.
 
 ### Task 2: Preview page and dedicated HTTP server
 
-- [ ] Write failing tests for GET/HEAD, 405, 404, correct content types, ETag behavior, escaped text/URLs, absent video, and player error UI.
-- [ ] Add tests proving MP4, queue, MCP, arbitrary paths, and encoded traversal are inaccessible.
-- [ ] Add a port-conflict test and missing/changed-asset request tests.
-- [ ] Implement the page with native controls, no autoplay, `playsinline`, narrow CSP, and an unavailable state.
-- [ ] Implement exact registered routes, loopback startup, explicit port validation, shutdown, and safe errors.
-- [ ] Run server/page/registry tests with ephemeral ports and temporary asset stores.
-- [ ] Add the start command and configuration documentation. Do not enable a background service.
+- [x] Write failing tests for GET/HEAD, 405, 404, correct content types, ETag behavior, escaped text/URLs, absent video, and player error UI.
+- [x] Add tests proving MP4, queue, MCP, arbitrary paths, and encoded traversal are inaccessible.
+- [x] Add a port-conflict test and missing/changed-asset request tests.
+- [x] Implement the page with native controls, no autoplay, `playsinline`, narrow CSP, and an unavailable state.
+- [x] Implement exact registered routes, loopback startup, explicit port validation, shutdown, and safe errors.
+- [x] Run server/page/registry tests with ephemeral ports and temporary asset stores.
+- [x] Add the start command and configuration documentation. Do not enable a background service.
 
 ### Task 3: Reproducible neutral Classic V1 sample
 
-- [ ] Read repository Remotion render guidance and inspect Classic composition props and current renderer interface.
-- [ ] Define original neutral demonstration content and imagery, marked as a sample; use local narration without provider fallback.
-- [ ] Write tests for sample identity, explicit generation, and failed asset promotion before implementing the render command.
-- [ ] Generate a 10–15 second sample using the actual Classic V1 renderer, then extract its poster.
+- [x] Read repository Remotion render guidance and inspect Classic composition props and current renderer interface.
+- [x] Define original neutral demonstration content and imagery, marked as a sample; use local narration without provider fallback.
+- [x] Write tests for sample identity, explicit generation, and failed asset promotion before implementing the render command.
+- [x] Generate a 10–15 second sample using the actual Classic V1 renderer, then extract its poster.
 - [ ] Verify video/audio properties and hashes; view frames and listen to narration. Fix clipping, timing, or pronunciation problems before acceptance.
-- [ ] Promote verified assets outside the checkout and register the poster. Keep video URL absent until hosting is selected.
-- [ ] Start locally in the foreground and visually inspect the poster-only preview page.
+- [x] Promote verified assets outside the checkout and register the poster. Keep video URL absent until hosting is selected.
+- [x] Start locally in the foreground and visually inspect the poster-only preview page.
 
 ### Task 4: Verification, reconciliation, and PR handoff
 
-- [ ] Run focused tests and existing related storage/template regressions.
-- [ ] Run applicable lint/TypeScript checks and `npm run verify:feature-docs`.
-- [ ] Compare behavior against the design; document deviations and local evidence.
+- [x] Run focused tests and existing related storage/template regressions.
+- [x] Run applicable lint/TypeScript checks and `npm run verify:feature-docs`.
+- [x] Compare behavior against the design; document deviations and local evidence.
 - [ ] Mark the feature COMPLETE only for verified local scope; explicitly record public rollout/video hosting/ChatGPT UI as pending separate work.
-- [ ] Prepare a reviewable implementation PR with `Feature-docs: docs/features/template-sample-server.md`.
-- [ ] Give the user the confirmed local address, foreground start/stop instructions, and exact dashboard fields.
+- [x] Prepare a reviewable implementation PR with `Feature-docs: docs/features/template-sample-server.md`.
+- [x] Give the user the confirmed local address, foreground start/stop instructions, and exact dashboard fields.
 
 ## Operator rollout after local verification
 
@@ -84,4 +84,21 @@
 
 ## Execution status
 
-Not started. This PR contains design and planning documents only.
+Local server, registry, neutral render, tests, and operator docs are implemented.
+Visual inspection and technical audio checks passed. Listening review remains
+pending, so the implementation PR stays draft and the feature stays IN_PROGRESS.
+
+Ruling: use word entries with proportional timings inside measured sentences.
+Classic expects words for layout. Cost: word highlights can differ from speech.
+Ruling: keep review inline under the user agent-cost policy. No subagents used.
+Ruling: preserve the listening gate rather than mark an unperformed check complete.
+
+Tasks 1–2: focused route/registry tests passed, including a new regression that
+rejects roots inside another Git checkout. Initial tests failed before modules
+existed. The macOS test root uses realpath to avoid the /var symlink alias.
+Task 3: renderer-failure tests preserve the registry. The first narration was
+9.91 seconds and correctly rejected. Rate 145 produced 11.093333 seconds.
+Visual inspection caught and corrected sentence-entry clipping.
+Task 4: inline review checked route isolation, URL escaping, hashes, failed
+promotion, and port behavior. A regression caught nonnumeric rendered duration;
+validation now rejects it. Full local media acceptance awaits listening.
