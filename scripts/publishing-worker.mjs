@@ -49,7 +49,7 @@ export const runPublishingOnce = async ({
     if (!item) return result("ineligible");
   }
   let attempt = execution.getAttempt(itemId);
-  if (!attempt || (attempt.phase === "failed" && attempt.safeToRetry)) {
+  if (!attempt || (attempt.phase === "failed" && attempt.safeToRetry) || execution.canBeginReplacement?.(itemId)) {
     execution.beginAttempt(itemId);
     attempt = execution.getAttempt(itemId);
   }
