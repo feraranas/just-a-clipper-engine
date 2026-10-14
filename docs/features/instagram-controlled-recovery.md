@@ -1,13 +1,13 @@
 ---
 feature: instagram-controlled-recovery
-status: DESIGN
+status: IN_PROGRESS
 design-reviewed: true
 implementation-reconciled: false
 ---
 
 # Controlled Instagram publishing recovery
 
-The user approved this design in chat on 2026-10-13. Implementation has not started.
+The user approved this design in chat on 2026-10-13. Implementation is in progress.
 
 ## Changed / unchanged
 
