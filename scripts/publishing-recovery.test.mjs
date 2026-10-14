@@ -62,3 +62,8 @@ test("inspection uses GET-only client and returns only sanitized evidence", asyn
   const result = await inspectRecovery({...f, store});
   assert.equal(result.eligible, true); assert.ok(!JSON.stringify(result).includes("secret"));
 });
+test("artifact mutation during provider reads cannot qualify for recovery", async t => {
+  const f=await recoveryFixture(t),store=openRecoveryStore(f.path); t.after(()=>store.close());
+  f.client.getContainerStatus=async()=>{await writeFile(join(f.root,"clip.mp4"),"changed during GET"); return uploadError;};
+  await assert.rejects(inspectRecovery({...f,store}), /integrity/);
+});

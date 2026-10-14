@@ -34,6 +34,8 @@ export const inspectRecovery = async ({store, client, config, itemId, verifyArti
   await client.verifyAccount({accountId:config.accountId, pageId:config.pageId, username:config.username});
   const diagnostic = sanitizePublishingDiagnostic({...await client.getContainerStatus(snapshot.attempt.container_id), operation:"container_status"});
   if (recoveryFingerprint(store.readSnapshot(itemId)) !== recoveryFingerprint(snapshot)) return {eligible:false, reasonCode:"STALE_SNAPSHOT"};
+  await verifyArtifact(config, snapshot);
+  if (recoveryFingerprint(store.readSnapshot(itemId)) !== recoveryFingerprint(snapshot)) return {eligible:false, reasonCode:"STALE_SNAPSHOT"};
   const classification = classifyRecovery(snapshot, diagnostic);
   return {...classification, expected:{itemId, attemptId:snapshot.attempt.id, containerId:snapshot.attempt.container_id, fingerprint:recoveryFingerprint(snapshot)}, diagnostic};
 };
