@@ -64,3 +64,11 @@ test("audit insertion failure rolls back all item, attempt and diagnostic fields
   assert.deepEqual(db.prepare("SELECT * FROM publishing_diagnostics").all(), diagnostics);
   assert.equal(db.prepare("SELECT count(*) AS n FROM publishing_recoveries").get().n, 0); db.close();
 });
+test("recovering a confirmed upload rejection revokes generic retry but retains its original error", async t => {
+  const f=await recoveryFixture(t);
+  f.execution.checkpoint(f.attemptId,"failed",{errorCode:"UPLOAD_REJECTED",safeToRetry:true});
+  const store=openRecoveryStore(f.path); t.after(()=>store.close());
+  store.applyRecovery(await inspectRecovery({...f,store}));
+  assert.equal(f.execution.getAttempt(f.itemId).safeToRetry,false);
+  assert.equal(f.execution.getAttempt(f.itemId).errorCode,"UPLOAD_REJECTED");
+});
