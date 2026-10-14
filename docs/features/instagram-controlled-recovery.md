@@ -1,13 +1,14 @@
 ---
 feature: instagram-controlled-recovery
-status: IN_PROGRESS
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Controlled Instagram publishing recovery
 
-The user approved this design in chat on 2026-10-13. Implementation is in progress.
+The user approved this design in chat on 2026-10-13. Implementation and
+reconciliation are complete.
 
 ## Changed / unchanged
 
@@ -82,8 +83,11 @@ Sources: [content publishing](https://developers.facebook.com/documentation/inst
 The direct official page fetch was unavailable; Context7 retrieved these official
 sources. EXPIRED means unpublished after 24 hours; it is not upload-failure proof.
 FINISHED means ready and PUBLISHED means published, so neither qualifies even if
-contradictory upload details say error. Only upload error with processing not
-started and ERROR or IN_PROGRESS qualifies, alongside local pre-publication proof.
+contradictory upload details say error. Upload error with processing not started
+or also failed, plus ERROR or IN_PROGRESS, qualifies alongside local
+pre-publication proof. Processing-only errors do not qualify. A fixture models
+the historical sanitized upload+processing error, zero byte counts and code
+1363008; those old observations do not establish the target's current state.
 
 - Investigate official Meta documentation for reconciliation or idempotency when
   container creation times out without an ID. Record sources and limitations.
@@ -122,6 +126,68 @@ provider messages. Recovery remains an operator command in this slice.
 
 ## Implementation reconciliation and deviations
 
-Pending implementation and reconciliation. The Meta no-ID reconciliation
-capability is an investigation requirement, not an established provider feature.
-Reconcile actual behavior and run npm run verify:feature-docs before COMPLETE.
+Implementation comparison and full verification are complete. Inspection uses
+an existing read-only SQLite handle and never
+initializes execution/ledger stores. It checks persisted approval, identity and
+container fields, verifies artifact bytes before and after provider GETs, and
+rejects changed snapshots. The final fingerprint check is repeated inside the
+BEGIN IMMEDIATE recovery transaction.
+
+Apply owns the existing worker lock, reinspects from scratch and checks expected
+attempt/container identifiers. The transaction preserves the old container in
+the old attempt, retains diagnostics, appends sanitized fresh evidence and a
+unique recovery audit, clears active fields and approval, and returns to queued.
+Legacy upload_requested attempts become failed. Already-failed attempts retain
+their error code; generic retry permission is revoked. A fresh approval and claim
+allow beginAttempt to consume the audit once when inserting a replacement.
+
+The worker needs one additional dispatch check for that audited replacement;
+its create/upload/poll/publish ordering and safety checks are unchanged. Artifact
+verification moved unchanged into publishing-artifact.mjs for shared use.
+The actual browser module is app.mjs, rather than app.js named in the plan.
+History reads the latest 20 attempts without schema initialization, with fixed
+outcome labels, allowlisted local codes, numeric provider codes, and recovery
+timestamps. Failed history loading leaves approval controls visible and reports
+that history is unavailable. There is no dashboard recovery button.
+
+### Operator commands
+
+These commands are for a later separately authorized operation. Supply existing
+configuration through the established environment setup; do not put credentials
+in arguments. Use fresh inspection output, never historical attempt/container
+values. DB and project-root paths must be absolute.
+
+```sh
+node scripts/publishing-recover.mjs --item "$ITEM_ID" \
+  --db "$PUBLISHING_DB" --project-root "$PROJECT_ROOT"
+
+node scripts/publishing-recover.mjs --item "$ITEM_ID" \
+  --db "$PUBLISHING_DB" --project-root "$PROJECT_ROOT" \
+  --apply --expected-attempt "$ATTEMPT_ID" --expected-container "$CONTAINER_ID"
+```
+
+The first command defaults to inspection. Apply repeats the GETs and may refuse
+changed or inaccessible state. Exit 0 means eligible inspection or locally
+requeued for approval, never publication. Exit 1 means blocked/stopped. The CLI
+suppresses raw exception messages. Inspect reason codes identify state and evidence
+blocks; a failed artifact/provider/configuration check returns RECOVERY_CHECK_FAILED.
+Do not blindly retry an interrupted apply: inspect its current local state.
+
+After successful recovery a human must use Approve + Schedule, then separately
+authorize the existing item-scoped publishing worker. Unknown creation without
+an ID, publication intent/media IDs, expired/inaccessible containers, incomplete
+or contradictory evidence, and stale snapshots stay blocked. Processing-only
+errors stay blocked even when their provider code resembles an upload failure.
+
+### Verification and review
+
+Final verification: publishing 151/151; broader Node suite 450/450;
+lint/TypeScript passed; feature-doc validation passed for 18 notes; whitespace
+check passed. Fresh-worktree missing dependency failures were resolved with
+lockfile npm ci --ignore-scripts; package and lock files were unchanged.
+Inline self-review was used as explicitly
+requested; there was no independent reviewer. Fixture tests cover the recovery
+transaction, audit failure rollback, duplicate/stale requests, fresh approval,
+replacement publication, and history. The fixture browser showed queued state
+and old upload failure together. Its fake MP4 bytes are intentionally unplayable;
+this was a history-layout check. No live ledger or provider writes were used.
