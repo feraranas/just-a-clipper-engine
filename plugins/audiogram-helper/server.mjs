@@ -1,3 +1,5 @@
+import { createCandidateReviewRunner } from "./candidate-review-runner.mjs";
+import { registerCandidateReviewTools } from "./candidate-review-tools.mjs";
 import {
   buildTemplateListing,
   templateListingShape,
@@ -52,9 +54,10 @@ const outputShape = {
   diagnosticsIncomplete: z.boolean().optional(),
 };
 
-function makeMcpServer({ runner, templateCatalog, templateUi }) {
+function makeMcpServer({ runner, templateCatalog, templateUi, candidateRunner }) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
   registerTemplateUi(server, templateUi);
+  if (candidateRunner) registerCandidateReviewTools(server, candidateRunner);
   server.registerTool(
     "list_video_templates",
     {
@@ -255,9 +258,11 @@ export async function startMcpServer({
   port = 7331,
   templateCatalog,
   principalResolver,
+  candidateRunner,
 } = {}) {
   if (!projectRoot) throw new Error("projectRoot is required.");
   const templateUi = await buildTemplateUi();
+  candidateRunner ??= createCandidateReviewRunner({ projectRoot });
   let store;
   if (!runner) {
     store = createJobStore(JOB_STORE_PATH(projectRoot));
@@ -271,7 +276,7 @@ export async function startMcpServer({
     });
   }
   const handler = createMcpHttpHandler({
-    makeServer: () => makeMcpServer({ runner, templateCatalog, templateUi }),
+    makeServer: () => makeMcpServer({ runner, templateCatalog, templateUi, candidateRunner }),
     principalResolver,
   });
   const httpServer = createServer(async (req, res) => {

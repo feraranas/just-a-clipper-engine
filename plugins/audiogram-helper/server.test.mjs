@@ -703,8 +703,11 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
       "create_audiogram",
       "get_audiogram_status",
+      "get_candidate_review",
       "list_video_templates",
+      "prepare_candidate_review",
       "retry_audiogram",
+      "select_candidate_review",
     ]);
     assert.match(
       tools.tools.find((tool) => tool.name === "retry_audiogram").description,

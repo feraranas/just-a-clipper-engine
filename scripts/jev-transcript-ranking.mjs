@@ -42,6 +42,7 @@ export const rankTranscriptPackagesWithJev = async ({
   packages,
   questions,
   jevClient,
+  returnEvaluation = false,
 }) => {
   if (!Array.isArray(packages) || packages.length === 0) return [];
   const candidates = packages.map((clip, index) => ({
@@ -62,6 +63,7 @@ export const rankTranscriptPackagesWithJev = async ({
       },
     },
   });
+  if (returnEvaluation) return { candidates, ...evaluation };
   const byId = new Map(packages.map((clip, index) => [`candidate-${index + 1}`, clip]));
   return evaluation.ranked.flatMap((ranked) => {
     const clip = byId.get(ranked.candidateId);
