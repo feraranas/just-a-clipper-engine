@@ -4,6 +4,10 @@ import { mkdtemp, mkdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { request } from "node:http";
+import { DatabaseSync } from "node:sqlite";
+import { recoveryFixture } from "./test-support/recovery-fixture.mjs";
+import { openRecoveryStore } from "./publishing-recovery-store.mjs";
+import { inspectRecovery } from "./publishing-recovery.mjs";
 
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { createPublishingServer } from "./publishing-server.mjs";
@@ -96,6 +100,38 @@ const call = (baseUrl, method, path, body) =>
     if (body !== undefined) req.end(JSON.stringify(body));
     else req.end();
   });
+
+test("history endpoint is bounded, sanitized, durable across reapproval and newer attempts", async t => {
+  const f=await recoveryFixture(t), store=openRecoveryStore(f.path);
+  store.applyRecovery(await inspectRecovery({...f,store})); store.close();
+  f.ledger.approveItem(f.itemId,"2026-10-03T00:00:00Z"); f.ledger.claimDueApprovedItem("2026-10-13T00:00:00Z"); f.execution.beginAttempt(f.itemId);
+  const server=createPublishingServer({ledger:f.ledger});
+  await new Promise(r=>server.listen(0,"127.0.0.1",r));
+  try {
+    const base=`http://127.0.0.1:${server.address().port}`;
+    const route=`/api/items/${f.itemId}/history`;
+    const r=await call(base,"GET",route);
+    assert.equal(r.status,200); assert.equal(r.headers["cache-control"],"no-store");
+    assert.equal(r.body.attempts.length,2);
+    const old=r.body.attempts.find(a=>a.attemptId===f.attemptId);
+    assert.equal(old.outcome,"Video upload failed"); assert.ok(old.recoveredAt);
+    assert.ok(!JSON.stringify(r.body).includes("rupload"));
+    const db=new DatabaseSync(f.path);
+    db.prepare("UPDATE publishing_attempts SET error_code='SECRET_TOKEN',upload_uri='secret',error_code='SECRET_TOKEN' WHERE id<>?").run(f.attemptId);
+    for(let i=0;i<25;i++) db.prepare("INSERT INTO publishing_attempts(id,item_id,phase,created_at,updated_at) VALUES (?,?,'unknown','2026-10-13','2026-10-13')").run(`extra-${i}`,f.itemId);
+    db.close();
+    const bounded=await call(base,"GET",route); assert.equal(bounded.body.attempts.length,20); assert.ok(!JSON.stringify(bounded.body).includes("SECRET_TOKEN"));
+    assert.equal((await call(base,"GET","/api/items/nonexistent/history")).status,404);
+  } finally { await new Promise(r=>server.close(r)); }
+});
+test("legacy missing history tables return empty list without schema initialization", async t => {
+  const {root,item,baseUrl}=await setup(t);
+  const db=new DatabaseSync(join(root,"publishing.sqlite"));
+  const before=db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
+  const r=await call(baseUrl,"GET",`/api/items/${item.id}/history`);
+  assert.equal(r.status,200); assert.deepEqual(r.body,{attempts:[]});
+  assert.deepEqual(db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all(),before); db.close();
+});
 
 test("creates a server when publicRoot uses its default path", () => {
   assert.doesNotThrow(() => createPublishingServer({ ledger: {} }));

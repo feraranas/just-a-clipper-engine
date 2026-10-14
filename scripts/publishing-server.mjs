@@ -72,6 +72,11 @@ export const createPublishingServer = ({
       }
       if (parts[0] === "api" && parts[1] === "items" && parts[2]) {
         const id = parts[2];
+        if (request.method === "GET" && parts.length === 4 && parts[3] === "history") {
+          response.setHeader("Cache-Control", "no-store");
+          if (!ledger.getPublishingItem(id)) return json(response,404,{error:"Item not found"});
+          return json(response,200,{attempts:ledger.getAttemptHistory(id)});
+        }
         if (request.method === "GET" && parts.length === 3) {
           const item = ledger.getPublishingItem(id);
           return item
