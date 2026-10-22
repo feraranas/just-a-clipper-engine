@@ -54,6 +54,7 @@
     "test:selector:live": "node scripts/clip-selector-smoke.mjs",
     "youtube:login:chatgpt": "node scripts/chatgpt-oauth-login.mjs",
     "test:youtube": "node --test scripts/*.test.mjs",
+    "test:ci": "node scripts/run-ci-tests.mjs",
     "publishing:run": "node scripts/publishing-run.mjs",
     "test:publishing": "node --test scripts/publishing-*.test.mjs scripts/instagram-client.test.mjs public/publishing/app.test.mjs",
     "youtube:discover": "node scripts/youtube-inbox.mjs",
