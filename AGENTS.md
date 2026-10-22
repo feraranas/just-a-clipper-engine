@@ -47,3 +47,17 @@ Only docs/**/*.md, root README.md and root AGENTS.md count as documentation-only
 The pr-readiness check is separate from document validation; branch protection
 must require it to enforce this merge rule. Never mark a note complete or bypass
 hooks merely to save unfinished work on GitHub.
+
+## Verification
+
+To prove the audiogram renderer works end to end, use the verification skill at `skills/verify-just-a-clipper-engine/SKILL.md` (also linked from `.cursor/skills/` and `.claude/skills/`):
+
+```bash
+export RUN_ID=$(date +%s)
+skills/verify-just-a-clipper-engine/scripts/clipctl launch
+skills/verify-just-a-clipper-engine/scripts/clipctl doctor
+skills/verify-just-a-clipper-engine/scripts/clipctl journey render-classic-fixture
+skills/verify-just-a-clipper-engine/scripts/clipctl cleanup
+```
+
+It renders the synthetic `tests/fixtures/classic-v1` fixture offline with no OAuth, LLM, YouTube or Instagram calls. Never run `publishing:run --live` for verification. Feature recipes, including what is not yet proved, are in `skills/verify-just-a-clipper-engine/features/`.

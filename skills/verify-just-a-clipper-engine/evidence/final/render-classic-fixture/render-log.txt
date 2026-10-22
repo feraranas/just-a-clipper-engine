@@ -1,0 +1,15 @@
+Bundling 8%
+Bundling 21%
+Bundling 65%
+Bundling 70%
+Bundling 75%
+Bundling 81%
+Bundling 87%
+Bundling 93%
+Bundling 100%
+Getting composition
+Composition          AudiogramBasic
+Codec                h264
+Output               /tmp/verify-clipper-final/candidate.mp4
+Concurrency          1x
++                    /tmp/verify-clipper-final/candidate.mp4 516.2 kB

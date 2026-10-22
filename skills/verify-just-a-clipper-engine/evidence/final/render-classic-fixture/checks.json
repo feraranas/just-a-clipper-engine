@@ -1,0 +1,11 @@
+{
+  "checks": {
+    "width": true,
+    "height": true,
+    "fps": true,
+    "frames": true,
+    "codec": true,
+    "audio": true
+  },
+  "pass": true
+}
