@@ -11,7 +11,8 @@
 # Repository guidance
 
 When introducing a new feature or meaningful behavioral change, invoke the
-repository-local `feature-flow-diagrams` skill in DESIGN mode before writing
+repository-local `feature-flow-diagrams` skill
+(`skills/feature-flow-diagrams/SKILL.md`, linked from `.claude/skills/`) in DESIGN mode before writing
 implementation code. Create or update a `docs/features/<feature>.md` note with
 the intended flow, lifecycle, approval and external-side-effect boundaries,
 failure/retry paths, and invariants.
