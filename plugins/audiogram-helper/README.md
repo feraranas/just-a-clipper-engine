@@ -50,7 +50,12 @@ Show the returned clickable preview link so the user can watch before choosing.
 The browser loads the sample directly from Hetzner; the tool does not download
 or proxy media. Other variations omit `preview` until a sample is published.
 `video-configured` describes a configured URL, not a live availability check.
-This adds links, not an embedded ChatGPT player.
+The tool also advertises an inline MCP Apps player at
+`ui://video-templates/v1.html`. The server bundles its UI at startup. A bundle
+failure stops startup before the listener opens. Compatible hosts display a
+card with native video controls; other hosts retain the text preview link.
+The UI uses the MCP Apps bridge and allows media only from the Hetzner origin.
+It cannot create jobs. Playback needs no additional credentials.
 
 Restart the MCP service and refresh its tools in ChatGPT to load these changes.
 To add or withdraw a public sample, edit `template-previews.mjs` using the exact
@@ -73,3 +78,47 @@ The helper does not reuse completed jobs. The pipeline ledger can reuse complete
 The store migrates old records to Classic / Default in a transaction.
 Existing job IDs, statuses and results remain intact.
 Tests use temporary databases. Development verification does not migrate the user's live job database.
+
+## Local template sample page
+
+Generate the original Classic V1 demonstration and start its dedicated server:
+
+```sh
+npm run samples:render
+npm run samples:serve
+```
+
+Generation requires macOS with the Samantha voice, FFmpeg, and ffprobe.
+Open [the local sample page](http://127.0.0.1:8790/samples/classic/1/default/).
+The page initially shows a poster and an unavailable-video message. Stop the
+foreground server with Ctrl+C. No background service is installed.
+
+The sample server reads `<AUDIOGRAM_DATA_ROOT>/template-samples/registry.json`.
+`AUDIOGRAM_SAMPLE_ROOT` overrides the asset root. It must be absolute and outside
+Git checkouts. `AUDIOGRAM_SAMPLE_PORT` overrides 8790. A busy port fails instead
+of silently selecting another port. Both commands load `.env` when it exists.
+
+For the Cloudflare published application, enter:
+
+| Field | Value |
+| --- | --- |
+| Subdomain | `samples` |
+| Domain | `ferarana.work` |
+| Path | Leave empty |
+| Service URL | `http://127.0.0.1:8790` |
+| Additional settings | Keep defaults |
+
+The user saves this route. This code does not configure the tunnel or DNS.
+After saving, verify the HTTPS sample page and its poster. `/mcp`, `/api/items`,
+MP4 paths, and unknown paths must return 404 from this server.
+
+For playback, first select a suitable external video host and upload the local
+sample there. Add its public HTTPS URL as `videoUrl` on the matching registry
+entry, then restart the sample server. URLs with embedded credentials are
+rejected. The browser loads the video directly. The server never proxies it.
+The host must support browser playback and byte-range requests. CSP permits
+only the configured video origin, so cross-origin redirects need compatible
+hosting. Test actual playback before claiming the preview works.
+
+This page is separate from the MCP tools. It does not create a ChatGPT preview
+card or change `list_video_templates`. That integration remains separate work.

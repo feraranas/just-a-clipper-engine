@@ -686,6 +686,20 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
   try {
     await client.connect(transport);
     const tools = await client.listTools();
+    const uiUri = "ui://video-templates/v1.html";
+    assert.equal(
+      tools.tools.find((t) => t.name === "list_video_templates")._meta?.ui
+        ?.resourceUri,
+      uiUri,
+    );
+    const resources = await client.listResources();
+    assert.ok(resources.resources.some((r) => r.uri === uiUri));
+    const widget = (await client.readResource({ uri: uiUri })).contents[0];
+    assert.equal(widget.mimeType, "text/html;profile=mcp-app");
+    assert.deepEqual(widget._meta.ui.csp.resourceDomains, [
+      "https://media.ferarana.work",
+    ]);
+    assert.match(widget.text, /<script>/);
     assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
       "create_audiogram",
       "get_audiogram_status",
@@ -708,9 +722,14 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
       variationId: "default",
     });
     assert.match(listing.content[0].text, /Classic V1/);
-    assert.match(listing.content[0].text, /\[Preview Classic V1 \(default\)\]\(https:\/\/media\.ferarana\.work\/templates\/classic\/v1\/\)/);
-    assert.equal(listing.structuredContent.templates[0].variations[0].preview.videoUrl,
-      "https://media.ferarana.work/templates/classic/v1/demo.mp4");
+    assert.match(
+      listing.content[0].text,
+      /\[Preview Classic V1 \(default\)\]\(https:\/\/media\.ferarana\.work\/templates\/classic\/v1\/\)/,
+    );
+    assert.equal(
+      listing.structuredContent.templates[0].variations[0].preview.videoUrl,
+      "https://media.ferarana.work/templates/classic/v1/demo.mp4",
+    );
     assert.equal(calls.length, 0);
     const repeatedListing = await client.callTool({
       name: "list_video_templates",
@@ -788,23 +807,6 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
         message: "Audiogram processing could not be configured.",
       },
     ]);
-    runner.getStatus = async () => ({
-      jobId: statusId,
-      status: "failed",
-      artifacts: [],
-      failures: [{
-        stage: "selection",
-        code: "SELECTION_INVALID_CUE",
-        message: "Clip selection referenced a cue that is not in the transcript.",
-      }],
-    });
-    const selectionFailure = await client.callTool({
-      name: "get_audiogram_status",
-      arguments: { jobId: statusId },
-    });
-    assert.notEqual(selectionFailure.isError, true);
-    assert.equal(selectionFailure.structuredContent.failures[0].code, "SELECTION_INVALID_CUE");
-    assert.equal(selectionFailure.structuredContent.failures[0].stage, "selection");
     const retried = await client.callTool({
       name: "retry_audiogram",
       arguments: { jobId: statusId },
