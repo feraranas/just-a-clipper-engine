@@ -1,8 +1,8 @@
 ---
 feature: template-sample-server
-status: IN_PROGRESS
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 # Local template sample server
 
@@ -186,12 +186,21 @@ Implementation details and deviations:
   preparation and does not establish human acceptance or public availability.
 - Review was inline under the repository's no-delegation preference.
 
-Pending reconciliation: listening and subjective narration/timing acceptance
-remain unverified. The current tools can inspect media properties and frames,
-but no listening review has been claimed. Keep this note IN_PROGRESS and the
-implementation PR in draft until that review is recorded. Public HTTPS rollout,
-external video hosting/playback, background startup, and the ChatGPT card remain
-separate work and are not prerequisites for the local implementation scope.
+Final reconciliation completed on 2026-10-25 using the repository's
+feature-flow-diagrams RECONCILE workflow. The user confirmed that the sample's
+spoken narration and caption timing look and sound acceptable. This is user
+acceptance evidence, not a claim that the agent listened to the audio.
+
+The reconciled merge passed 46 plugin tests, 10 sample-server/render tests,
+lint/type checks, and all 65 pre-push test files. Routes, storage boundaries,
+rendering failures and Classic defaults remain consistent with this note.
+No runtime changes were needed to close the acceptance gate.
+
+Subsequent rollout selected Hetzner for public media. The user also confirmed
+inline ChatGPT loading, audio and seeking; that integration is documented in
+template-preview-chatgpt.md. The earlier future-tense rollout sections describe
+the original local-server scope, not remaining implementation blockers.
+Background service installation remains outside this feature's scope.
 
 ## References
 
