@@ -708,6 +708,9 @@ test("MCP rejects unsupported URLs before runner dispatch and exposes create/sta
       variationId: "default",
     });
     assert.match(listing.content[0].text, /Classic V1/);
+    assert.match(listing.content[0].text, /\[Preview Classic V1 \(default\)\]\(https:\/\/media\.ferarana\.work\/templates\/classic\/v1\/\)/);
+    assert.equal(listing.structuredContent.templates[0].variations[0].preview.videoUrl,
+      "https://media.ferarana.work/templates/classic/v1/demo.mp4");
     assert.equal(calls.length, 0);
     const repeatedListing = await client.callTool({
       name: "list_video_templates",

@@ -1,5 +1,17 @@
 import { z } from "zod";
 import { listTemplates } from "../../src/templates/catalog.mjs";
+import { findTemplatePreview } from "./template-previews.mjs";
+
+const publicUrl = z.string().url().refine((value) => {
+  const url = new URL(value);
+  return url.protocol === "https:" && !url.username && !url.password;
+});
+const previewSchema = z.object({
+  status: z.literal("video-configured"),
+  pageUrl: publicUrl,
+  posterUrl: publicUrl,
+  videoUrl: publicUrl,
+});
 
 const text = z
   .string()
@@ -20,7 +32,7 @@ export const templateListingShape = {
       description: text,
       supportedInput: text,
       variations: z
-        .array(z.object({ variationId: text, name: text, description: text }))
+        .array(z.object({ variationId: text, name: text, description: text, preview: previewSchema.optional() }))
         .min(1),
       defaultSelection: selection,
     }),
@@ -70,11 +82,15 @@ export function buildTemplateListing(entries = listTemplates()) {
       name: t.name,
       description: t.description,
       supportedInput: t.supportedInput,
-      variations: t.variations.map((v) => ({
-        variationId: v.id,
-        name: v.label,
-        description: v.description,
-      })),
+      variations: t.variations.map((v) => {
+        const preview = findTemplatePreview(t.id, t.version, v.id);
+        return {
+          variationId: v.id,
+          name: v.label,
+          description: v.description,
+          ...(preview ? { preview } : {}),
+        };
+      }),
       defaultSelection: {
         templateId: t.id,
         templateVersion: t.version,
