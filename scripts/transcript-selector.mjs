@@ -78,7 +78,10 @@ export const deriveClipSelections = (parsed, transcript, recipe) => {
     ];
     const located = names.map((name) => {
       const found = byId.get(clip[name]);
-      if (!found) throw new Error(`Unknown transcript cue ID: ${clip[name]}`);
+      if (!found)
+        throw Object.assign(new Error(`Unknown transcript cue ID: ${clip[name]}`), {
+          code: "SELECTION_INVALID_CUE",
+        });
       return found;
     });
     const [start, context, insight, payoff, end] = located;

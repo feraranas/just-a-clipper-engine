@@ -72,7 +72,13 @@ const config = (environment = {}, providerId = "openai-api") =>
   });
 const request = (overrides = {}) => ({
   instructions: TRANSCRIPT_PROMPT,
-  input: '{"source":"creator-en","language":"en","cues":[]}',
+  input: JSON.stringify({
+    source: "creator-en",
+    language: "en",
+    cues: Array.from({ length: 15 }, (_, i) => ({
+      id: `c${String(i + 1).padStart(6, "0")}`,
+    })),
+  }),
   jsonSchema: buildTranscriptJsonSchema(3),
   ...overrides,
 });
@@ -160,6 +166,15 @@ test("uses the real SDK with one locked official request and returns sanitized p
   const result = await provider.generateStructured(request());
 
   assert.equal(seen.length, 1);
+  const wireSchema = JSON.parse(seen[0].init.body).text.format.schema;
+  assert.equal(
+    new RegExp(wireSchema.$defs.cueId.pattern).test("c000015"),
+    true,
+  );
+  assert.equal(
+    new RegExp(wireSchema.$defs.cueId.pattern).test("c002361"),
+    false,
+  );
   assert.equal(seen[0].url, "https://api.openai.com/v1/responses");
   const headers = new Headers(seen[0].init.headers);
   assert.equal(headers.get("x-stainless-timeout"), "120");
@@ -173,7 +188,10 @@ test("uses the real SDK with one locked official request and returns sanitized p
       format: {
         name: "transcript_clip_selection",
         type: "json_schema",
-        schema: request().jsonSchema,
+        schema: buildTranscriptJsonSchema(
+          3,
+          JSON.parse(request().input).cues.map((cue) => cue.id),
+        ),
         strict: true,
       },
     },
@@ -192,7 +210,7 @@ test("uses the real SDK with one locked official request and returns sanitized p
     model: "gpt-5.6-terra",
     responseId: "resp_test_123",
     recipeSha256:
-      "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
+      "8856b350e1b0cdb973c734e28a7e5ff5047e5a77f14778dc036ec9d01f1f82f9",
     usage: {
       input_tokens: 120,
       output_tokens: 340,
@@ -250,7 +268,10 @@ test("uses app-owned credentials with the bounded in-process OAuth transport", a
   assert.deepEqual(body.text.format, {
     name: "transcript_clip_selection",
     type: "json_schema",
-    schema: request().jsonSchema,
+    schema: buildTranscriptJsonSchema(
+      3,
+      JSON.parse(request().input).cues.map((cue) => cue.id),
+    ),
     strict: true,
   });
   assert.equal(result.parsed.clips.length, 3);
@@ -480,8 +501,55 @@ test("captures immutable recipe validation values at provider creation", async (
   assert.equal(result.parsed.clips.length, 3);
   assert.equal(
     result.provenance.recipeSha256,
-    "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
+    "8856b350e1b0cdb973c734e28a7e5ff5047e5a77f14778dc036ec9d01f1f82f9",
   );
+});
+
+test("rejects empty, malformed, or duplicate transcript cue IDs before sending", async () => {
+  let calls = 0;
+  const provider = createStructuredGenerationProvider(config(), {
+    apiKey: "sk-test-provider-key-not-real",
+    fetch: async () => {
+      calls += 1;
+      return jsonResponse();
+    },
+  });
+  for (const cues of [
+    [],
+    [{ id: "c000001" }, { id: "c000001" }],
+    [{ id: "c.*" }],
+  ])
+    await assert.rejects(
+      provider.generateStructured(request({ input: JSON.stringify({ cues }) })),
+      /cue IDs/,
+    );
+  assert.equal(calls, 0);
+});
+
+test("distinguishes invalid selection JSON from refusals for bounded recovery", async () => {
+  for (const [content, expectedCode] of [
+    [[{ type: "output_text", text: "not JSON" }], "selection_output_invalid"],
+    [
+      [{ type: "output_text", text: '{"clips":[]}' }],
+      "selection_output_invalid",
+    ],
+    [
+      [{ type: "refusal", refusal: "Cannot comply" }],
+      "provider_response_invalid",
+    ],
+  ]) {
+    const response = structuredClone(officialResponse);
+    response.output.find((item) => item.type === "message").content = content;
+    delete response.output_text;
+    const provider = createStructuredGenerationProvider(config(), {
+      apiKey: "sk-test-provider-key-not-real",
+      fetch: async () => jsonResponse(response),
+    });
+    await assert.rejects(
+      provider.generateStructured(request()),
+      (error) => error.code === expectedCode,
+    );
+  }
 });
 
 test("rejects a signal without cleanup support before fetch", async () => {

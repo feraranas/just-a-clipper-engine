@@ -10,6 +10,7 @@ import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 import { computeTranscriptIdentity } from "./youtube-transcript-core.mjs";
 import { validateCliResult } from "../plugins/audiogram-helper/result-validation.mjs";
+import { SafeDiagnosticError } from "./error-diagnostics.mjs";
 
 const videoId = "dQw4w9WgXcQ";
 const sourceUrl = `https://www.youtube.com/watch?v=${videoId}`;
@@ -69,7 +70,12 @@ const transcriptSelection = {
 
 const createOptions = async (
   directory,
-  { media = metadata, transcriptError } = {},
+  {
+    media = metadata,
+    transcriptError,
+    selection = transcriptSelection,
+    selections,
+  } = {},
 ) => {
   const databaseDirectory = join(directory, "state");
   await mkdir(databaseDirectory, { recursive: true });
@@ -83,6 +89,7 @@ const createOptions = async (
   const transcriptRequests = [];
   const providerConfigs = [];
   let providerRequests = 0;
+  const selectionRequests = [];
   const renderedPaths = [];
 
   return {
@@ -90,6 +97,7 @@ const createOptions = async (
     transcriptRequests,
     providerConfigs,
     getProviderRequestCount: () => providerRequests,
+    selectionRequests,
     renderedPaths,
     options: {
       url: sourceUrl,
@@ -109,10 +117,17 @@ const createOptions = async (
           providerConfigs.push(selectionConfig);
           const selectionRecipe = buildSelectionRecipe(selectionConfig);
           return {
-            generateStructured: async () => {
+            generateStructured: async (request) => {
               providerRequests += 1;
+              selectionRequests.push(request);
+              const parsed = selections
+                ? selections[
+                    Math.min(providerRequests - 1, selections.length - 1)
+                  ]
+                : selection;
+              if (parsed instanceof Error) throw parsed;
               return {
-                parsed: transcriptSelection,
+                parsed,
                 provenance: {
                   providerId: selectionRecipe.recipe.provider.id,
                   model: selectionRecipe.recipe.provider.model,
@@ -298,6 +313,102 @@ test("reports post-metadata configuration errors as setup failures", async (t) =
   );
   assert.deepEqual(safeResult.failures, result.failures);
 });
+
+for (const invalidCue of [true, false]) {
+  test(`reports ${invalidCue ? "SELECTION_INVALID_CUE" : "SELECTION_FAILED"} through the CLI result boundary`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "selection-error-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const selection = structuredClone(transcriptSelection);
+    selection.clips[0].insightCueId = invalidCue ? "c002361" : "c000002";
+    const { options, renderedPaths, getProviderRequestCount } =
+      await createOptions(directory, { selection });
+    const events = [];
+    options.dependencies.onEvent = (event) => events.push(event);
+
+    const result = await runSingleUrlPipeline(options);
+    const safeResult = await validateCliResult(result, directory);
+    const code = invalidCue ? "SELECTION_INVALID_CUE" : "SELECTION_FAILED";
+    const message = invalidCue
+      ? "Clip selection referenced a cue that is not in the transcript."
+      : "Clip selection failed.";
+    assert.equal(result.status, "failed");
+    assert.deepEqual(result.failures, [{ stage: "selection", code, message }]);
+    assert.deepEqual(safeResult.failures, result.failures);
+    assert.equal(safeResult.error, message);
+    assert.deepEqual(safeResult.artifacts, []);
+    assert.deepEqual(renderedPaths, []);
+    assert.equal(getProviderRequestCount(), 2);
+    assert.equal(
+      events.some((event) => event.stage === "jev"),
+      false,
+    );
+    assert.equal(JSON.stringify(result).includes("c002361"), false);
+  });
+}
+
+for (const invalidCue of [true, false]) {
+  test(`recovers once from invalid ${invalidCue ? "cue membership" : "evidence order"} before rendering`, async (t) => {
+    const directory = await mkdtemp(join(tmpdir(), "selection-recovery-"));
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const invalid = structuredClone(transcriptSelection);
+    invalid.clips[0].insightCueId = invalidCue ? "c002361" : "c000002";
+    const {
+      options,
+      getProviderRequestCount,
+      renderedPaths,
+      selectionRequests,
+    } = await createOptions(directory, {
+      selections: [invalid, transcriptSelection],
+    });
+    const events = [];
+    options.dependencies.onEvent = (event) => events.push(event);
+    const result = await runSingleUrlPipeline(options);
+    assert.equal(result.status, "complete");
+    assert.equal(getProviderRequestCount(), 2);
+    assert.equal(renderedPaths.length, 3);
+    assert.equal(
+      events.filter(
+        (event) => event.stage === "selection" && event.status === "retrying",
+      ).length,
+      1,
+    );
+    const initial = JSON.parse(selectionRequests[0].input);
+    const corrected = JSON.parse(selectionRequests[1].input);
+    assert.deepEqual(corrected.cues, initial.cues);
+    assert.equal(
+      corrected.validationFeedback.code,
+      invalidCue ? "SELECTION_INVALID_CUE" : "SELECTION_INVALID_OUTPUT",
+    );
+    assert.equal(selectionRequests[1].input.includes("c002361"), false);
+    assert.equal(JSON.stringify(events).includes("c002361"), false);
+  });
+}
+
+for (const code of [
+  "selection_output_invalid",
+  "provider_response_invalid",
+  "provider_request_failed",
+]) {
+  test(`selection recovery is bounded and distinguishes ${code}`, async (t) => {
+    const directory = await mkdtemp(
+      join(tmpdir(), "selection-provider-recovery-"),
+    );
+    t.after(() => rm(directory, { recursive: true, force: true }));
+    const error = new SafeDiagnosticError({ providerId: "openai-api", code });
+    for (const recover of [true, false]) {
+      const runDirectory = join(directory, String(recover));
+      const { options, getProviderRequestCount, renderedPaths } =
+        await createOptions(runDirectory, {
+          selections: [error, recover ? transcriptSelection : error],
+        });
+      const result = await runSingleUrlPipeline(options);
+      const allowed = code === "selection_output_invalid";
+      assert.equal(getProviderRequestCount(), allowed ? 2 : 1);
+      assert.equal(result.status, allowed && recover ? "complete" : "failed");
+      assert.equal(renderedPaths.length, allowed && recover ? 3 : 0);
+    }
+  });
+}
 
 test("fails transcript acquisition without falling back to heatmap selection", async (t) => {
   const directory = await mkdtemp(join(tmpdir(), "single-url-empty-"));
