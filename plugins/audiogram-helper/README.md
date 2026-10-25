@@ -50,7 +50,12 @@ Show the returned clickable preview link so the user can watch before choosing.
 The browser loads the sample directly from Hetzner; the tool does not download
 or proxy media. Other variations omit `preview` until a sample is published.
 `video-configured` describes a configured URL, not a live availability check.
-This adds links, not an embedded ChatGPT player.
+The tool also advertises an inline MCP Apps player at
+`ui://video-templates/v1.html`. The server bundles its UI at startup. A bundle
+failure stops startup before the listener opens. Compatible hosts display a
+card with native video controls; other hosts retain the text preview link.
+The UI uses the MCP Apps bridge and allows media only from the Hetzner origin.
+It cannot create jobs. Playback needs no additional credentials.
 
 Restart the MCP service and refresh its tools in ChatGPT to load these changes.
 To add or withdraw a public sample, edit `template-previews.mjs` using the exact
