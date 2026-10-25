@@ -3,6 +3,8 @@ import {
   TRANSCRIPT_LIMITS,
 } from "./clip-selection-contract.mjs";
 
+export class InvalidSelectionOutputError extends Error {}
+
 const numericUsage = (usage, field) => {
   const value = usage?.[field];
   if (value === undefined) return undefined;
@@ -87,9 +89,18 @@ export const extractStructuredOutput = (response, limits) => {
   try {
     json = JSON.parse(text);
   } catch {
-    throw new Error("Structured output is not valid JSON");
+    throw new InvalidSelectionOutputError(
+      "Structured output is not valid JSON",
+    );
   }
-  const parsed = buildTranscriptZodSchema(limits?.desiredClipCount).parse(json);
+  const validation = buildTranscriptZodSchema(
+    limits?.desiredClipCount,
+  ).safeParse(json);
+  if (!validation.success)
+    throw new InvalidSelectionOutputError(
+      "Structured output does not match the selection schema",
+    );
+  const parsed = validation.data;
   return {
     responseId: response.id,
     usage: sanitizedUsage(response.usage),

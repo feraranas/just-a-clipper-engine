@@ -6,12 +6,16 @@ import { canonicalJson, sha256Canonical } from "./canonical-json.mjs";
 import { loadFreshChatGptSession } from "./chatgpt-oauth-credentials.mjs";
 import {
   buildSelectionRecipe,
+  buildTranscriptJsonSchema,
   OAUTH_CODEX_VERSION,
   SELECTOR_MODEL,
   TRANSCRIPT_LIMITS,
 } from "./clip-selection-contract.mjs";
 import { SafeDiagnosticError } from "./error-diagnostics.mjs";
-import { extractStructuredOutput } from "./structured-response.mjs";
+import {
+  extractStructuredOutput,
+  InvalidSelectionOutputError,
+} from "./structured-response.mjs";
 
 const OFFICIAL_PROVIDER_ID = "openai-api";
 const OAUTH_PROVIDER_ID = "chatgpt-oauth";
@@ -195,6 +199,11 @@ export const createStructuredGenerationProvider = (
         throw new Error(
           "Structured generation jsonSchema does not match the configured selection recipe",
         );
+      const transcript = JSON.parse(request.input);
+      const boundSchema = buildTranscriptJsonSchema(
+        desiredClipCount,
+        transcript.cues?.map((cue) => cue.id) ?? [],
+      );
       const body = {
         model: SELECTOR_MODEL,
         store: false,
@@ -209,7 +218,7 @@ export const createStructuredGenerationProvider = (
           format: {
             name: FORMAT_NAME,
             type: "json_schema",
-            schema: jsonSchema,
+            schema: boundSchema,
             strict: true,
           },
         },
@@ -312,10 +321,13 @@ export const createStructuredGenerationProvider = (
           desiredClipCount,
           maximumOutputTextUtf8Bytes,
         });
-      } catch {
+      } catch (error) {
         throw new SafeDiagnosticError({
           providerId,
-          code: "provider_response_invalid",
+          code:
+            error instanceof InvalidSelectionOutputError
+              ? "selection_output_invalid"
+              : "provider_response_invalid",
         });
       }
       const responseId = safeResponseId(extracted.responseId);

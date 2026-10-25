@@ -342,7 +342,9 @@ export const runSingleUrlPipeline = async ({
         .map((failure) => ({
           ...failure,
           message:
-            failure.stage === "transcript"
+            failure.stage === "selection" && failure.code === "SELECTION_INVALID_CUE"
+              ? "Clip selection referenced a cue that is not in the transcript."
+              : failure.stage === "transcript"
               ? "Transcript acquisition failed."
               : failure.stage === "jev"
                 ? "Jev analysis failed."

@@ -1133,7 +1133,7 @@ test("sync rejects every changed recipe dimension under one package version", as
     buildSelectionRecipe({ ...base, model: "changed-model" }),
     buildSelectionRecipe({ ...base, promptVersion: "changed-prompt" }),
     buildSelectionRecipe({ ...base, prompt: "changed prompt body" }),
-    buildSelectionRecipe({ ...base, outputSchemaVersion: 2 }),
+    buildSelectionRecipe({ ...base, outputSchemaVersion: 3 }),
     buildSelectionRecipe({ ...base, outputSchema: { type: "object" } }),
     buildSelectionRecipe({ ...base, desiredClipCount: 4 }),
     ...[

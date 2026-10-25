@@ -361,8 +361,26 @@ for (const failure of ["acquisition", "provider", "schema", "semantic"]) {
     });
 
     assert.deepEqual(failedJobs, [1]);
+    assert.deepEqual(result.analyzed[0].failure, {
+      stage: failure === "acquisition" ? "transcript" : "selection",
+      code:
+        failure === "semantic"
+          ? "SELECTION_INVALID_CUE"
+          : failure === "acquisition"
+            ? "TRANSCRIPT_FAILED"
+            : "SELECTION_FAILED",
+    });
     const failedStep = failure === "acquisition" ? "transcript" : "selection";
-    assert.deepEqual(events.filter((event) => event.videoId === "video-1" && event.stage === failedStep).map((event) => event.status), ["started", "failed"]);
+    assert.deepEqual(
+      events
+        .filter(
+          (event) => event.videoId === "video-1" && event.stage === failedStep,
+        )
+        .map((event) => event.status),
+      failure === "semantic"
+        ? ["started", "retrying", "failed"]
+        : ["started", "failed"],
+    );
     assert.deepEqual(recordedJobs, [2]);
     assert.deepEqual(
       result.analyzed.map(({ videoId, status }) => ({ videoId, status })),
@@ -373,6 +391,9 @@ for (const failure of ["acquisition", "provider", "schema", "semantic"]) {
     );
     assert.equal(heatmapRequests, 0);
     assert.equal(providerConstructions, 1);
-    assert.equal(providerRequests, failure === "acquisition" ? 1 : 2);
+    assert.equal(
+      providerRequests,
+      failure === "acquisition" ? 1 : failure === "semantic" ? 3 : 2,
+    );
   });
 }

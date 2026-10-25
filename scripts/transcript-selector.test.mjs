@@ -114,6 +114,16 @@ test("derives exact clamped intervals and accepts three grounded arcs", () => {
   );
 });
 
+test("reports SELECTION_INVALID_CUE for each reference absent from the transcript", () => {
+  for (const field of ["startCueId", "contextCueId", "insightCueId", "payoffCueId", "endCueId"]) {
+    const parsed = structuredClone(validParsed);
+    parsed.clips[0][field] = "c002361";
+    assert.throws(() => deriveClipSelections(parsed, transcript, recipe), {
+      code: "SELECTION_INVALID_CUE",
+    });
+  }
+});
+
 test("rejects bad cue grounding, ranks, duplicate ideas/spans, and false editorial claims", () => {
   const mutate = (change, index = 0) => ({
     clips: validParsed.clips.map((clip, at) =>

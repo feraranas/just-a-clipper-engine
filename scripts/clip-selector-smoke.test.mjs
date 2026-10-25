@@ -164,7 +164,7 @@ test("authorized smoke exercises the production request contract and prints only
             providerId: config.providerId,
             model: config.model,
             recipeSha256:
-              "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
+              "8856b350e1b0cdb973c734e28a7e5ff5047e5a77f14778dc036ec9d01f1f82f9",
             responseId: "resp_smoke_synthetic",
           },
         };
@@ -194,9 +194,9 @@ test("authorized smoke exercises the production request contract and prints only
     providerId: "openai-api",
     model: "gpt-5.6-terra",
     recipeSha256:
-      "b70400ac1426383aa73448e3e2aede41344800d77faa41e03f456537608fb90c",
+      "8856b350e1b0cdb973c734e28a7e5ff5047e5a77f14778dc036ec9d01f1f82f9",
     responseId: "resp_smoke_synthetic",
-    schemaVersion: 1,
+    schemaVersion: 2,
     clipCount: 3,
     status: "pass",
   });
@@ -218,7 +218,7 @@ test("failure summaries expose only the seven approved fields", () => {
     model: "gpt-5.6-terra",
     recipeSha256: null,
     responseId: null,
-    schemaVersion: 1,
+    schemaVersion: 2,
     clipCount: 0,
     status: "fail",
   });
