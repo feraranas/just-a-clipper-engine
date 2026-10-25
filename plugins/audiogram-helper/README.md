@@ -43,6 +43,19 @@ It returns `contractVersion: 1`, descriptions, supported input types, variations
 and a `defaultSelection` for each template. It reads the same catalog used by
 creation. It does not start a job or check provider readiness.
 Show the choices to the user, then pass their selection to `create_audiogram`.
+
+Classic V1's default variation includes `preview.pageUrl`, `preview.posterUrl`,
+and `preview.videoUrl`, hosted at `https://media.ferarana.work/templates/classic/v1/`.
+Show the returned clickable preview link so the user can watch before choosing.
+The browser loads the sample directly from Hetzner; the tool does not download
+or proxy media. Other variations omit `preview` until a sample is published.
+`video-configured` describes a configured URL, not a live availability check.
+This adds links, not an embedded ChatGPT player.
+
+Restart the MCP service and refresh its tools in ChatGPT to load these changes.
+To add or withdraw a public sample, edit `template-previews.mjs` using the exact
+template/version/variation identity. Verify the page, poster and MP4 range
+response before adding a mapping. Never use private job media in this map.
 Classic V1 / Default is currently the only available design. Preview images
 and planned designs are not included. Restart the MCP server after deploying
 this change so clients can discover the new tool.

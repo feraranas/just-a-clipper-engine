@@ -6,6 +6,26 @@ import {
   resolveTemplateSelection,
 } from "../../src/templates/catalog.mjs";
 
+test("sample links match the exact template, version and variation", () => {
+  const original = listTemplates()[0];
+  const otherVersion = structuredClone(original);
+  otherVersion.version = "2";
+  const otherTemplate = structuredClone(original);
+  otherTemplate.id = "other";
+  const withVariation = structuredClone(original);
+  withVariation.variations.push({ ...original.variations[0], id: "other" });
+  const result = buildTemplateListing([withVariation, otherVersion, otherTemplate]);
+  assert.deepEqual(result.templates[0].variations[0].preview, {
+    status: "video-configured",
+    pageUrl: "https://media.ferarana.work/templates/classic/v1/",
+    posterUrl: "https://media.ferarana.work/templates/classic/v1/poster.jpg",
+    videoUrl: "https://media.ferarana.work/templates/classic/v1/demo.mp4",
+  });
+  assert.equal(result.templates[0].variations[1].preview, undefined);
+  assert.equal(result.templates[1].variations[0].preview, undefined);
+  assert.equal(result.templates[2].variations[0].preview, undefined);
+});
+
 test("every advertised variation and default resolves through the creation catalog", () => {
   for (const t of buildTemplateListing().templates) {
     resolveTemplateSelection(t.defaultSelection);
