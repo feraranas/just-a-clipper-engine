@@ -1,8 +1,8 @@
 ---
 feature: template-preview-chatgpt
-status: IN_PROGRESS
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 # Inline video template previews in ChatGPT
 
@@ -109,13 +109,15 @@ ui/template-view.mjs; registered the resource in server.mjs. Tests retrieve the
 bundled resource through the actual MCP transport. A local iframe harness
 completed the SDK handshake, received the tool result and displayed Classic V1.
 The native player loaded the Hetzner MP4 and its timer advanced to 0:01 / 0:11.
-Audio listening and real ChatGPT sandbox playback remain pending.
+The user confirmed that the inline player loads in ChatGPT, plays audio, and
+seeks successfully. This supplies the real-host acceptance evidence. The local
+plugin suite passed all 46 tests; lint/type checks and the document gate passed.
 
 This supersedes the earlier Cloudflare Stream proposal: the existing Hetzner
 host now supplies all public sample assets. The curated preview map replaces
 local registry lookup. Startup bundling replaces a separate generated artifact;
-no UI flag or additional build command is required. Keep IN_PROGRESS until
-ChatGPT acceptance is confirmed; no COMPLETE claim is made.
+no UI flag or additional build command is required. Implementation is reconciled
+with this note, and the ChatGPT acceptance gate is satisfied.
 
 ## References
 
