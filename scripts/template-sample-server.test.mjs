@@ -130,13 +130,17 @@ test("external media page uses exact origin CSP and escaped attributes without f
 });
 test("root validation rejects relative roots and checkout storage; another caller can use the same durable root", async (t) => {
   const f = await fixture(t);
+  const callerRoot = await realpath(
+    await mkdtemp(path.join(tmpdir(), "sample-caller-")),
+  );
+  t.after(() => rm(callerRoot, { recursive: true, force: true }));
   await assert.rejects(loadSampleRegistry({ sampleRoot: "." }), /absolute/);
   await assert.rejects(
     loadSampleRegistry({ sampleRoot: process.cwd() }),
     /outside the source checkout/,
   );
   assert.equal(
-    (await loadSampleRegistry({ sampleRoot: f.root, projectRoot: "/Users" }))
+    (await loadSampleRegistry({ sampleRoot: f.root, projectRoot: callerRoot }))
       .length,
     1,
   );

@@ -14,6 +14,11 @@ import path from "node:path";
 import { createJobStore } from "./job-store.mjs";
 import { createLocalRunner, parseAndValidateUrl } from "./local-runner.mjs";
 import { validateMcpRuntimeConfig } from "./runtime-config.mjs";
+import {
+  buildTemplateUi,
+  registerTemplateUi,
+  TEMPLATE_UI_URI,
+} from "./template-ui-resource.mjs";
 
 const HOST = "127.0.0.1";
 const JOB_STORE_PATH = (root) =>
@@ -57,15 +62,20 @@ const outputShape = {
   diagnosticsIncomplete: z.boolean().optional(),
 };
 
-function makeMcpServer({ runner, templateCatalog }) {
+function makeMcpServer({ runner, templateCatalog, templateUi }) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
+  registerTemplateUi(server, templateUi);
   server.registerTool(
     "list_video_templates",
     {
       description:
-        "List available video templates, their variations, and valid selections for create_audiogram. This tool does not start a job.",
+        "List available video templates, their variations, public sample preview links, and valid selections for create_audiogram. Show the preview page link when available so the user can watch the sample before choosing. Video and poster URLs point directly to the public media host. This tool does not start a job.",
       inputSchema: z.strictObject({}),
       outputSchema: templateListingShape,
+      _meta: {
+        ui: { resourceUri: TEMPLATE_UI_URI },
+        "openai/outputTemplate": TEMPLATE_UI_URI,
+      },
       annotations: {
         readOnlyHint: true,
         destructiveHint: false,
@@ -85,7 +95,13 @@ function makeMcpServer({ runner, templateCatalog }) {
                 listing.templates
                   .map(
                     (t) =>
-                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.`,
+                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.${t.variations
+                        .filter((v) => v.preview)
+                        .map(
+                          (v) =>
+                            `\n[Preview ${t.name} (${v.variationId})](${v.preview.pageUrl})`,
+                        )
+                        .join("")}`,
                   )
                   .join("\n") || "No video templates are available.",
             },
@@ -250,6 +266,7 @@ export async function startMcpServer({
   templateCatalog,
 } = {}) {
   if (!projectRoot) throw new Error("projectRoot is required.");
+  const templateUi = await buildTemplateUi();
   let store;
   if (!runner) {
     store = createJobStore(JOB_STORE_PATH(projectRoot));
@@ -289,7 +306,7 @@ export async function startMcpServer({
         .end(JSON.stringify({ error: error.message }));
       return;
     }
-    const mcp = makeMcpServer({ runner, templateCatalog });
+    const mcp = makeMcpServer({ runner, templateCatalog, templateUi });
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
