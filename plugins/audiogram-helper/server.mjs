@@ -63,7 +63,7 @@ function makeMcpServer({ runner, templateCatalog }) {
     "list_video_templates",
     {
       description:
-        "List available video templates, their variations, and valid selections for create_audiogram. This tool does not start a job.",
+        "List available video templates, their variations, public sample preview links, and valid selections for create_audiogram. Show the preview page link when available so the user can watch the sample before choosing. Video and poster URLs point directly to the public media host. This tool does not start a job.",
       inputSchema: z.strictObject({}),
       outputSchema: templateListingShape,
       annotations: {
@@ -85,7 +85,7 @@ function makeMcpServer({ runner, templateCatalog }) {
                 listing.templates
                   .map(
                     (t) =>
-                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.`,
+                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.${t.variations.filter((v) => v.preview).map((v) => `\n[Preview ${t.name} (${v.variationId})](${v.preview.pageUrl})`).join("")}`,
                   )
                   .join("\n") || "No video templates are available.",
             },
