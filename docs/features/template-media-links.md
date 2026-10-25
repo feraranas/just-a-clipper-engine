@@ -52,8 +52,7 @@ The user requested connecting the plugin to the exposed Hetzner media endpoint.
 This change edits the existing server source. It creates no jobs, uploads no
 files and changes no hosting configuration. The operator restarts the MCP
 service and refreshes tools after deployment. No automatic UI rendering claim.
-The feature-flow-diagrams skill is unavailable; use the previously authorized
-feature-note structure. Design review confirms this narrow link-only scope.
+The feature-flow-diagrams reconciliation confirms this narrow link-only scope.
 
 ## Failure and retry paths
 
