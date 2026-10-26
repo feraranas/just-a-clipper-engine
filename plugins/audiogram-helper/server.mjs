@@ -7,8 +7,8 @@ import { createServer } from "node:http";
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import { URL } from "node:url";
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { McpServer } from "@modelcontextprotocol/server";
+import { createMcpHttpHandler } from "./mcp-http.mjs";
 import { z } from "zod";
 import path from "node:path";
 import { createJobStore } from "./job-store.mjs";
@@ -264,6 +264,7 @@ export async function startMcpServer({
   runner,
   port = 7331,
   templateCatalog,
+  principalResolver,
 } = {}) {
   if (!projectRoot) throw new Error("projectRoot is required.");
   const templateUi = await buildTemplateUi();
@@ -279,6 +280,10 @@ export async function startMcpServer({
       ),
     });
   }
+  const handler = createMcpHttpHandler({
+    makeServer: () => makeMcpServer({ runner, templateCatalog, templateUi }),
+    principalResolver,
+  });
   const httpServer = createServer(async (req, res) => {
     const host = req.headers.host ?? "";
     const origin = req.headers.origin;
@@ -306,18 +311,11 @@ export async function startMcpServer({
         .end(JSON.stringify({ error: error.message }));
       return;
     }
-    const mcp = makeMcpServer({ runner, templateCatalog, templateUi });
-    const transport = new StreamableHTTPServerTransport({
-      sessionIdGenerator: undefined,
-    });
     try {
-      await mcp.connect(transport);
-      await transport.handleRequest(req, res, body);
+      await handler.handleNodeRequest(req, res, body);
     } catch {
       if (!res.headersSent) res.writeHead(500).end();
       else res.end();
-    } finally {
-      await Promise.allSettled([mcp.close(), transport.close()]);
     }
   });
   await new Promise((resolve, reject) => {
@@ -332,6 +330,7 @@ export async function startMcpServer({
     address,
     url: `http://${HOST}:${address.port}/mcp`,
     close: async () => {
+      await handler.close();
       await new Promise((resolve, reject) =>
         httpServer.close((error) => (error ? reject(error) : resolve())),
       );
