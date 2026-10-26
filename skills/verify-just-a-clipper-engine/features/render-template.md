@@ -27,4 +27,4 @@ Preconditions:
 
 - Frame-exact parity needs the local-only baseline MP4; not checked.
 - Without `CHROME_PATH`/system Chrome, Remotion downloads Chrome Headless Shell (network) on first render.
-- Proved on Node 20.19.2; README requires Node 22.
+- Proved on Node 20.19.2 and Node 22.23.4; README requires Node 22.
