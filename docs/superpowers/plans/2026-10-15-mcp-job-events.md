@@ -1,5 +1,9 @@
 # MCP Job Completion Events Implementation Plan
 
+> **SUPERSEDED 2026-10-25:** Do not execute this completion-only plan. Use
+> [MCP live stage events implementation plan](2026-10-25-mcp-live-stage-events.md).
+> The approved design now includes stage progress, recovery, and durable replay.
+
 > **For agentic workers:** Use superpowers:executing-plans to implement this plan task-by-task, inline. The repository policy defaults to no subagents. Steps use checkboxes for tracking. This document authorizes no code execution or external publication by itself.
 
 **Goal:** Notify a subscribed ChatGPT Work chat when a clip-generation attempt reaches a final outcome.
