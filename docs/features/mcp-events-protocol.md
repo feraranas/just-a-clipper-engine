@@ -1,8 +1,8 @@
 ---
 feature: MCP modern HTTP protocol boundary
-status: IN_PROGRESS
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # MCP modern HTTP protocol boundary
@@ -43,8 +43,9 @@ stateDiagram-v2
 The user approved execution of the live-stage-events plan. This slice changes
 only the isolated implementation checkout and dependency lockfile. Tests use
 temporary stores and ephemeral local HTTP ports. No real job is started,
-plugin updated, callback contacted, or running service restarted. Tunnel/live
-acceptance requires separate approval.
+production plugin updated, callback contacted, or running service restarted.
+The user separately approved and operated a visible server on port 7332 and
+a separate test tunnel/plugin for read-only template listing.
 
 ## Failure and retry paths
 
@@ -83,10 +84,16 @@ oversized bodies, paths, existing Host/Origin guards, concurrent principal
 isolation, and actual low-level close notifications. All 67 CI-safe test files
 and all 52 plugin tests pass; targeted ESLint and repository lint pass.
 
-This slice stays IN_PROGRESS pending the plan's operator-authorized private
-tunnel discovery check. No live tunnel acceptance is claimed and no existing
-runtime/tunnel has been altered. Events capability is absent, as intended.
-The overall live-stage-events feature remains unfinished.
+Live compatibility evidence on 2026-10-25: the user reported that the separate
+ChatGPT test plugin returned Classic V1 / Default and its public preview link,
+with no job created or retried. This verifies a real tool round-trip through
+the test connection, not the exact protocol era used by ChatGPT. Modern-era
+negotiation is independently proven by the pinned modern SDK client test and
+the local read-only check against the visible port-7332 server.
+
+The protocol slice is reconciled. No existing runtime/tunnel was replaced.
+Events capability remains absent and the overall live-stage-events feature
+remains IN_PROGRESS. Subscription/callback acceptance is still future work.
 
 Sources: [SDK modern migration](https://ts.sdk.modelcontextprotocol.io/v2/migration/support-2026-07-28)
 and [legacy HTTP support](https://ts.sdk.modelcontextprotocol.io/v2/serving/legacy-clients).
