@@ -5,7 +5,8 @@
 ## Sub-features
 
 - `publish-live` posts the item. This is a real external side effect.
-- `publish-check` read-only account check (calls the Instagram API).
+- `publish-check` account check (calls the Instagram Graph API with the configured token).
+- `publish-guard` bad arguments or missing `INSTAGRAM_*` config stop before any network call.
 
 ## How to get to it (user POV)
 
@@ -15,10 +16,11 @@
 
 Preconditions:
 
-- None. Do not drive.
+- No `INSTAGRAM_*` variables in the environment and no `.env` in the checkout.
 
-- **Never.** Verification must not run `--live`. Use the unit tests (`npm run test:publishing`, which use fakes) only as a developer signal, not as user-path proof.
+- **Guard.** `AUDIOGRAM_DATA_ROOT=$STATE/data node scripts/publishing-run.mjs --item <id>` (no `--live`) → stdout `{"status":"stopped","errorCode":"CONFIGURATION_OR_WORKER_ERROR"}`, exit 1. `--check-account` without config prints the same. The usage text is not shown.
+- **Never `--live`.** Use the unit tests (`npm run test:publishing`, which use fakes) only as a developer signal, not as user-path proof.
 
 ## Gotchas
 
-- Unverifiable by policy without explicit user approval of a real post.
+- `publish-live` and `publish-check` are unverifiable by policy without explicit user approval and credentials.

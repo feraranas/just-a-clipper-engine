@@ -18,7 +18,10 @@ browser_flag(){ [ -n "$CHROME" ] && echo "--browser-executable=$CHROME" || true;
 
 launch() {
   mkdir -p "$STATE"
-  [ -x "$REMOTION" ] || (cd "$REPO" && npm ci --no-audit --no-fund)
+  # Reinstall when deps are missing or package-lock.json changed since the last install (e.g. after git pull).
+  if [ ! -x "$REMOTION" ] || [ "$REPO/package-lock.json" -nt "$REPO/node_modules/.package-lock.json" ]; then
+    (cd "$REPO" && npm ci --no-audit --no-fund)
+  fi
   [ -e "$STAGE" ] && die "$STAGE already exists; pick another RUN_ID or run cleanup"
   mkdir -p "$STAGE"
   cp "$FIXTURE/audio.wav" "$FIXTURE/thumbnail.svg" "$FIXTURE/captions.json" "$STAGE/"
@@ -30,10 +33,13 @@ doctor() {
   local ok=0
   chk(){ if eval "$2" >/dev/null 2>&1; then echo "OK   $1"; else echo "FAIL $1"; ok=1; fi; }
   chk "node_modules has remotion CLI" "[ -x '$REMOTION' ]"
+  chk "node_modules not older than package-lock.json" "[ ! '$REPO/package-lock.json' -nt '$REPO/node_modules/.package-lock.json' ]"
   chk "remotion version is 4.0.525 (manifest pin)" "grep -q '\"version\": \"4.0.525\"' '$REPO/node_modules/@remotion/cli/package.json'"
   chk "ffmpeg + ffprobe on PATH" "command -v ffmpeg && command -v ffprobe"
   chk "fixture staged at public/$STAGE_REL" "[ -f '$STAGE/audio.wav' ] && [ -f '$STATE/props.json' ]"
   chk "composition AudiogramBasic registered" "cd '$REPO' && '$REMOTION' compositions $(browser_flag) 2>/dev/null | grep -q AudiogramBasic"
+  if node -e 'process.exit(require("node:module").isBuiltin("node:sqlite")?0:1)' 2>/dev/null; then echo "OK   node has node:sqlite (pipelines, approval UI, MCP)"
+  else echo "WARN node $(node -v) lacks node:sqlite: render works, but audiogram:url, publishing-server, youtube:inbox and audiogram:mcp need Node >= 22.13"; fi
   echo "node $(node -v) (README wants 22) | chrome: ${CHROME:-remotion-managed headless shell} | repo HEAD: $(git -C "$REPO" rev-parse --short HEAD)"
   return $ok
 }
