@@ -1,0 +1,1 @@
+node_modules/.bin/remotion render AudiogramBasic /tmp/verify-clipper-final/candidate.mp4 --props=/tmp/verify-clipper-final/props.json --frames=0-179 --concurrency=1 --codec=h264 --browser-executable=/usr/bin/google-chrome

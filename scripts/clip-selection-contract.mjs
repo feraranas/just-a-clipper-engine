@@ -9,7 +9,8 @@ import { selectorRegistry } from "./clip-selector-registry.mjs";
 export const SELECTOR_MODEL = "gpt-5.6-terra";
 export const OAUTH_CODEX_VERSION = "0.144.1";
 export const TRANSCRIPT_PROMPT_VERSION = "transcript-insight-v1";
-export const TRANSCRIPT_OUTPUT_SCHEMA_VERSION = 1;
+export const TRANSCRIPT_OUTPUT_SCHEMA_VERSION = 2;
+export const MAXIMUM_SELECTION_ATTEMPTS = 2;
 export const TRANSCRIPT_LIMITS = deepFreeze({
   minimumClipMs: 30000,
   maximumClipMs: 90000,
@@ -66,10 +67,23 @@ const checks = {
   containsSponsorOrCta: false,
 };
 
-export const buildTranscriptJsonSchema = (count) => {
+export const buildTranscriptJsonSchema = (count, cueIds) => {
   countCheck(count);
-  return deepFreeze(
-    strictObject({
+  if (
+    cueIds !== undefined &&
+    (!Array.isArray(cueIds) ||
+      cueIds.length === 0 ||
+      cueIds.some(
+        (id) =>
+          typeof id !== "string" || !/^c\d{6}$/.test(id) || id.length !== 7,
+      ) ||
+      new Set(cueIds).size !== cueIds.length)
+  )
+    throw new Error(
+      "Transcript cue IDs must be nonempty, unique cNNNNNN values",
+    );
+  return deepFreeze({
+    ...strictObject({
       clips: {
         type: "array",
         minItems: count,
@@ -84,7 +98,9 @@ export const buildTranscriptJsonSchema = (count) => {
           ...Object.fromEntries(
             cueNames.map((name) => [
               name,
-              { type: "string", pattern: "^c\\d{6}$" },
+              cueIds === undefined
+                ? { type: "string", pattern: "^c\\d{6}$" }
+                : { $ref: "#/$defs/cueId" },
             ]),
           ),
           ...Object.fromEntries(
@@ -102,7 +118,19 @@ export const buildTranscriptJsonSchema = (count) => {
         }),
       },
     }),
-  );
+    ...(cueIds === undefined
+      ? {}
+      : {
+          $defs: {
+            cueId: {
+              type: "string",
+              minLength: 7,
+              maxLength: 7,
+              pattern: `^(?:${[...cueIds].sort().join("|")})$`,
+            },
+          },
+        }),
+  });
 };
 
 export const buildTranscriptZodSchema = (count) => {
@@ -214,6 +242,8 @@ export const buildSelectionRecipe = (config) => {
       },
       outputSchema: {
         version: config.outputSchemaVersion ?? TRANSCRIPT_OUTPUT_SCHEMA_VERSION,
+        cueBinding: "exact-transcript-id-pattern-v1",
+        maximumSelectionAttempts: MAXIMUM_SELECTION_ATTEMPTS,
         sha256: sha256Canonical(
           config.outputSchema ?? buildTranscriptJsonSchema(desiredClipCount),
         ),

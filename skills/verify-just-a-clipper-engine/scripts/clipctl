@@ -1,0 +1,71 @@
+#!/usr/bin/env bash
+# clipctl — build and drive the Audiogram (Remotion) renderer offline for verification.
+# Resolves its own real path, so it works via skills/, .cursor/skills/ or .claude/skills/.
+set -euo pipefail
+SELF="$(readlink -f "${BASH_SOURCE[0]}")"
+SKILL_DIR="$(cd "$(dirname "$SELF")/.." && pwd)"
+REPO="$(git -C "$SKILL_DIR" rev-parse --show-toplevel)"
+RUN_ID="${RUN_ID:-default}"
+STATE="${CLIP_VERIFY_STATE:-/tmp/verify-clipper-$RUN_ID}"
+EVIDENCE="${CLIP_VERIFY_EVIDENCE:-$SKILL_DIR/evidence/$RUN_ID}"
+FIXTURE="$REPO/tests/fixtures/classic-v1"
+STAGE_REL="generated/verify-$RUN_ID"          # verification scaffolding under public/, removed by cleanup
+STAGE="$REPO/public/$STAGE_REL"
+CHROME="${CHROME_PATH:-$(command -v google-chrome || command -v chromium || true)}"
+REMOTION="$REPO/node_modules/.bin/remotion"
+die(){ echo "clipctl: $*" >&2; exit 1; }
+browser_flag(){ [ -n "$CHROME" ] && echo "--browser-executable=$CHROME" || true; }
+
+launch() {
+  mkdir -p "$STATE"
+  [ -x "$REMOTION" ] || (cd "$REPO" && npm ci --no-audit --no-fund)
+  [ -e "$STAGE" ] && die "$STAGE already exists; pick another RUN_ID or run cleanup"
+  mkdir -p "$STAGE"
+  cp "$FIXTURE/audio.wav" "$FIXTURE/thumbnail.svg" "$FIXTURE/captions.json" "$STAGE/"
+  sed "s#generated/classic-regression#$STAGE_REL#g" "$FIXTURE/props.json" > "$STATE/props.json"
+  echo "READY state=$STATE staged=public/$STAGE_REL"
+}
+
+doctor() {
+  local ok=0
+  chk(){ if eval "$2" >/dev/null 2>&1; then echo "OK   $1"; else echo "FAIL $1"; ok=1; fi; }
+  chk "node_modules has remotion CLI" "[ -x '$REMOTION' ]"
+  chk "remotion version is 4.0.525 (manifest pin)" "grep -q '\"version\": \"4.0.525\"' '$REPO/node_modules/@remotion/cli/package.json'"
+  chk "ffmpeg + ffprobe on PATH" "command -v ffmpeg && command -v ffprobe"
+  chk "fixture staged at public/$STAGE_REL" "[ -f '$STAGE/audio.wav' ] && [ -f '$STATE/props.json' ]"
+  chk "composition AudiogramBasic registered" "cd '$REPO' && '$REMOTION' compositions $(browser_flag) 2>/dev/null | grep -q AudiogramBasic"
+  echo "node $(node -v) (README wants 22) | chrome: ${CHROME:-remotion-managed headless shell} | repo HEAD: $(git -C "$REPO" rev-parse --short HEAD)"
+  return $ok
+}
+
+journey_render_classic_fixture() {
+  local E="$EVIDENCE/render-classic-fixture"; mkdir -p "$E"
+  local cmd=("$REMOTION" render AudiogramBasic "$STATE/candidate.mp4" "--props=$STATE/props.json" --frames=0-179 --concurrency=1 --codec=h264 $(browser_flag))
+  echo "${cmd[*]}" | sed "s#$REPO/##g" > "$E/command.txt"
+  set +e; (cd "$REPO" && "${cmd[@]}") > "$STATE/render.log" 2>&1; echo $? > "$E/exit-code.txt"; set -e
+  grep -vE "^Rendered [0-9]+/|^Encoded [0-9]+/" "$STATE/render.log" | sed "s#$REPO/##g" > "$E/render-log.txt" || true
+  [ "$(cat "$E/exit-code.txt")" = 0 ] || die "render failed; see $E/render-log.txt"
+  ffprobe -v error -show_entries stream=codec_type,codec_name,width,height,r_frame_rate,sample_rate,channels,nb_frames:format=duration -of json "$STATE/candidate.mp4" > "$E/ffprobe.json"
+  for f in 0 90 179; do ffmpeg -v error -y -i "$STATE/candidate.mp4" -vf "select=eq(n\,$f),scale=540:-1" -frames:v 1 "$E/frame-$f.png"; done
+  ffmpeg -v error -i "$STATE/candidate.mp4" -map 0:a -f hash -hash sha256 - > "$E/audio-hash.txt"
+  cp "$STATE/candidate.mp4" "$E/candidate.mp4"
+  node -e '
+    const p=require(process.argv[1]), m=require(process.argv[2]);
+    const v=p.streams.find(s=>s.codec_type==="video"), a=p.streams.find(s=>s.codec_type==="audio");
+    const checks={width:v.width===m.dimensions[0],height:v.height===m.dimensions[1],fps:v.r_frame_rate===m.fps+"/1",frames:Number(v.nb_frames)===180,codec:v.codec_name==="h264",audio:!!a};
+    console.log(JSON.stringify({checks,pass:Object.values(checks).every(Boolean)},null,2));
+    process.exit(Object.values(checks).every(Boolean)?0:1);' "$E/ffprobe.json" "$FIXTURE/baseline-manifest.json" > "$E/checks.json"
+  echo "PASS render-classic-fixture evidence=$E"
+}
+
+cleanup() {
+  case "$STAGE" in "$REPO/public/generated/verify-"*) rm -rf "$STAGE";; esac
+  [ -d "$STATE" ] && { case "$STATE" in /tmp/verify-clipper-*) rm -rf "$STATE";; *) die "refusing to rm $STATE";; esac; }
+  echo "removed public/$STAGE_REL and $STATE; evidence kept at $EVIDENCE"
+}
+
+case "${1:-}" in
+  launch) launch;; doctor) doctor;; cleanup) cleanup;;
+  journey) case "${2:-}" in render-classic-fixture) journey_render_classic_fixture;; *) die "journeys: render-classic-fixture";; esac;;
+  *) echo "usage: clipctl launch|doctor|journey render-classic-fixture|cleanup  (env RUN_ID, CHROME_PATH)"; exit 2;;
+esac

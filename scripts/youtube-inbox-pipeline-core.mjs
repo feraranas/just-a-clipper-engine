@@ -3,8 +3,14 @@ import {
   fetchYtDlpMetadata,
   selectTopHeatmapClips,
 } from "./youtube-heatmap-core.mjs";
-import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
-import { buildTranscriptJsonSchema } from "./clip-selection-contract.mjs";
+import {
+  sanitizeErrorDiagnostic,
+  SafeDiagnosticError,
+} from "./error-diagnostics.mjs";
+import {
+  buildTranscriptJsonSchema,
+  MAXIMUM_SELECTION_ATTEMPTS,
+} from "./clip-selection-contract.mjs";
 import { createStructuredGenerationProvider } from "./structured-generation-provider.mjs";
 import {
   buildTranscriptPrompt,
@@ -51,7 +57,8 @@ export const syncAndAnalyzeInbox = async ({
   });
 
   for (const job of pendingJobs) {
-    let activeStage = selectorId === "transcript-llm" ? "transcript" : "selection";
+    let activeStage =
+      selectorId === "transcript-llm" ? "transcript" : "selection";
     const step = (stage, operation) => {
       activeStage = stage;
       return runLoggedStage({
@@ -88,18 +95,58 @@ export const syncAndAnalyzeInbox = async ({
         const prompt = buildTranscriptPrompt(transcript);
         let generated;
         packages = await step("selection", async () => {
-          generated = await provider.generateStructured({
-            instructions: prompt.instructions,
-            input: prompt.input,
-            jsonSchema: buildTranscriptJsonSchema(
-              selectionConfig.desiredClipCount,
-            ),
-          });
-          return deriveClipSelections(
-            generated.parsed,
-            transcript,
-            selectionRecipe.recipe,
-          );
+          let input = prompt.input;
+          for (
+            let attempt = 1;
+            attempt <= MAXIMUM_SELECTION_ATTEMPTS;
+            attempt += 1
+          ) {
+            let validatingClips = false;
+            try {
+              generated = await provider.generateStructured({
+                instructions: prompt.instructions,
+                input,
+                jsonSchema: buildTranscriptJsonSchema(
+                  selectionConfig.desiredClipCount,
+                ),
+              });
+              validatingClips = true;
+              return deriveClipSelections(
+                generated.parsed,
+                transcript,
+                selectionRecipe.recipe,
+              );
+            } catch (error) {
+              if (
+                !validatingClips &&
+                !(
+                  error instanceof SafeDiagnosticError &&
+                  error.code === "selection_output_invalid"
+                )
+              )
+                throw error;
+              if (attempt === MAXIMUM_SELECTION_ATTEMPTS) throw error;
+              const code =
+                error?.code === "SELECTION_INVALID_CUE"
+                  ? "SELECTION_INVALID_CUE"
+                  : "SELECTION_INVALID_OUTPUT";
+              await emitPipelineEvent(onEvent, {
+                stage: "selection",
+                status: "retrying",
+                videoId: job.videoId,
+                count: attempt + 1,
+                errorCode: code,
+              });
+              input = JSON.stringify({
+                ...JSON.parse(prompt.input),
+                validationFeedback: {
+                  code,
+                  instruction:
+                    "The previous selection failed validation. Select again using only the supplied cue IDs. Check evidence order, distinct ideas, clip duration, separation, and editorial requirements. Do not fabricate cues.",
+                },
+              });
+            }
+          }
         });
         if (jevClient) {
           packages = await step("jev", () =>
@@ -155,7 +202,16 @@ export const syncAndAnalyzeInbox = async ({
         error: sanitizeErrorDiagnostic(error),
         failure: {
           stage: activeStage,
-          code: ({ transcript: "TRANSCRIPT_FAILED", selection: "SELECTION_FAILED", jev: "JEV_FAILED", heatmap: "SELECTION_FAILED" })[activeStage] ?? "ANALYSIS_FAILED",
+          code:
+            activeStage === "selection" &&
+            error?.code === "SELECTION_INVALID_CUE"
+              ? "SELECTION_INVALID_CUE"
+              : ({
+                  transcript: "TRANSCRIPT_FAILED",
+                  selection: "SELECTION_FAILED",
+                  jev: "JEV_FAILED",
+                  heatmap: "SELECTION_FAILED",
+                }[activeStage] ?? "ANALYSIS_FAILED"),
         },
       });
     }

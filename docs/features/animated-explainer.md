@@ -8,13 +8,14 @@ implementation-reconciled: false
 
 ## Purpose and scope
 
-Create a new narrated explanation from a public YouTube video. Use diagrams
+Discover a topic from a public YouTube video and create a researched narrated explanation. Use diagrams
 and illustrated examples to explain one selected idea. Preserve source
 passages so the user can check the script before voice generation.
 
 This document proposes behavior. It does not describe a completed feature.
 The user approved the direction and requested this written design.
-Review of this document remains pending. Complexity is acceptable when it
+The user approved the original direction on 2026-10-11.
+The user clarified research scope on 2026-10-13. Review of this revision is pending. Complexity is acceptable when it
 improves explanation quality, control, or reliable production.
 
 The agreed production sequence is:
@@ -22,7 +23,7 @@ The agreed production sequence is:
 1. Extract a transcript with timestamps.
 2. Present candidate ideas with supporting passages.
 3. Let the user select one candidate.
-4. Write and check a script for that candidate.
+4. Research the selected topic, develop its explanation, and write a checked script.
 5. Let the user review and approve the exact script revision.
 6. Generate narration and check its pronunciation and timing.
 7. Build a scene plan that follows the narration.
@@ -100,13 +101,13 @@ A new candidate set invalidates an old selection for subsequent work.
 
 ### Script record and evidence check
 
-The script writer uses the selected candidate and its supporting passages.
+The script writer uses the selected topic, relevant video passages, and a saved research brief.
 The script has an opening, explanation, and final takeaway.
 Separate spoken text from scene suggestions and evidence notes.
 
 Assign stable IDs to script segments and factual claims.
-For each factual claim, save the supporting passage IDs and review outcome.
-Classify content as source-supported, added analogy, added example, or
+For each factual claim, save video passage IDs or external evidence IDs and the review outcome.
+Classify content as video-supported, externally supported, added analogy, added example, or
 requiring further evidence. Preserve qualifications and attribution.
 
 Source support means the video states the claim. It does not prove the claim
@@ -114,7 +115,7 @@ is accurate. A check must distinguish faithful rewriting from factual truth.
 Flag contradictions, omitted conditions, unsupported statements, and
 uncertain transcript text for review.
 
-V1 does not silently research or invent missing evidence.
+V1 researches missing context and added factual claims after topic selection.
 The user can remove a claim or provide further evidence as a saved revision.
 Unresolved factual claims block script approval.
 Clearly identify invented example values in both review data and visuals.
@@ -123,6 +124,29 @@ Show spoken text, evidence, estimated duration, and review flags together.
 An edit creates a new script revision and reruns the affected evidence checks.
 Approval identifies the script revision and content hash.
 Never infer approval from a request to create or inspect a draft.
+
+## Research and explanation development
+
+The source video helps discover topics. It does not limit the explanation.
+The LLM drafts candidate descriptions. Jev judges candidates using the question framework.
+The user selects a topic before research starts. Use the existing analysis and worker flow where it fits.
+
+Research fills gaps, checks claims, adds context, and supports clearer examples.
+The final explanation must stand on its own. LLM knowledge can guide research,
+but it is not a cited source. Prefer primary sources when available.
+
+Save a research brief with the selected topic revision, questions to answer,
+source records, claim support, contradictions, limitations, and visual opportunities.
+External evidence records include URLs, titles, retrieval times, and relevant support.
+Separate statements from the video, external evidence, and our teaching choices.
+Identify illustrative data and calculation assumptions. Preserve uncertainty.
+When research contradicts the original speaker, show the difference during script review.
+
+Research is a saved stage between selection and script drafting.
+A failed research attempt preserves the selected topic and completed evidence.
+New evidence invalidates affected claim checks and dependent approvals.
+Treat external content as evidence rather than worker instructions.
+Research provider, retrieval limits, and cost controls need a separate implementation plan.
 
 ## Narration and scene plan
 
@@ -147,7 +171,9 @@ Each scene records its purpose, time range, narration segment IDs,
 visual elements, demonstration data, and animation actions.
 Caption timing follows the audio. Scene timing uses audio-derived timestamps.
 
-Start with these building blocks:
+The following building blocks are proposals for our project.
+They are not existing Remotion MCP tools.
+Use the capability investigation below before finalizing their contracts.
 
 | Building block | Example behavior |
 |---|---|
@@ -170,6 +196,122 @@ Review one representative scene before setting the initial visual style.
 Check text fit, graph labels, color contrast, timing, and caption placement.
 The first rendered draft remains a separate user review checkpoint.
 
+## Remotion capabilities and discovery
+
+### Investigation evidence
+
+The documentation investigation used Context7 and the official Remotion pages.
+Remotion documents Studio tools through WebMCP. These tools inspect and control
+an open Studio session. They do not constitute an explanatory scene catalog.
+
+Sources:
+
+- [Remotion Studio WebMCP](https://www.remotion.dev/docs/ai/webmcp).
+- [Remotion Agent Skills](https://www.remotion.dev/docs/ai/skills).
+- [Remotion plugins](https://www.remotion.dev/docs/ai/plugins).
+- [Remotion Sequence API](https://www.remotion.dev/docs/sequence).
+
+The live investigation on 2026-10-11 found 26 browser tools in Studio 4.0.525.
+Composition inspection, timeline inspection, layout inspection, seek, and
+playback worked. Asset jobs remain unexecuted. See the
+[capability investigation](../investigations/remotion-explainer-capabilities.md)
+for input contracts, observed responses, limitations, and proposed block rules.
+Direct MCP inventory alone does not establish browser-tool availability.
+
+### Three capability layers
+
+| Layer | Provider | Responsibility |
+|---|---|---|
+| Studio WebMCP tools | Remotion | Inspect compositions, layouts, timelines, and playback |
+| Rendering and timing APIs | Remotion | Draw components and place them in video time |
+| Explanatory block catalog | Our project | Describe supported demonstrations and their allowed actions |
+
+Agent Skills provide instructions for using Remotion. They are not callable
+scene tools. A React component or API is also not automatically an MCP tool.
+Our ChatGPT-facing helper and Studio WebMCP are separate interfaces.
+A tool available in a browser does not automatically exist in the stage worker.
+
+### Documented Studio inventory
+
+These groups summarize the official tool list. They are documentation evidence,
+not proof that our installed Studio exposes every listed tool.
+
+| Tool group | Documented tools | Intended use |
+|---|---|---|
+| Compositions | `get_compositions`, `select_composition`, `get_composition` | Find and inspect a preview |
+| Timeline selection | `get_sequences`, `select_sequence`, `get_selection` | Inspect timing and selected source context |
+| Canvas inspection | `get_canvas_html`, `get_outlines`, `get_current_error` | Inspect layout and diagnose errors |
+| Playback | `get_playback_state`, `play`, `pause`, `seek_to_frame`, `set_playback_rate`, `mute`, `unmute`, `set_timeline_zoom` | Review particular frames and transitions |
+| Guides | `get_guides`, `set_guides_visible`, `add_guide`, `remove_guide` | Inspect and adjust preview guides |
+| Asset jobs | `transcribe_asset`, `remove_video_background` | Potential transcription and future presenter preparation |
+| Project operations | `install_package`, `restart_studio`, `shut_down_studio` | Explicit development and setup operations |
+
+The official page requires Studio in a browser with WebMCP support.
+Tools that change playback, timelines, or guides require an open composition.
+Some asset tools require additional packages. Inputs and outputs are not stable.
+Record the installed version before checking each contract.
+
+Canvas HTML does not include Canvas or WebGL pixels.
+Use rendered frames and playback for visual checks as well.
+Package installation and server operations are development actions.
+Do not expose them as scene-planner actions.
+
+### Capability evidence labels
+
+Use these labels in the capability map and implementation records:
+
+| Label | Required evidence |
+|---|---|
+| Documented by Remotion | Official source URL and stated requirements |
+| Verified locally | Installed version, live tool schema, and observed check result |
+| Provided by our project | Existing implementation path and relevant checks |
+| Proposed work | Unimplemented contract or component described in this design |
+
+An item can have both documented and locally verified evidence.
+Do not upgrade its status based only on a skill name or documentation example.
+The explanatory blocks and `list_scene_blocks` remain proposed work.
+
+### Required discovery before planner contracts
+
+Before finalizing block contracts, inspect the actual Studio tool inventory
+through a compatible browser. Save tool names, schemas, prerequisites,
+installed versions, and check outcomes in a capability map.
+Use read-only discovery first. Record unavailable capabilities explicitly.
+Do not install packages or change a server merely to complete an inventory.
+
+Map each production need to an existing API, Studio tool, project component,
+or required new component. Decide whether each capability belongs in
+development review or in the one-run production worker.
+Check reusable Remotion capabilities before assigning new implementation work.
+Do not make production depend on an open Studio tab by accident.
+
+This discovery step precedes final planner contracts and implementation.
+It does not require a live discovery call for every rendered scene.
+
+### Sanctioned block contract
+
+Each block has a stable ID and version, an explanatory purpose, an input
+schema, supported actions, timing rules, and numerical checks where needed.
+The planner can compose only blocks supported by the running renderer.
+Save the catalog revision with the scene plan.
+
+Separate simple visual elements from demonstrations and complete scenes.
+A label or arrow is a visual element. Binary search is a demonstration.
+A scene can combine that demonstration with a counter and captions.
+Drive related blocks from shared demonstration events to keep their data aligned.
+
+A proposed `list_scene_blocks` tool returns supported block contracts.
+It does not list unimplemented blocks as available.
+The planner submits a complete scene plan containing timed allowed actions.
+It does not make an MCP call for every animation action.
+Our components interpret those actions through Remotion rendering APIs.
+
+For example, a search scene shows a sorted list, highlights the midpoint,
+shrinks the range, and updates a counter at narration cues.
+The checked search operation supplies the counter values.
+Studio tools can inspect the resulting sequences and seek to review frames.
+They do not create the binary-search component.
+
 ## Files and interfaces
 
 Use the existing source extraction, Jev client, template catalog, MCP server,
@@ -183,6 +325,7 @@ Proposed units are:
 |---|---|---|
 | Source adapter | Save transcript evidence | YouTube URL to source revision |
 | Candidate service | Prepare and judge ideas | Source revision to candidate set |
+| Research service | Develop and support the selected topic | Selected topic to research brief |
 | Script service | Write and check an explanation | Selected candidate to script revision |
 | Explainer store | Save revisions, approvals, and attempts | Checked records to durable state |
 | Stage worker | Claim and execute one requested stage | Job revision to stage outcome |
@@ -209,6 +352,7 @@ The proposed explainer tools are:
 |---|---|
 | `prepare_explainer` | Start source extraction and candidate preparation |
 | `get_explainer_status` | Return state, revisions, review data, and available actions |
+| `list_scene_blocks` | Return supported demonstration blocks and their contracts |
 | `select_explainer_candidate` | Save an explicit choice and request a script draft |
 | `revise_explainer` | Save changes to a script, narration settings, or scene plan |
 | `approve_explainer_stage` | Save an explicit decision for an exact revision and request the next stage |
@@ -249,11 +393,12 @@ The ledger remains the authority for accepted revisions and approvals.
 | Voice or pronunciation settings | Approved script | Audio, timing, narration acceptance, scenes, render |
 | Spoken text | Source and selected candidate | Evidence check, script approval, audio, scenes, render |
 | Selected candidate | Source | Script and all later stages |
-| Source transcript | Nothing dependent on old evidence | Candidates and all later stages |
+| Source transcript | Existing research only after relevance review | Candidates and all dependent stages |
+| Research evidence | Unaffected topic and evidence records | Affected claim checks, script approval, and dependent stages |
 
 Older revisions remain inspectable. Mark their descendants stale for current
 use. Never present an old render as the result of a newer script.
-Final manifests identify exact source, script, approval, audio, scene,
+Final manifests identify exact source, research, script, approval, audio, scene,
 template, and asset revisions. Publishing approvals apply to final video bytes.
 
 ## Mermaid flowchart
@@ -263,13 +408,14 @@ flowchart TD
     A[YouTube source] --> B[Transcript and evidence]
     B --> C[Jev-assisted candidate set]
     C --> D[User selects candidate]
-    D --> E[Script and evidence checks]
+    D --> R[Research and explanation brief]
+    R --> E[Script and evidence checks]
     E --> F[User approves script revision]
     F --> G[Narration and timing]
     G --> H[User accepts narration]
     H --> I[Checked scene plan and render]
     I --> J[Draft review in queue]
-    B & C & D & E & F & G & H & I & J --> K[(Shared revisions and ledger)]
+    B & C & D & R & E & F & G & H & I & J --> K[(Shared revisions and ledger)]
 ```
 
 ## Lifecycle/state diagram
@@ -278,7 +424,9 @@ flowchart TD
 stateDiagram-v2
     [*] --> PreparingCandidates
     PreparingCandidates --> AwaitingCandidateSelection: saved candidates
-    AwaitingCandidateSelection --> DraftingScript: explicit selection
+    AwaitingCandidateSelection --> ResearchingTopic: explicit selection
+    ResearchingTopic --> DraftingScript: research brief saved
+    ResearchingTopic --> Failed: research error
     DraftingScript --> AwaitingScriptApproval: checked script saved
     AwaitingScriptApproval --> DraftingScript: user edits script
     AwaitingScriptApproval --> GeneratingNarration: exact revision approved
@@ -298,6 +446,7 @@ stateDiagram-v2
     Rendering --> Failed: stage error
     Failed --> RetryRequested: explicit retry
     RetryRequested --> PreparingCandidates: candidate stage failed
+    RetryRequested --> ResearchingTopic: research stage failed
     RetryRequested --> DraftingScript: script stage failed
     RetryRequested --> GeneratingNarration: narration stage failed
     RetryRequested --> BuildingScenes: scene stage failed
@@ -311,7 +460,8 @@ The store records cancellation and stale dependent revisions separately from fai
 ## Human approval and external-side-effect boundaries
 
 The source request authorizes transcript retrieval and configured candidate
-analysis. Candidate selection authorizes script generation and evidence checks.
+analysis. Candidate selection authorizes configured research, script generation, and evidence checks.
+Show research providers and known cost before external research dispatch.
 Script approval authorizes voice generation for that exact revision.
 Narration acceptance authorizes scene planning and the initial render.
 Show the configured provider and estimated cost when available before each
@@ -371,6 +521,10 @@ worker leases, restarts during review, and uncertain provider outcomes.
 Check that script changes invalidate narration and that scene edits reuse it.
 Check durable storage after removing a disposable producing checkout.
 Check authenticated remote media review through the actual MCP client.
+Check the live Studio capability map against the installed version.
+Check block discovery against the renderer's supported block versions.
+Reject unsupported blocks, actions, inputs, and stale catalog references.
+Check production without Studio open if the chosen worker design excludes it.
 
 Check representative frames and full playback for readable diagrams,
 caption timing, pronunciation, pacing, and meaningful demonstrations.
@@ -380,9 +534,10 @@ Retain Classic parity checks when shared code changes.
 
 ## Changed/unchanged summary
 
-Proposed changes add candidate review, source-linked script revisions,
+Proposed changes add candidate review, research briefs and evidence-linked script revisions,
 generated narration, checked scene plans, and resumable explainer jobs.
 They extend discovery and remote review for the new format.
+The design separates Studio WebMCP discovery from our scene-block discovery.
 
 Classic clipping and separate publishing approval retain their current roles.
 No product code, provider integration, or live data changes belong to this
@@ -393,6 +548,9 @@ documentation-only design stage.
 Pending. This feature is not implemented.
 Compare this design with actual code and tests after implementation.
 Keep `implementation-reconciled: false` until that comparison is complete.
-Design review is pending. Provider choice, voice choice, exact module paths,
+Review of the research clarification is pending. Provider choice, voice choice, exact module paths,
 and the remote media delivery contract belong in the reviewed implementation
 plan. Those decisions must precede the stages that depend on them.
+The initial live capability map is complete in the linked investigation.
+It records a proposed binary-search contract. Review that contract before
+implementing the block. Asset-job readiness and a block render remain unverified.

@@ -15,6 +15,32 @@ const base = {
   providerId: "openai-api",
   desiredClipCount: 3,
 };
+
+test("bound cue schema accepts only actual IDs, including transcripts over 1,000 cues", () => {
+  const ids = Array.from(
+    { length: 1624 },
+    (_, i) => `c${String(i + 1).padStart(6, "0")}`,
+  );
+  const schema = buildTranscriptJsonSchema(3, ids);
+  const pattern = new RegExp(schema.$defs.cueId.pattern);
+  assert.ok(ids.every((id) => pattern.test(id)));
+  assert.equal(pattern.test("c002361"), false);
+  assert.equal(pattern.test("c000000"), false);
+  for (const name of [
+    "startCueId",
+    "contextCueId",
+    "insightCueId",
+    "payoffCueId",
+    "endCueId",
+  ])
+    assert.deepEqual(schema.properties.clips.items.properties[name], {
+      $ref: "#/$defs/cueId",
+    });
+  const sparse = buildTranscriptJsonSchema(3, ["c000001", "c000003"]);
+  assert.equal(new RegExp(sparse.$defs.cueId.pattern).test("c000002"), false);
+  for (const invalid of [[], ["c000001", "c000001"], ["c123|.*"]])
+    assert.throws(() => buildTranscriptJsonSchema(3, invalid), /cue IDs/);
+});
 const clip = {
   rank: 1,
   title: "A complete useful idea",
@@ -53,7 +79,7 @@ test("recipe hashes include real prompt/schema and all behavior inputs", () => {
     { model: "future-model" },
     { promptVersion: "v2" },
     { prompt: "new instructions" },
-    { outputSchemaVersion: 2 },
+    { outputSchemaVersion: 3 },
     { outputSchema: { type: "object" } },
     { desiredClipCount: 4 },
     ...Object.keys(TRANSCRIPT_LIMITS).map((key) => ({
