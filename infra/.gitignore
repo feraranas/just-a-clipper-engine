@@ -1,0 +1,14 @@
+# Runtime artifacts and credentials must never be added here.
+*.log
+*.log.*
+*.pem
+*.key
+*.htpasswd
+*.mp4
+*.jpg
+*.jpeg
+report.html
+incoming/
+backups/
+.env
+.env.*
