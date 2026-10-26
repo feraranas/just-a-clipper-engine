@@ -1,0 +1,22 @@
+[Unit]
+Description=Live dashboard for Audiograms media access logs
+After=network.target nginx.service
+
+[Service]
+Type=simple
+User=goaccess-media
+Group=goaccess-media
+Environment=LC_ALL=C.UTF-8
+ExecStart=/usr/bin/goaccess /var/log/audiograms-media/access.log --no-global-config --log-format=COMBINED --date-format=%%d/%%b/%%Y --time-format=%%T --real-time-html --addr=127.0.0.1 --port=7890 --ws-url=wss://logs.ferarana.work/live --origin=https://logs.ferarana.work --output=/var/lib/goaccess-media/report.html --no-progress --no-parsing-spinner
+Restart=on-failure
+RestartSec=5
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/var/lib/goaccess-media
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+
+[Install]
+WantedBy=multi-user.target
