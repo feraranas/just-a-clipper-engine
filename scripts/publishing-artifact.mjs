@@ -75,4 +75,3 @@ export const openArtifact = async (projectRoot, item, artifactRoot) => {
     throw error;
   }
 };
-
