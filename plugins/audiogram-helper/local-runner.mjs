@@ -16,6 +16,8 @@ import {
   persistFinalResult,
   recoverPendingFinalizations,
 } from "./mcp-finalization.mjs";
+import { requireEventPrincipal } from "./mcp-events.mjs";
+import { resolveStorageConfig } from "../../scripts/storage-config.mjs";
 
 export function createLocalRunner({
   jobStore,
@@ -23,6 +25,9 @@ export function createLocalRunner({
   workerPath,
   diagnosticsRoot = process.env.AUDIOGRAM_DIAGNOSTICS_ROOT,
   spawnProcess = spawn,
+  environment = process.env,
+  eventsEnabled = false,
+  jobStorePath,
   isProcessAlive = (pid) => {
     try {
       process.kill(pid, 0);
@@ -33,6 +38,33 @@ export function createLocalRunner({
   },
 }) {
   const recoveryRoot = resolveDiagnosticsRoot({ projectRoot, diagnosticsRoot });
+  const validateResult = (result) =>
+    validateStoredResult(result, projectRoot, {
+      artifactRoot: resolveStorageConfig(environment).artifactRoot,
+    });
+  const checkOwner = (job, principal) => {
+    if (
+      eventsEnabled &&
+      (!job || job.ownerId !== requireEventPrincipal(principal))
+    )
+      throw new Error("Audiogram job was not found.");
+  };
+  const health = (jobId, principal) => {
+    if (!eventsEnabled) return {};
+    try {
+      return {
+        notificationHealth: jobStore.getNotificationHealth(jobId, {
+          principal,
+        }),
+      };
+    } catch {
+      // Ownership was checked before this diagnostic-only query. Never turn
+      // a notification-store failure into an artifact or processing failure.
+      return {
+        notificationHealth: { capture: "unknown", delivery: "degraded" },
+      };
+    }
+  };
   const recordFailure = async (jobId, stage, code, message) => {
     const job = jobStore.getJob(jobId);
     if (!job || !["queued", "running"].includes(job.status)) return;
@@ -85,7 +117,7 @@ export function createLocalRunner({
     }
     try {
       const childEnvironment = {
-        ...process.env,
+        ...environment,
         AUDIOGRAM_PROJECT_ROOT: projectRoot,
         AUDIOGRAM_DIAGNOSTICS_ROOT: diagnostics.root,
         ...(diagnosticsIncomplete
@@ -93,6 +125,8 @@ export function createLocalRunner({
           : {}),
       };
       delete childEnvironment.AUDIOGRAM_EVENT_SECRET_KEY;
+      if (jobStorePath) childEnvironment.AUDIOGRAM_JOB_STORE = jobStorePath;
+      if (eventsEnabled) childEnvironment.AUDIOGRAM_EVENT_CAPTURE_ENABLED = "1";
       const child = spawnProcess(
         process.execPath,
         [
@@ -142,28 +176,31 @@ export function createLocalRunner({
     }
   };
   return {
-    async start({ url, videoId, templateSelection }) {
+    async start({ url, videoId, templateSelection, principal }) {
       const resolved = resolveTemplateSelection(templateSelection);
       const { job, created } = jobStore.createOrGetJob({
         videoId,
         sourceUrl: url,
         selection: resolved.selection,
         renderKey: resolved.renderKey,
+        ...(eventsEnabled ? { ownerId: requireEventPrincipal(principal) } : {}),
       });
       if (created) {
         await launchWorker(job);
-        return this.getStatus(job.jobId);
+        return this.getStatus(job.jobId, { principal });
       }
       return {
         jobId: job.jobId,
         status: job.status,
         artifacts: [],
+        ...health(job.jobId, principal),
         ...(job.error ? { error: job.error } : {}),
       };
     },
-    async getStatus(jobId) {
+    async getStatus(jobId, { principal } = {}) {
       let job = jobStore.getJob(jobId);
       if (!job) return null;
+      checkOwner(job, principal);
       const workerStopped =
         job.status === "running" && job.pid && !isProcessAlive(job.pid);
       if (job.status === "queued" || workerStopped) {
@@ -171,7 +208,7 @@ export function createLocalRunner({
           store: jobStore,
           recoveryRoot,
           jobId,
-          validateResult: (result) => validateStoredResult(result, projectRoot),
+          validateResult,
         });
         if (recovered.pending || recovered.rejected)
           throw Object.assign(
@@ -179,15 +216,16 @@ export function createLocalRunner({
             { code: "FINALIZATION_PENDING" },
           );
         job = jobStore.getJob(jobId);
+        checkOwner(job, principal);
       }
       if (job.status === "running" && workerStopped) {
         const message = "Worker stopped before recording a terminal result.";
         await recordFailure(jobId, "worker", "WORKER_PROCESS_FAILED", message);
-        return this.getStatus(jobId);
+        return this.getStatus(jobId, { principal });
       }
       if (job.status === "complete" || job.status === "partial") {
         try {
-          await validateStoredResult(job.result, projectRoot);
+          await validateResult(job.result);
           const result = await validateCliResult(
             {
               contractVersion: 1,
@@ -198,6 +236,7 @@ export function createLocalRunner({
               diagnosticsIncomplete: job.result.diagnosticsIncomplete,
             },
             projectRoot,
+            { artifactRoot: resolveStorageConfig(environment).artifactRoot },
           );
           return {
             jobId,
@@ -206,6 +245,7 @@ export function createLocalRunner({
             ...(job.finalizedAt
               ? { notificationHealth: { capture: job.captureHealth } }
               : {}),
+            ...health(jobId, principal),
           };
         } catch {
           const message = "A completed artifact could not be verified.";
@@ -227,6 +267,7 @@ export function createLocalRunner({
         ...(job.finalizedAt
           ? { notificationHealth: { capture: job.captureHealth } }
           : {}),
+        ...health(jobId, principal),
         ...(job.retryOfJobId ? { retryOfJobId: job.retryOfJobId } : {}),
         ...(job.result?.failures ? { failures: job.result.failures } : {}),
         ...(job.result?.diagnosticsIncomplete
@@ -237,10 +278,14 @@ export function createLocalRunner({
           : {}),
       };
     },
-    async retry({ jobId }) {
-      const { job } = jobStore.createRetryJob({ priorJobId: jobId });
+    async retry({ jobId, principal }) {
+      checkOwner(jobStore.getJob(jobId), principal);
+      const { job } = jobStore.createRetryJob({
+        priorJobId: jobId,
+        ...(eventsEnabled ? { ownerId: requireEventPrincipal(principal) } : {}),
+      });
       await launchWorker(job);
-      return this.getStatus(job.jobId);
+      return this.getStatus(job.jobId, { principal });
     },
   };
 }

@@ -116,7 +116,7 @@ export async function dispatcherTick({
       else store.releaseDelivery(claim);
     }
   };
-  await Promise.all(
+  const sends = await Promise.allSettled(
     Array.from({ length: Math.min(4, claims.length) }, async () => {
       while (index < claims.length) {
         const claim = claims[index++];
@@ -124,6 +124,10 @@ export async function dispatcherTick({
       }
     }),
   );
+  // One database failure must not orphan concurrent HTTP work. The service
+  // awaits every send before retrying the tick or closing the shared store.
+  const failed = sends.find((result) => result.status === "rejected");
+  if (failed) throw failed.reason;
   return summary;
 }
 

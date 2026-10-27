@@ -208,6 +208,41 @@ test("failed or cancelled verification cannot activate a subscription or create 
   );
 });
 
+test("expired verification and competing renewal cannot activate stale subscription versions", async (t) => {
+  const f = await fixture(t);
+  f.webhook.verifyCallback = async () => {
+    f.advance(1001);
+  };
+  await assert.rejects(
+    f.call("events/subscribe", f.params({ ttlMs: 1000 })),
+    /changed before activation/,
+  );
+  let nested = false;
+  const replacement = `whsec_${Buffer.alloc(32, 9).toString("base64")}`;
+  f.webhook.verifyCallback = async () => {
+    if (!nested) {
+      nested = true;
+      await f.call(
+        "events/subscribe",
+        f.params({ delivery: { ...f.params().delivery, secret: replacement } }),
+      );
+    }
+  };
+  await assert.rejects(
+    f.call("events/subscribe", f.params()),
+    /changed before activation/,
+  );
+  const raw = new DatabaseSync(f.file);
+  try {
+    const row = raw.prepare("SELECT * FROM event_subscriptions").get();
+    assert.equal(row.state, "active");
+    assert.equal(f.secrets.openSecret(row.secret_box), replacement);
+    assert.equal(f.store.getJob(f.job.jobId).status, "queued");
+  } finally {
+    raw.close();
+  }
+});
+
 test("secret rotation requires verification and retains old encrypted key for only the overlap window", async (t) => {
   const f = await fixture(t);
   const first = await f.call("events/subscribe", f.params());

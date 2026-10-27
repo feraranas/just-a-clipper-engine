@@ -264,6 +264,84 @@ test("cancellation before or during a send stops future work and invalidates its
   );
 });
 
+test("cancellation before claim, expiry and ownership revocation prevent outbound delivery", async (t) => {
+  const f = await fixture(t);
+  await f.subscribe();
+  f.append();
+  await f.cancel();
+  await f.cancel();
+  let sends = 0;
+  const webhook = {
+    sendSignedEvent: async () => {
+      sends++;
+      return { accepted: true };
+    },
+  };
+  assert.equal((await f.tick(webhook)).sent, 0);
+  await f.subscribe();
+  const raw = new DatabaseSync(f.file);
+  try {
+    raw
+      .prepare("UPDATE event_subscriptions SET expires_at=?")
+      .run(f.clock() - 1);
+    assert.equal((await f.tick(webhook)).sent, 0);
+    await f.subscribe();
+    const claim = f.store.claimDueDeliveries({ now: f.clock() })[0];
+    assert.ok(claim);
+    raw
+      .prepare("UPDATE jobs SET owner_id='different' WHERE job_id=?")
+      .run(f.job.jobId);
+    assert.equal(
+      f.store.getDeliveryContext({ ...claim, now: f.clock() }),
+      null,
+    );
+    assert.equal((await f.tick(webhook)).sent, 0);
+    assert.equal(sends, 0);
+    assert.equal(f.store.getJob(f.job.jobId).status, "queued");
+  } finally {
+    raw.close();
+  }
+});
+
+test("a database failure in one send waits for other in-flight sends before the tick settles", async (t) => {
+  const f = await fixture(t);
+  await f.subscribe("audiogram.job.progress", "a");
+  await f.subscribe("audiogram.job.progress", "b");
+  f.append();
+  const original = f.store.getDeliveryContext;
+  let firstId;
+  f.store.getDeliveryContext = (input) => {
+    firstId ??= input.id;
+    if (input.id !== firstId) throw new Error("temporary database failure");
+    return original(input);
+  };
+  let release;
+  let entered;
+  const started = new Promise((resolve) => {
+    entered = resolve;
+  });
+  let settled = false;
+  const tick = f
+    .tick({
+      sendSignedEvent: () => {
+        entered();
+        return new Promise((resolve) => {
+          release = () => resolve({ accepted: true });
+        });
+      },
+    })
+    .finally(() => {
+      settled = true;
+    });
+  const rejected = assert.rejects(tick, /database failure/);
+  await started;
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  const settledEarly = settled;
+  release();
+  await rejected;
+  assert.equal(settledEarly, false);
+});
+
 test("permanent response classes stop delivery; transient failures stop after eight bounded attempts", async (t) => {
   for (const status of [
     302, 400, 401, 403, 404, 410, 413, 408, 429, 500, 503,
@@ -377,14 +455,31 @@ test("service-owned loop backs off on database failure and stops with an abortab
 });
 
 test("retry scheduling clamps jitter and Retry-After and stores only safe diagnostic codes", async (t) => {
-  for (const [random, retryAfter, delay] of [[() => 1, "invalid", 6000], [() => -1, undefined, 5000],
-    [() => 2, undefined, 6000], [() => 0, "999999", 300000],
-    [() => 0, "Mon, 26 Oct 2026 12:01:00 GMT", 60000]]) {
-    const f = await fixture(t); await f.subscribe(); f.append();
+  for (const [random, retryAfter, delay] of [
+    [() => 1, "invalid", 6000],
+    [() => -1, undefined, 5000],
+    [() => 2, undefined, 6000],
+    [() => 0, "999999", 300000],
+    [() => 0, "Mon, 26 Oct 2026 12:01:00 GMT", 60000],
+  ]) {
+    const f = await fixture(t);
+    await f.subscribe();
+    f.append();
     const [claim] = f.store.claimDueDeliveries({ now: f.clock() });
-    f.store.failDelivery({ ...claim, now: f.clock(), httpStatus: 503, retryAfter, random, code: "private-url-detail" });
+    f.store.failDelivery({
+      ...claim,
+      now: f.clock(),
+      httpStatus: 503,
+      retryAfter,
+      random,
+      code: "private-url-detail",
+    });
     const raw = new DatabaseSync(f.file);
-    const row = raw.prepare("SELECT next_attempt_at,last_code FROM event_deliveries WHERE id=?").get(claim.id);
+    const row = raw
+      .prepare(
+        "SELECT next_attempt_at,last_code FROM event_deliveries WHERE id=?",
+      )
+      .get(claim.id);
     raw.close();
     assert.equal(row.next_attempt_at, f.clock() + delay);
     assert.equal(row.last_code, "delivery_failed");

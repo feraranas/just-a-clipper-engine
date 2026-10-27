@@ -163,13 +163,16 @@ export function createDeliveryStore({ db, getJob, transaction, decodeEvent }) {
         ) === 1
       );
     },
-    getNotificationHealth(jobId, { principal, now = Date.now() } = {}) {
+    getNotificationHealth(
+      jobId,
+      { principal, subscriptionId, now = Date.now() } = {},
+    ) {
       const job = getJob(jobId);
       if (!job || job.ownerId !== requireEventPrincipal(principal))
         throw eventError(-32001, "Job access denied.");
       const rows = db
         .prepare(
-          `SELECT s.state,s.expires_at,
+          `SELECT s.id,s.event_name,s.state,s.expires_at,
         EXISTS(SELECT 1 FROM event_deliveries d WHERE d.subscription_id=s.id AND d.status='stopped') AS stopped,
         EXISTS(SELECT 1 FROM event_deliveries d WHERE d.subscription_id=s.id AND (d.status='stopped' OR (d.status='pending' AND d.attempts>0))) AS degraded
         FROM event_subscriptions s WHERE s.job_id=? AND s.owner_id=?`,
@@ -178,8 +181,24 @@ export function createDeliveryStore({ db, getJob, transaction, decodeEvent }) {
       const active = rows.filter(
         (row) => row.state === "active" && row.expires_at > now,
       );
+      const selected =
+        subscriptionId === undefined
+          ? rows
+          : rows.filter((row) => row.id === subscriptionId);
+      if (subscriptionId !== undefined && !selected.length)
+        throw eventError(-32001, "Subscription access denied.");
       return {
         capture: job.captureHealth,
+        subscriptions: selected
+          .slice(0, 50)
+          .map((row) => ({
+            id: row.id,
+            name: row.event_name,
+            state:
+              row.state === "active" && row.expires_at <= now
+                ? "expired"
+                : row.state,
+          })),
         delivery: !rows.length
           ? "not_subscribed"
           : !active.length || active.every((row) => row.stopped)
