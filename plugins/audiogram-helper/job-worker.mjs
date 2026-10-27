@@ -210,6 +210,11 @@ export async function runJobWorker({
         ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: "1" }
         : {}),
     };
+    delete childEnvironment.AUDIOGRAM_EVENT_SECRET_KEY;
+    if (environment.AUDIOGRAM_EVENT_CAPTURE_ENABLED === "1") {
+      Object.assign(childEnvironment, { AUDIOGRAM_EVENT_STORE_PATH: jobStorePath,
+        AUDIOGRAM_JOB_ID: jobId, AUDIOGRAM_RUN_ID: jobId });
+    }
     try {
       const output = await (runCommand
         ? runCommand({ args, env: childEnvironment, diagnostics })
