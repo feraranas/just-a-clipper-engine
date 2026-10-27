@@ -4,8 +4,18 @@ import { closeSync, openSync } from "node:fs";
 import { constants } from "node:fs";
 import process from "node:process";
 import { parseYouTubeVideoUrl } from "../../scripts/youtube-url-core.mjs";
-import { validateCliResult } from "./result-validation.mjs";
-import { createJobDiagnostics } from "./job-diagnostics.mjs";
+import {
+  validateCliResult,
+  validateStoredResult,
+} from "./result-validation.mjs";
+import {
+  createJobDiagnostics,
+  resolveDiagnosticsRoot,
+} from "./job-diagnostics.mjs";
+import {
+  persistFinalResult,
+  recoverPendingFinalizations,
+} from "./mcp-finalization.mjs";
 
 export function createLocalRunner({
   jobStore,
@@ -22,14 +32,24 @@ export function createLocalRunner({
     }
   },
 }) {
-  const recordFailure = (jobId, stage, code, message) =>
-    jobStore.setResult(jobId, {
-      status: "failed",
-      title: null,
-      artifacts: [],
-      failures: [{ stage, code, message }],
-      error: message,
+  const recoveryRoot = resolveDiagnosticsRoot({ projectRoot, diagnosticsRoot });
+  const recordFailure = async (jobId, stage, code, message) => {
+    const job = jobStore.getJob(jobId);
+    if (!job || !["queued", "running"].includes(job.status)) return;
+    return persistFinalResult({
+      store: jobStore,
+      jobId,
+      recoveryRoot,
+      onHealth: (health) => process.stderr.write(`${JSON.stringify(health)}\n`),
+      result: {
+        status: "failed",
+        title: null,
+        artifacts: [],
+        failures: [{ stage, code, message }],
+        error: message,
+      },
     });
+  };
   const launchWorker = async (job) => {
     const diagnostics = createJobDiagnostics({
       projectRoot,
@@ -100,20 +120,20 @@ export function createLocalRunner({
       if (stderrFd !== undefined) closeSync(stderrFd);
       stdoutFd = stderrFd = undefined;
       if (!child.pid) throw new Error("Worker could not be started.");
-      child.once?.("error", () =>
-        recordFailure(
+      child.once?.("error", () => {
+        void recordFailure(
           job.jobId,
           "worker",
           "WORKER_START_FAILED",
           "Worker could not be started.",
-        ),
-      );
+        ).catch(() => {});
+      });
       jobStore.markRunning(job.jobId, child.pid);
       child.unref();
     } catch {
       if (stdoutFd !== undefined) closeSync(stdoutFd);
       if (stderrFd !== undefined) closeSync(stderrFd);
-      recordFailure(
+      await recordFailure(
         job.jobId,
         "worker",
         "WORKER_START_FAILED",
@@ -142,23 +162,32 @@ export function createLocalRunner({
       };
     },
     async getStatus(jobId) {
-      const job = jobStore.getJob(jobId);
+      let job = jobStore.getJob(jobId);
       if (!job) return null;
-      if (job.status === "running" && job.pid && !isProcessAlive(job.pid)) {
-        const message = "Worker stopped before recording a terminal result.";
-        recordFailure(jobId, "worker", "WORKER_PROCESS_FAILED", message);
-        return {
+      const workerStopped =
+        job.status === "running" && job.pid && !isProcessAlive(job.pid);
+      if (job.status === "queued" || workerStopped) {
+        const recovered = await recoverPendingFinalizations({
+          store: jobStore,
+          recoveryRoot,
           jobId,
-          status: "failed",
-          artifacts: [],
-          failures: [
-            { stage: "worker", code: "WORKER_PROCESS_FAILED", message },
-          ],
-          error: message,
-        };
+          validateResult: (result) => validateStoredResult(result, projectRoot),
+        });
+        if (recovered.pending || recovered.rejected)
+          throw Object.assign(
+            new Error("Job result is waiting for safe finalization."),
+            { code: "FINALIZATION_PENDING" },
+          );
+        job = jobStore.getJob(jobId);
+      }
+      if (job.status === "running" && workerStopped) {
+        const message = "Worker stopped before recording a terminal result.";
+        await recordFailure(jobId, "worker", "WORKER_PROCESS_FAILED", message);
+        return this.getStatus(jobId);
       }
       if (job.status === "complete" || job.status === "partial") {
         try {
+          await validateStoredResult(job.result, projectRoot);
           const result = await validateCliResult(
             {
               contractVersion: 1,
@@ -174,28 +203,15 @@ export function createLocalRunner({
             jobId,
             ...(job.retryOfJobId ? { retryOfJobId: job.retryOfJobId } : {}),
             ...result,
+            ...(job.finalizedAt
+              ? { notificationHealth: { capture: job.captureHealth } }
+              : {}),
           };
         } catch {
           const message = "A completed artifact could not be verified.";
-          recordFailure(
-            jobId,
-            "artifact_verification",
-            "ARTIFACT_VERIFICATION_FAILED",
-            message,
-          );
-          return {
-            jobId,
-            status: "failed",
-            artifacts: [],
-            failures: [
-              {
-                stage: "artifact_verification",
-                code: "ARTIFACT_VERIFICATION_FAILED",
-                message,
-              },
-            ],
-            error: message,
-          };
+          throw Object.assign(new Error(message), {
+            code: "ARTIFACT_UNAVAILABLE",
+          });
         }
       }
       const safeFailure = job.result?.failures?.[0]?.message;
@@ -208,6 +224,9 @@ export function createLocalRunner({
         jobId,
         status: job.status,
         artifacts: [],
+        ...(job.finalizedAt
+          ? { notificationHealth: { capture: job.captureHealth } }
+          : {}),
         ...(job.retryOfJobId ? { retryOfJobId: job.retryOfJobId } : {}),
         ...(job.result?.failures ? { failures: job.result.failures } : {}),
         ...(job.result?.diagnosticsIncomplete

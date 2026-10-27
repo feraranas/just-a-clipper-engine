@@ -1,4 +1,4 @@
-import { artifactLocation } from "../../scripts/artifact-store.mjs";
+import { artifactLocation, hashFile } from "../../scripts/artifact-store.mjs";
 import { stat } from "node:fs/promises";
 import { JOB_STAGES } from "./job-stages.mjs";
 
@@ -11,11 +11,7 @@ export async function validateCliResult(result, projectRoot, options = {}) {
     throw new Error("Invalid Audiograms result contract.");
   const failures = Array.isArray(result.failures)
     ? result.failures.slice(0, 50).flatMap((failure) => {
-        if (
-          !failure ||
-          !JOB_STAGES.includes(failure.stage)
-        )
-          return [];
+        if (!failure || !JOB_STAGES.includes(failure.stage)) return [];
         if (
           typeof failure.code !== "string" ||
           !/^[A-Z][A-Z0-9_]{1,63}$/.test(failure.code)
@@ -38,6 +34,11 @@ export async function validateCliResult(result, projectRoot, options = {}) {
         ];
       })
     : [];
+  if (
+    (result.status === "partial" && failures.length === 0) ||
+    (["complete", "no_clips"].includes(result.status) && failures.length > 0)
+  )
+    throw new Error("Result status does not match its failures.");
   if (result.status === "failed" || result.status === "no_clips")
     return {
       status: result.status,
@@ -54,6 +55,7 @@ export async function validateCliResult(result, projectRoot, options = {}) {
   if (!Array.isArray(result.artifactPaths) || result.artifactPaths.length === 0)
     throw new Error("Result has no artifacts.");
   const artifacts = [];
+  const artifactHashes = {};
   for (const reference of result.artifactPaths) {
     const location = await artifactLocation(projectRoot, reference, options);
     if (!location.durable && !reference.startsWith("out/treatments/"))
@@ -61,6 +63,14 @@ export async function validateCliResult(result, projectRoot, options = {}) {
     const info = await stat(location.path);
     if (!info.isFile() || info.size === 0)
       throw new Error("Artifact is missing or empty.");
+    if (options.recordArtifactHashes || options.expectedHashes) {
+      const hash = await hashFile(location.path);
+      if (options.expectedHashes && options.expectedHashes[reference] !== hash)
+        throw Object.assign(new Error("Artifact is unavailable."), {
+          code: "ARTIFACT_UNAVAILABLE",
+        });
+      artifactHashes[reference] = hash;
+    }
     artifacts.push(location.reference);
   }
   if (result.status === "partial" && artifacts.length === 0)
@@ -69,6 +79,7 @@ export async function validateCliResult(result, projectRoot, options = {}) {
     status: result.status,
     title: result.source?.title ?? null,
     artifacts,
+    ...(options.recordArtifactHashes ? { artifactHashes } : {}),
     ...(failures.length ? { failures } : {}),
     ...(result.retryOfJobId ? { retryOfJobId: result.retryOfJobId } : {}),
     diagnosticsIncomplete: Boolean(result.diagnosticsIncomplete),
@@ -77,4 +88,20 @@ export async function validateCliResult(result, projectRoot, options = {}) {
         ? result.error.message.slice(0, 240)
         : null,
   };
+}
+
+// Re-check availability without rewriting the immutable historical result.
+export async function validateStoredResult(result, projectRoot, options = {}) {
+  await validateCliResult(
+    {
+      contractVersion: 1,
+      status: result.status,
+      source: { title: result.title },
+      artifactPaths: result.artifacts,
+      failures: result.failures,
+    },
+    projectRoot,
+    { ...options, expectedHashes: result.artifactHashes },
+  );
+  return result;
 }
