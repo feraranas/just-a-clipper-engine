@@ -51,8 +51,9 @@ export function createEventMethods({
   secrets,
   clock = Date.now,
   validateResult,
+  signal,
 }) {
-  const services = { webhook, secrets, clock, validateResult };
+  const services = { webhook, secrets, clock, validateResult, signal };
   return Object.freeze({
     async handleEventRequest({ principal, method, params = {} }) {
       requireEventPrincipal(principal);

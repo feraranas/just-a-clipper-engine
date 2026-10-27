@@ -1,8 +1,8 @@
 ---
 feature: Verified MCP subscriptions and durable signed delivery
-status: IN_PROGRESS
+status: COMPLETE
 design-reviewed: true
-implementation-reconciled: false
+implementation-reconciled: true
 ---
 
 # Verified MCP subscriptions and durable signed delivery
@@ -84,7 +84,33 @@ durable work. No delivery failure starts a new job or changes render success.
 
 ## Implementation reconciliation and deviations
 
-Pending implementation and verification. The overall feature remains IN_PROGRESS.
+Reconciled against the implementation and isolated tests on 2026-10-26.
+`server.mjs` owns the store and dispatcher. Request-scoped MCP instances register
+the three Events methods only for the modern protocol when configuration is ready.
+`local-runner.mjs` receives trusted identity for create, status, and retry. Shared
+mode rejects ownerless legacy jobs; private-tunnel migration uses `local-owner`.
+Startup recovers pending final results before a status lookup can classify a
+stopped worker. Shutdown aborts verification and delivery, waits for all concurrent
+sends even when one database operation fails, then closes the store.
+
+Subscription SQL is isolated in `mcp-subscription-store.mjs`; lease and delivery
+SQL is isolated in `mcp-delivery-store.mjs`. Both use the existing connection and
+transaction boundary, not a new database or queue service. Safe status summaries
+contain at most 50 subscription IDs, event names, and states. An internal lookup
+can select a subscription ID. Callback URLs, secrets, and raw event bodies stay
+out of these summaries. Notification health failures do not replace job results.
+
+Verification: 76/76 offline CI test files and 139 plugin tests passed. Repository
+lint/TypeScript and direct ESLint checks for callback modules passed. Tests cover
+wire discovery and subscription, ownership, migration, persisted replay, startup
+recovery, cancellation, expiry, competing renewal, rotation, retries, retention,
+destination pinning, signatures, bounded concurrency, and shutdown. Author review
+was inline under the repository cost policy; no independent agent review is claimed.
+
+Events remains opt-in. No real key was installed, callback contacted, video
+processed, remote plugin changed, tunnel changed, or running server restarted.
+Live ChatGPT subscription and presentation remain PR 5 acceptance work. The
+overall `mcp-job-events.md` roadmap remains IN_PROGRESS.
 This PR also carries the reviewed PR 53 commits: that stacked PR merged into
 the former PR 52 branch, not main. Its feature note remains reconciled separately.
 

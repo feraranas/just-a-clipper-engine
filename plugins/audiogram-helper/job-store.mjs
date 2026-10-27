@@ -90,7 +90,13 @@ export function createJobStore(
       ...(row.error ? { error: row.error } : {}),
     };
   const api = {
-    createOrGetJob({ videoId, sourceUrl, selection, renderKey }) {
+    createOrGetJob({
+      videoId,
+      sourceUrl,
+      selection,
+      renderKey,
+      ownerId: requestedOwnerId = ownerId,
+    }) {
       const resolved = resolveSelection(selection);
       if (renderKey !== undefined && renderKey !== resolved.renderKey)
         throw new Error("Render identity does not match selection");
@@ -102,6 +108,11 @@ export function createJobStore(
           )
           .get(videoId);
         if (existing) {
+          if (existing.owner_id !== (requestedOwnerId ?? null))
+            throw Object.assign(
+              new Error("This video already has an active job."),
+              { code: "VIDEO_BUSY" },
+            );
           if (existing.render_key !== resolved.renderKey) {
             throw Object.assign(
               new Error(
@@ -124,7 +135,7 @@ export function createJobStore(
           resolved.renderKey,
           JSON.stringify(resolved.selection),
           jobId,
-          ownerId ?? null,
+          requestedOwnerId ?? null,
         );
         const job = decode(
           db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId),
@@ -136,13 +147,18 @@ export function createJobStore(
         throw error;
       }
     },
-    createRetryJob({ priorJobId }) {
+    createRetryJob({ priorJobId, ownerId: requestedOwnerId }) {
       db.exec("BEGIN IMMEDIATE");
       try {
         const prior = db
           .prepare("SELECT * FROM jobs WHERE job_id=?")
           .get(priorJobId);
         if (!prior) throw new Error("Audiogram job was not found.");
+        if (
+          requestedOwnerId !== undefined &&
+          prior.owner_id !== requestedOwnerId
+        )
+          throw new Error("Audiogram job was not found.");
         if (!["failed", "partial"].includes(prior.status))
           throw new Error("Retry requires a terminal failed or partial job.");
         const jobId = randomUUID();
@@ -211,6 +227,11 @@ export function createJobStore(
     },
     getJob(jobId) {
       return decode(db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId));
+    },
+    hasUnownedJobs() {
+      return Boolean(
+        db.prepare("SELECT 1 FROM jobs WHERE owner_id IS NULL LIMIT 1").get(),
+      );
     },
     close() {
       db.close();

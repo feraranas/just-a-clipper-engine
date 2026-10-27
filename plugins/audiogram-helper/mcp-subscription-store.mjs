@@ -80,7 +80,7 @@ export function createSubscriptionStore({
   return {
     async subscribe(
       { principal, name, arguments: args, delivery, ttlMs, cursor },
-      { secrets, webhook, clock = Date.now, validateResult } = {},
+      { secrets, webhook, clock = Date.now, validateResult, signal } = {},
     ) {
       const job = authorized(principal, args.job_id);
       let url;
@@ -158,6 +158,7 @@ export function createSubscriptionStore({
             url,
             secret: delivery.secret,
             subscriptionId: id,
+            signal,
           });
         } catch (error) {
           transaction(() =>
@@ -197,6 +198,7 @@ export function createSubscriptionStore({
         const current = read(id);
         const activatedAt = clock();
         if (
+          signal?.aborted ||
           !current ||
           current.version !== prepared.version ||
           current.state !== "verifying" ||
