@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { createDeliveryStore } from "./mcp-delivery-store.mjs";
 import {
   migrateEventSubscriptions,
   enqueueEventDeliveries,
@@ -109,7 +110,7 @@ export function createMcpEventStore({
       fact ? canonicalJson(fact) : null,
       canonicalJson(event),
     );
-    enqueueEventDeliveries(db, Date.parse(now()));
+    enqueueEventDeliveries(db, Date.parse(now()), { eventId: event.eventId });
   };
   const api = {
     appendProgress({ jobId, sourceId, fact }) {
@@ -235,5 +236,6 @@ export function createMcpEventStore({
       canonicalJson,
       finalizeJob: api.finalizeJob,
     }),
+    createDeliveryStore({ db, getJob, transaction, decodeEvent: decode }),
   );
 }

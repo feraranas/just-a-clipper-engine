@@ -32,14 +32,23 @@ export function migrateEventSubscriptions(db) {
 }
 
 // Works inside the caller's existing transaction: activation/reconciliation and append cannot lose a fact.
-export function enqueueEventDeliveries(db, now) {
+export function enqueueEventDeliveries(
+  db,
+  now,
+  { eventId, subscriptionId } = {},
+) {
   db.prepare(
     `INSERT OR IGNORE INTO event_deliveries(id,subscription_id,event_id,sequence,next_attempt_at)
     SELECT s.id||':'||e.event_id,s.id,e.event_id,e.sequence,?
     FROM event_subscriptions s JOIN jobs j ON j.job_id=s.job_id AND j.owner_id=s.owner_id
     JOIN event_outbox e ON e.job_id=s.job_id AND e.event_name=s.event_name AND e.sequence>s.replay_after
-    WHERE s.state='active' AND s.expires_at>?`,
-  ).run(now, now);
+    WHERE s.state='active' AND s.expires_at>? ${eventId ? "AND e.event_id=?" : ""} ${subscriptionId ? "AND s.id=?" : ""}`,
+  ).run(
+    now,
+    now,
+    ...(eventId ? [eventId] : []),
+    ...(subscriptionId ? [subscriptionId] : []),
+  );
 }
 
 export function createSubscriptionStore({
@@ -210,7 +219,7 @@ export function createSubscriptionStore({
           `UPDATE event_deliveries SET status='pending',claim_token=NULL,lease_until=NULL,next_attempt_at=?
           WHERE subscription_id=? AND status='cancelled' AND sequence>?`,
         ).run(activatedAt, id, prepared.after);
-        enqueueEventDeliveries(db, activatedAt);
+        enqueueEventDeliveries(db, activatedAt, { subscriptionId: id });
         const floor = floorFor(job.jobId, name);
         return {
           id,
