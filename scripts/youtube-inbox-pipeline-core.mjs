@@ -94,7 +94,7 @@ export const syncAndAnalyzeInbox = async ({
         provider ??= createProvider(selectionConfig);
         const prompt = buildTranscriptPrompt(transcript);
         let generated;
-        packages = await step("selection", async () => {
+        packages = await step("selection", async (stageContext) => {
           let input = prompt.input;
           for (
             let attempt = 1;
@@ -130,7 +130,9 @@ export const syncAndAnalyzeInbox = async ({
                 error?.code === "SELECTION_INVALID_CUE"
                   ? "SELECTION_INVALID_CUE"
                   : "SELECTION_INVALID_OUTPUT";
+              stageContext.stageAttempt = attempt + 1;
               await emitPipelineEvent(onEvent, {
+                ...stageContext,
                 stage: "selection",
                 status: "retrying",
                 videoId: job.videoId,
