@@ -1,5 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
+  migrateEventSubscriptions,
+  enqueueEventDeliveries,
+  createSubscriptionStore,
+} from "./mcp-subscription-store.mjs";
+import {
   EVENT_NAMES,
   EventEnvelopeSchema,
   buildProgressEvent,
@@ -64,6 +69,7 @@ export function migrateMcpEventStore(db, { eventOwnerMode, ownerId } = {}) {
       WHERE event_name='audiogram.job.finished';
     INSERT OR IGNORE INTO mcp_event_schema(version) VALUES(1);
   `);
+  migrateEventSubscriptions(db);
 }
 
 export function createMcpEventStore({
@@ -103,8 +109,9 @@ export function createMcpEventStore({
       fact ? canonicalJson(fact) : null,
       canonicalJson(event),
     );
+    enqueueEventDeliveries(db, Date.parse(now()));
   };
-  return {
+  const api = {
     appendProgress({ jobId, sourceId, fact }) {
       return transaction(() => {
         const job = requiredJob(jobId);
@@ -161,6 +168,7 @@ export function createMcpEventStore({
             throw new Error("Final result conflict.");
           return { job, event: existing, created: false };
         }
+        if (job.finalizedAt) throw new Error("Final event history expired.");
         // A legacy terminal row is only materialized by an authorized caller after verification.
         if (
           !["queued", "running"].includes(job.status) &&
@@ -218,4 +226,14 @@ export function createMcpEventStore({
       return requiredJob(jobId).captureHealth;
     },
   };
+  return Object.assign(
+    api,
+    createSubscriptionStore({
+      db,
+      getJob,
+      transaction,
+      canonicalJson,
+      finalizeJob: api.finalizeJob,
+    }),
+  );
 }
