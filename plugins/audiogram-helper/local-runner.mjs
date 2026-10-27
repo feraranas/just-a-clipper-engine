@@ -119,7 +119,6 @@ export function createLocalRunner({
       if (stdoutFd !== undefined) closeSync(stdoutFd);
       if (stderrFd !== undefined) closeSync(stderrFd);
       stdoutFd = stderrFd = undefined;
-      if (!child.pid) throw new Error("Worker could not be started.");
       child.once?.("error", () => {
         void recordFailure(
           job.jobId,
@@ -128,6 +127,7 @@ export function createLocalRunner({
           "Worker could not be started.",
         ).catch(() => {});
       });
+      if (!child.pid) throw new Error("Worker could not be started.");
       jobStore.markRunning(job.jobId, child.pid);
       child.unref();
     } catch {

@@ -7,6 +7,7 @@ import { createJobStore } from "./job-store.mjs";
 import { runJobWorker } from "./job-worker.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { createLocalRunner } from "./local-runner.mjs";
+import { EventEmitter } from "node:events";
 test("worker sends stored default flags to the real CLI subprocess", async (t) => {
   const root = await mkdtemp(join(tmpdir(), "classic-worker-"));
   t.after(() => rm(root, { recursive: true, force: true }));
@@ -295,4 +296,29 @@ test("partial CLI result without failures is a contract error, not stranded fina
     store.getJob(job.jobId).result.failures[0].code,
     "CLI_CONTRACT_INVALID",
   );
+});
+
+test("asynchronous spawn error without a PID is handled and creates one worker failure", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "worker-spawn-error-"));
+  const store = createJobStore(join(root, "jobs.sqlite"));
+  t.after(async () => {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const runner = createLocalRunner({
+    jobStore: store,
+    projectRoot: root,
+    workerPath: "worker.mjs",
+    spawnProcess: () => {
+      const child = new EventEmitter();
+      queueMicrotask(() =>
+        child.emit("error", new Error("private spawn error")),
+      );
+      return child;
+    },
+  });
+  const status = await runner.start({ videoId: "v", url: "url" });
+  assert.equal(status.status, "failed");
+  assert.equal(status.failures[0].code, "WORKER_START_FAILED");
+  assert.equal(store.listJobEvents({ jobId: status.jobId }).length, 1);
 });
