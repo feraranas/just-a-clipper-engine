@@ -62,3 +62,43 @@ test("worker rejects supplied selection that differs from persisted job", async 
   assert.equal(calls, 0);
   assert.equal(store.getJob(job.jobId).status, "failed");
 });
+
+test("worker passes managed capture identity to CLI without inheriting the signing key", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "worker-event-env-"));
+  const storePath = join(root, "jobs.sqlite");
+  const store = createJobStore(storePath);
+  t.after(async () => {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const { job } = store.createOrGetJob({
+    videoId: "v",
+    sourceUrl: "https://youtu.be/abcdefghijk",
+  });
+  let received;
+  await runJobWorker({
+    jobId: job.jobId,
+    sourceUrl: job.sourceUrl,
+    projectRoot: root,
+    jobStorePath: storePath,
+    environment: {
+      AUDIOGRAM_EVENT_CAPTURE_ENABLED: "1",
+      AUDIOGRAM_EVENT_SECRET_KEY: "private-key",
+    },
+    runCommand: async ({ env }) => {
+      received = env;
+      return {
+        stdout: JSON.stringify({
+          contractVersion: 1,
+          status: "no_clips",
+          artifactPaths: [],
+        }),
+        stderr: "",
+      };
+    },
+  });
+  assert.equal(received.AUDIOGRAM_EVENT_SECRET_KEY, undefined);
+  assert.equal(received.AUDIOGRAM_EVENT_STORE_PATH, storePath);
+  assert.equal(received.AUDIOGRAM_JOB_ID, job.jobId);
+  assert.equal(received.AUDIOGRAM_RUN_ID, job.jobId);
+});

@@ -72,6 +72,7 @@ export function createLocalRunner({
           ? { AUDIOGRAM_DIAGNOSTICS_INCOMPLETE: "1" }
           : {}),
       };
+      delete childEnvironment.AUDIOGRAM_EVENT_SECRET_KEY;
       const child = spawnProcess(
         process.execPath,
         [

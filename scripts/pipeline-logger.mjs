@@ -1,6 +1,7 @@
 import { appendFile, mkdir, open, stat } from "node:fs/promises";
 import { dirname } from "node:path";
 import { SafeDiagnosticError } from "./error-diagnostics.mjs";
+import { randomUUID } from "node:crypto";
 
 const maximumTailBytes = 8 * 1024 * 1024;
 const minimumTailBytes = 64 * 1024;
@@ -17,6 +18,8 @@ const identifiers = [
   "itemId",
   "clipPackageId",
   "errorCode",
+  "sourceId",
+  "stageInstanceId",
 ];
 const measurements = ["durationMs", "count"];
 
@@ -36,6 +39,8 @@ export const normalizePipelineEvent = (input, timestamp) => {
   for (const key of measurements) {
     if (Number.isFinite(input[key]) && input[key] >= 0) event[key] = input[key];
   }
+  if (Number.isSafeInteger(input.stageAttempt) && input.stageAttempt > 0)
+    event.stageAttempt = input.stageAttempt;
   return event.stage && event.status ? event : null;
 };
 
@@ -43,6 +48,7 @@ export const createPipelineLogger = ({
   logPath,
   now = () => new Date().toISOString(),
   onError,
+  durableSink,
   maxFileBytes = Number.POSITIVE_INFINITY,
 } = {}) => {
   if (typeof logPath !== "string" || !logPath.trim())
@@ -51,30 +57,56 @@ export const createPipelineLogger = ({
   return Object.freeze({
     event: (input) => {
       const write = async () => {
-      try {
-        const event = normalizePipelineEvent(input, now());
-        if (!event) return;
-        await mkdir(dirname(logPath), { recursive: true, mode: 0o700 });
-        const record = `\n${JSON.stringify(event)}\n`;
-        let currentBytes = 0;
-        try { currentBytes = (await stat(logPath)).size; } catch (error) { if (error.code !== "ENOENT") throw error; }
-        if (currentBytes + Buffer.byteLength(record) > maxFileBytes)
-          throw Object.assign(new Error("Structured diagnostic file reached its size limit."), { code: "DIAGNOSTICS_SIZE_LIMIT" });
-        // Isolate an earlier interrupted append from the new record.
-        await appendFile(logPath, record, {
-          mode: 0o600,
-        });
-        return event;
-      } catch (error) {
         try {
-          await onError?.(error);
-        } catch {
-          /* Observability is best effort. */
+          const event = normalizePipelineEvent(
+            durableSink
+              ? {
+                  ...input,
+                  sourceId: input?.sourceId ?? randomUUID(),
+                  stageInstanceId: input?.stageInstanceId ?? randomUUID(),
+                }
+              : input,
+            now(),
+          );
+          if (!event) return;
+          // The sink owns bounded retries and capture health; mirror health is separate.
+          try {
+            await durableSink?.record(event);
+          } catch {
+            /* The mirror still receives the fact. */
+          }
+          await mkdir(dirname(logPath), { recursive: true, mode: 0o700 });
+          const record = `\n${JSON.stringify(event)}\n`;
+          let currentBytes = 0;
+          try {
+            currentBytes = (await stat(logPath)).size;
+          } catch (error) {
+            if (error.code !== "ENOENT") throw error;
+          }
+          if (currentBytes + Buffer.byteLength(record) > maxFileBytes)
+            throw Object.assign(
+              new Error("Structured diagnostic file reached its size limit."),
+              { code: "DIAGNOSTICS_SIZE_LIMIT" },
+            );
+          // Isolate an earlier interrupted append from the new record.
+          await appendFile(logPath, record, {
+            mode: 0o600,
+          });
+          return event;
+        } catch (error) {
+          try {
+            await onError?.(error);
+          } catch {
+            /* Observability is best effort. */
+          }
         }
-      }
       };
       writeChain = writeChain.then(write, write);
       return writeChain;
+    },
+    flush: async () => {
+      await writeChain;
+      await durableSink?.flush();
     },
   });
 };
@@ -155,11 +187,20 @@ export const runLoggedStage = async ({
   ...metadata
 }) => {
   const startedAt = Date.now();
-  await emitPipelineEvent(logger?.event, { ...metadata, status: "started" });
+  const context = {
+    stageInstanceId: metadata.stageInstanceId ?? randomUUID(),
+    stageAttempt: metadata.stageAttempt ?? 1,
+  };
+  await emitPipelineEvent(logger?.event, {
+    ...metadata,
+    ...context,
+    status: "started",
+  });
   try {
-    const result = await operation();
+    const result = await operation(context);
     await emitPipelineEvent(logger?.event, {
       ...metadata,
+      ...context,
       status: hasFailures(result) ? failureStatus : "completed",
       durationMs: Date.now() - startedAt,
     });
@@ -167,6 +208,7 @@ export const runLoggedStage = async ({
   } catch (error) {
     await emitPipelineEvent(logger?.event, {
       ...metadata,
+      ...context,
       status: "failed",
       durationMs: Date.now() - startedAt,
       errorCode:
