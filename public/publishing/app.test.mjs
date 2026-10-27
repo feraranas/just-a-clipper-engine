@@ -12,7 +12,27 @@ import {
   rejectItem,
   saveCaption,
   saveCaptionAndReload,
+  renderItem,
 } from "./app.mjs";
+
+test("queue cards keep current state, approval controls, and separate sanitized history", async t => {
+  class Node {
+    children=[]; textContent="";
+    append(...children){this.children.push(...children);}
+    setAttribute(){} addEventListener(){}
+  }
+  const previous=globalThis.document; globalThis.document={createElement:()=>new Node()};
+  t.after(()=>{globalThis.document=previous;});
+  const text=n=>[n.textContent,...n.children.map(text)].join(" ");
+  for(const outcome of ["Video upload failed","Container creation outcome unknown","Still processing","Publication outcome unknown"]){
+    const card=renderItem({id:"one",state:"queued"},()=>{},()=>{},async()=>Response.json({attempts:[{outcome,createdAt:"2026-10-13",errorCode:"UPLOAD_PHASE_ERROR",recoveredAt:"2026-10-13"}]}));
+    await new Promise(r=>setImmediate(r));
+    assert.match(text(card),/Queued — awaiting approval/); assert.ok(text(card).includes(outcome)); assert.match(text(card),/Approve \+ schedule/);
+  }
+  const card=renderItem({id:"one",state:"queued"},()=>{},()=>{},async()=>{throw new Error("failure");});
+  await new Promise(r=>setImmediate(r));
+  assert.match(text(card),/History unavailable/); assert.match(text(card),/Approve \+ schedule/);
+});
 
 test("caption saving reloads persisted state before prompting reapproval", async () => {
   const events = [];

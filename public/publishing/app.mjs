@@ -111,13 +111,13 @@ const element = (tag, properties = {}, children = []) => {
   return node;
 };
 
-const renderItem = (item, reload, setMessage) => {
+export const renderItem = (item, reload, setMessage, fetchImpl = fetch) => {
   const metadata = formatItemMetadata(item);
   const card = element("article", { className: "queue-card" });
   const heading = element("div", { className: "queue-card-heading" }, [
     element("div", {}, [
       element("h2", { textContent: metadata.title }),
-      element("p", { className: "queue-state", textContent: metadata.state }),
+      element("p", { className: "queue-state", textContent: metadata.state === "queued" ? "Queued — awaiting approval" : metadata.state }),
     ]),
     element("time", { textContent: formatDate(metadata.createdAt) }),
   ]);
@@ -216,8 +216,22 @@ const renderItem = (item, reload, setMessage) => {
     }
     return run(() => rejectItem(fetch, item.id, rejectionReason.value.trim()));
   });
-  card.append(heading, preview, details, controls);
+  const history = element("div", {className:"attempt-history", textContent:"Loading attempt history…"});
+  card.append(heading, preview, details, history, controls);
+  loadAttemptHistory(fetchImpl,item.id).then(attempts=>{
+    history.textContent = attempts.length ? "" : "No recorded attempts.";
+    for (const attempt of attempts) history.append(element("p", {textContent:
+      `Previous attempt: ${attempt.outcome} · ${formatDate(attempt.createdAt)}${attempt.errorCode ? ` · ${attempt.errorCode}` : ""}${attempt.providerCodes?.length ? ` · Provider codes: ${attempt.providerCodes.join(", ")}` : ""}${attempt.recoveredAt ? ` · Requeued for approval: ${formatDate(attempt.recoveredAt)}` : ""}`,
+    }));
+  }).catch(()=>{history.textContent="History unavailable. Previous outcomes could not be loaded.";});
   return card;
+};
+
+export const loadAttemptHistory = async (fetchImpl,itemId) => {
+  const response = await fetchImpl(itemPath(itemId,"history"), {cache:"no-store"});
+  const payload = await parseResponse(response);
+  if (!Array.isArray(payload.attempts)) throw new Error("Invalid history payload");
+  return payload.attempts;
 };
 
 export const initializePublishingPage = (root = document) => {
