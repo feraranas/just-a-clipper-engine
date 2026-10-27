@@ -1,5 +1,6 @@
 import { artifactLocation } from "../../scripts/artifact-store.mjs";
 import { stat } from "node:fs/promises";
+import { JOB_STAGES } from "./job-stages.mjs";
 
 export async function validateCliResult(result, projectRoot, options = {}) {
   if (
@@ -12,18 +13,7 @@ export async function validateCliResult(result, projectRoot, options = {}) {
     ? result.failures.slice(0, 50).flatMap((failure) => {
         if (
           !failure ||
-          ![
-            "worker",
-            "intake",
-            "metadata",
-            "setup",
-            "transcript",
-            "selection",
-            "jev",
-            "assets",
-            "render",
-            "artifact_verification",
-          ].includes(failure.stage)
+          !JOB_STAGES.includes(failure.stage)
         )
           return [];
         if (

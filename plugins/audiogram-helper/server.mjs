@@ -12,6 +12,7 @@ import { createMcpHttpHandler } from "./mcp-http.mjs";
 import { z } from "zod";
 import path from "node:path";
 import { createJobStore } from "./job-store.mjs";
+import { JOB_STAGES } from "./job-stages.mjs";
 import { createLocalRunner, parseAndValidateUrl } from "./local-runner.mjs";
 import { validateMcpRuntimeConfig } from "./runtime-config.mjs";
 import {
@@ -40,18 +41,7 @@ const outputShape = {
   failures: z
     .array(
       z.object({
-        stage: z.enum([
-          "worker",
-          "intake",
-          "metadata",
-          "setup",
-          "transcript",
-          "selection",
-          "jev",
-          "assets",
-          "render",
-          "artifact_verification",
-        ]),
+        stage: z.enum(JOB_STAGES),
         code: z.string(),
         message: z.string(),
         packageId: z.string().optional(),
