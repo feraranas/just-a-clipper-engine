@@ -1,7 +1,9 @@
 import { resolveTemplateSelectionConfig } from "./template-selection-config.mjs";
 import { parseArgs } from "node:util";
 import { fileURLToPath } from "node:url";
-import { resolve } from "node:path";
+import { resolve, isAbsolute } from "node:path";
+import { createJobStore } from "../plugins/audiogram-helper/job-store.mjs";
+import { createStageEventSink } from "../plugins/audiogram-helper/mcp-stage-sink.mjs";
 
 import { runSingleUrlPipeline } from "./single-url-pipeline.mjs";
 import {
@@ -56,12 +58,40 @@ export const runAudiogramUrlCli = async (
 
   let result;
   let diagnostics;
+  let eventStore;
+  let stageSink;
+  let capture;
   try {
     const projectRoot =
       dependencies.projectRoot ??
       process.env.AUDIOGRAM_PROJECT_ROOT ??
       process.cwd();
     const environment = dependencies.environment ?? process.env;
+    if (environment.AUDIOGRAM_EVENT_CAPTURE_ENABLED === "1") {
+      if (
+        !jobId ||
+        environment.AUDIOGRAM_JOB_ID !== jobId ||
+        environment.AUDIOGRAM_RUN_ID !== jobId ||
+        !isAbsolute(environment.AUDIOGRAM_EVENT_STORE_PATH ?? "") ||
+        resolve(environment.AUDIOGRAM_EVENT_STORE_PATH) !==
+          environment.AUDIOGRAM_EVENT_STORE_PATH
+      )
+        throw new Error("Invalid managed event capture configuration.");
+      capture = "incomplete";
+      try {
+        eventStore = createJobStore(environment.AUDIOGRAM_EVENT_STORE_PATH, {
+          busyTimeoutMs: 100,
+        });
+      } catch {
+        /* Capture cannot prevent processing; report incomplete coverage. */
+      }
+      if (eventStore) {
+        const job = eventStore.getJob(jobId);
+        if (!job || job.runId !== jobId)
+          throw new Error("Invalid managed job identity.");
+        stageSink = createStageEventSink({ store: eventStore, job });
+      }
+    }
     const request = {};
     for (const [flag, key] of [
       ["template", "templateId"],
@@ -77,6 +107,7 @@ export const runAudiogramUrlCli = async (
             projectRoot,
             diagnosticsRoot: environment.AUDIOGRAM_DIAGNOSTICS_ROOT,
             jobId,
+            durableSink: stageSink,
           });
     await diagnostics?.ready;
     const pipelineDependencies = {
@@ -109,10 +140,19 @@ export const runAudiogramUrlCli = async (
             : "Audiograms could not complete the request.",
       },
     };
+  } finally {
+    await diagnostics?.logger.flush();
+    if (stageSink) {
+      await stageSink.close();
+      capture = stageSink.captureState();
+    }
+    eventStore?.close();
   }
 
   if (diagnostics?.diagnosticsIncomplete)
     result = { ...result, diagnosticsIncomplete: true };
+  if (capture !== undefined)
+    result = { ...result, notificationHealth: { capture } };
 
   io.stdout.write(`${JSON.stringify(result)}\n`);
   return 0;
