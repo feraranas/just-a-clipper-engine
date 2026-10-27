@@ -30,7 +30,7 @@ export function createJobStore(
   chmodSync(filename, 0o600);
   chmodSync(path.dirname(filename), 0o700);
   db.exec(
-    `PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA busy_timeout=${busyTimeoutMs};`,
+    `PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=${busyTimeoutMs};`,
   );
   for (const suffix of ["-wal", "-shm"])
     if (existsSync(filename + suffix)) chmodSync(filename + suffix, 0o600);

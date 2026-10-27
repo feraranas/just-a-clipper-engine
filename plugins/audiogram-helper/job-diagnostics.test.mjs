@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { mkdtemp, mkdir, stat, utimes, rm } from "node:fs/promises";
+import { mkdtemp, mkdir, stat, utimes, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { createJobDiagnostics } from "./job-diagnostics.mjs";
@@ -89,4 +89,24 @@ test("event JSONL respects its configured size cap and marks diagnostics incompl
     });
   assert.equal((await stat(diagnostics.files.events)).size <= 1024, true);
   assert.equal(diagnostics.diagnosticsIncomplete, true);
+});
+
+test("diagnostic retention does not delete an unresolved finalization record", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "job-finalization-retention-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const pending = join(root, ids[1]);
+  await mkdir(pending);
+  await writeFile(join(pending, "finalization-result.json"), "pending");
+  const oldTime = new Date(Date.now() - 40 * 86400000);
+  await utimes(pending, oldTime, oldTime);
+  await createJobDiagnostics({
+    projectRoot: root,
+    diagnosticsRoot: root,
+    jobId: ids[0],
+    retentionDays: 30,
+  }).ready;
+  assert.equal(
+    (await stat(join(pending, "finalization-result.json"))).isFile(),
+    true,
+  );
 });
