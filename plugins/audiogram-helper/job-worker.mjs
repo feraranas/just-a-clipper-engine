@@ -9,6 +9,8 @@ import process from "node:process";
 import { createJobStore } from "./job-store.mjs";
 import { createJobDiagnostics } from "./job-diagnostics.mjs";
 import { validateCliResult } from "./result-validation.mjs";
+import { persistFinalResult } from "./mcp-finalization.mjs";
+import { resolveDiagnosticsRoot } from "./job-diagnostics.mjs";
 
 const CONTRACT_LIMIT = 8 * 1024 * 1024;
 const DEFAULT_LOG_LIMIT = 2 * 1024 * 1024;
@@ -165,13 +167,29 @@ export async function runJobWorker({
   runCommand,
   spawnProcess = spawn,
   isWorkerOutputIncomplete = () => false,
+  finalizationSleep,
 }) {
   const store = createJobStore(jobStorePath);
+  let acquiredResult = false;
+  const recoveryRoot = resolveDiagnosticsRoot({ projectRoot, diagnosticsRoot });
+  const persist = (result, capture = "unknown") =>
+    persistFinalResult({
+      store,
+      jobId,
+      result,
+      capture,
+      recoveryRoot,
+      sleep: finalizationSleep,
+      onHealth: (health) => process.stderr.write(`${JSON.stringify(health)}\n`),
+    });
   let diagnosticsIncomplete =
     environment.AUDIOGRAM_DIAGNOSTICS_INCOMPLETE === "1";
   try {
     const job = store.getJob(jobId);
     if (!job) throw new Error("Job does not exist.");
+    if (!["queued", "running"].includes(job.status)) return;
+    if (sourceUrl !== job.sourceUrl)
+      throw new Error("Worker source does not match stored job.");
     const resolved = resolveTemplateSelection(job.selection);
     if (
       job.renderKey !== resolved.renderKey ||
@@ -212,9 +230,14 @@ export async function runJobWorker({
     };
     delete childEnvironment.AUDIOGRAM_EVENT_SECRET_KEY;
     if (environment.AUDIOGRAM_EVENT_CAPTURE_ENABLED === "1") {
-      Object.assign(childEnvironment, { AUDIOGRAM_EVENT_STORE_PATH: jobStorePath,
-        AUDIOGRAM_JOB_ID: jobId, AUDIOGRAM_RUN_ID: jobId });
+      Object.assign(childEnvironment, {
+        AUDIOGRAM_EVENT_STORE_PATH: jobStorePath,
+        AUDIOGRAM_JOB_ID: jobId,
+        AUDIOGRAM_RUN_ID: jobId,
+      });
     }
+    let result;
+    let capture = "unknown";
     try {
       const output = await (runCommand
         ? runCommand({ args, env: childEnvironment, diagnostics })
@@ -228,17 +251,29 @@ export async function runJobWorker({
             spawnProcess,
           }));
       const contract = JSON.parse(output.stdout.trim());
-      let result;
       try {
+        if (
+          contract.source?.videoId !== undefined &&
+          contract.source.videoId !== job.videoId
+        )
+          throw new Error("CLI source identity is invalid.");
         result = await validateCliResult(contract, projectRoot, {
           artifactRoot: resolveStorageConfig(environment).artifactRoot,
+          recordArtifactHashes: true,
         });
+        const report = contract.notificationHealth?.capture;
+        if (
+          report !== undefined &&
+          !["complete", "incomplete", "unknown"].includes(report)
+        )
+          throw new Error("Invalid capture health.");
+        capture = report ?? "unknown";
       } catch {
         throw Object.assign(new Error("CLI result validation failed."), {
           code: "CLI_CONTRACT_INVALID",
         });
       }
-      store.setResult(jobId, {
+      result = {
         ...result,
         diagnosticsIncomplete: Boolean(
           output.diagnosticsIncomplete ||
@@ -247,11 +282,11 @@ export async function runJobWorker({
           diagnostics.diagnosticsIncomplete ||
           isWorkerOutputIncomplete(),
         ),
-      });
+      };
     } catch (error) {
       const invalidContract = error?.code === "CLI_CONTRACT_INVALID";
       const contractFailure = error instanceof SyntaxError || invalidContract;
-      store.setResult(jobId, {
+      result = {
         status: "failed",
         title: null,
         artifacts: [],
@@ -274,13 +309,32 @@ export async function runJobWorker({
           diagnostics.diagnosticsIncomplete ||
           isWorkerOutputIncomplete(),
         ),
-      });
+      };
     }
+    acquiredResult = true;
+    await persist(result, capture);
   } catch {
-    try {
-      store.setFailed(jobId, "Audiograms worker could not record its result.");
-    } catch {
-      /* preserve original process outcome */
+    if (!acquiredResult) {
+      try {
+        await persist({
+          status: "failed",
+          artifacts: [],
+          error: "Audiograms worker could not complete the request.",
+          failures: [
+            {
+              stage: "worker",
+              code: "WORKER_PROCESS_FAILED",
+              message: "Worker configuration failed.",
+            },
+          ],
+        });
+      } catch {
+        /* A missing job cannot be finalized. */
+      }
+    } else {
+      process.stderr.write(
+        `${JSON.stringify({ jobId, code: "FINALIZATION_UNRECOVERABLE" })}\n`,
+      );
     }
   } finally {
     store.close();
