@@ -50,6 +50,9 @@ const outputShape = {
     .optional(),
   retryOfJobId: z.string().uuid().optional(),
   diagnosticsIncomplete: z.boolean().optional(),
+  notificationHealth: z
+    .strictObject({ capture: z.enum(["complete", "incomplete", "unknown"]) })
+    .optional(),
 };
 
 function makeMcpServer({ runner, templateCatalog, templateUi }) {
@@ -175,7 +178,25 @@ function makeMcpServer({ runner, templateCatalog, templateUi }) {
       outputSchema: outputShape,
     },
     async ({ jobId }) => {
-      const state = await runner.getStatus(jobId);
+      let state;
+      try {
+        state = await runner.getStatus(jobId);
+      } catch (error) {
+        return {
+          isError: true,
+          content: [
+            {
+              type: "text",
+              text:
+                error.code === "ARTIFACT_UNAVAILABLE"
+                  ? "ARTIFACT_UNAVAILABLE: A completed video is missing or changed. The historical job result has not changed."
+                  : error.code === "FINALIZATION_PENDING"
+                    ? "FINALIZATION_PENDING: The result is waiting for safe recording. Do not start another job."
+                    : "Audiogram status is temporarily unavailable.",
+            },
+          ],
+        };
+      }
       if (!state)
         return {
           isError: true,
