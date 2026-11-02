@@ -28,3 +28,4 @@ Preconditions:
 
 - `samples:render` is unreachable on Linux (needs `/usr/bin/say` with the Samantha voice). Report it as unverified there.
 - The server reads the registry only at startup; restart it after a render.
+- Stopping a backgrounded `npm run samples:serve` can leave its `node scripts/template-sample-server.mjs` child running. Start that node command directly, or kill the child too, and check with `pgrep -af template-sample-server`.
