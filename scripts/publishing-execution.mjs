@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sanitizePublishingDiagnostic } from "./publishing-diagnostics.mjs";
 import { DatabaseSync } from "node:sqlite";
+import { recoverySchema } from "./publishing-recovery-store.mjs";
 import { mkdir, open, readFile, unlink, rmdir, realpath } from "node:fs/promises";
 
 const edges = {
@@ -30,14 +31,17 @@ export const createPublishingExecution = (dbPath) => {
       observed_at TEXT NOT NULL, data_json TEXT NOT NULL
     ) STRICT;
     CREATE INDEX IF NOT EXISTS publishing_diagnostics_attempt_idx ON publishing_diagnostics(attempt_id, sequence);`);
+  db.exec(recoverySchema);
   const transaction = (fn) => {
     db.exec("BEGIN IMMEDIATE");
     try { const result = fn(); db.exec("COMMIT"); return result; }
     catch (error) { db.exec("ROLLBACK"); throw error; }
   };
   const getAttempt = (itemId) => map(db.prepare("SELECT * FROM publishing_attempts WHERE item_id = ? ORDER BY sequence DESC LIMIT 1").get(itemId));
+  const replacementAuthorization = last => last?.phase === "failed" && db.prepare("SELECT id FROM publishing_recoveries WHERE old_attempt_id=? AND replacement_attempt_id IS NULL").get(last.id);
   return {
     close: () => db.close(), getAttempt,
+    canBeginReplacement: itemId => Boolean(replacementAuthorization(getAttempt(itemId))),
     getDiagnostics: (itemId) => db.prepare(`SELECT d.sequence, d.attempt_id, d.observed_at, d.data_json
       FROM publishing_diagnostics d JOIN publishing_attempts a ON a.id=d.attempt_id
       WHERE a.item_id=? ORDER BY d.sequence DESC LIMIT 100`).all(itemId).reverse().map(row => ({
@@ -69,9 +73,12 @@ export const createPublishingExecution = (dbPath) => {
       const item = db.prepare("SELECT * FROM publishing_items WHERE id = ?").get(itemId);
       if (!item || item.state !== "uploading") throw new Error("Cannot begin attempt in current state");
       const last = getAttempt(itemId);
-      if (last && !(last.phase === "failed" && last.safeToRetry)) throw new Error("Attempt already active or terminal");
+      const authorization = replacementAuthorization(last);
+      if (last && !(last.phase === "failed" && last.safeToRetry) && !authorization) throw new Error("Attempt already active or terminal");
+      if (authorization && (item.approval_decision !== "approved" || !item.approved_at || !item.scheduled_at || item.caption !== item.approved_caption || item.artifact_hash !== item.approved_artifact_hash)) throw new Error("Replacement requires fresh approval");
       const id = randomUUID(), now = new Date().toISOString();
       db.prepare("INSERT INTO publishing_attempts(id,item_id,phase,created_at,updated_at) VALUES (?,?,'claimed',?,?)").run(id, itemId, now, now);
+      if (authorization) db.prepare("UPDATE publishing_recoveries SET replacement_attempt_id=? WHERE id=? AND replacement_attempt_id IS NULL").run(id, authorization.id);
       return id;
     }),
     checkpoint: (id, phase, patch = {}) => transaction(() => {

@@ -20,6 +20,19 @@ This development adapter accepts one YouTube video URL, queues the existing Audi
 
 The Secure MCP Tunnel is a private development bridge, not hosting. The tunnel configuration and credentials remain in the user/account environment and are not stored by this project. A service restart preserves recorded job outcomes; a worker that disappears before recording its result is reported as failed.
 
+## MCP protocol foundation
+
+The HTTP endpoint supports modern protocol `2026-07-28` through the released
+MCP v2 handler and preserves stateless legacy clients. Existing create, status,
+retry, and template-listing tools and the template preview resource remain.
+Modern requests must use the protocol's matching version/method/name headers;
+the pinned v2 client handles this automatically.
+
+This protocol slice does **not** advertise Events support or implement job
+subscriptions, webhooks, progress delivery, or automatic chat updates. Those
+remain later slices of the live-stage-events plan. No service is started or
+restarted by installing dependencies. Start MCP visibly using the command above.
+
 ## Cloud runtime boundary
 
 The same command can run in a cloud host. The host must provide runtime settings as environment variables and secrets through its secret manager. The `.env` file is optional and must not be copied into a container image or committed. Startup validation uses the environment that the host provides before the service accepts jobs.
