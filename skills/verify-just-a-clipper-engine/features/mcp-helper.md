@@ -1,6 +1,6 @@
 # MCP helper
 
-`npm run audiogram:mcp` starts a Streamable-HTTP MCP server on `http://127.0.0.1:7331/mcp` (`AUDIOGRAM_MCP_PORT`) for ChatGPT Developer Mode. Tools: `list_video_templates`, `create_audiogram`, `get_audiogram_status`, `retry_audiogram`. Jobs run the direct-URL pipeline in a detached worker and record state in `.local/audiogram-helper-jobs.sqlite` (gitignored, in the checkout).
+`npm run audiogram:mcp` starts a Streamable-HTTP MCP server on `http://127.0.0.1:7331/mcp` (`AUDIOGRAM_MCP_PORT`) for ChatGPT Developer Mode. It serves the modern protocol `2026-07-28` through the MCP v2 handler (`@modelcontextprotocol/server`, `plugins/audiogram-helper/mcp-http.mjs`) and still accepts stateless legacy clients (`initialize`, for example `2025-06-18`). Tools: `list_video_templates`, `create_audiogram`, `get_audiogram_status`, `retry_audiogram`. Jobs run the direct-URL pipeline in a detached worker and record state in `.local/audiogram-helper-jobs.sqlite` (gitignored, in the checkout).
 
 ## Sub-features
 
@@ -10,6 +10,8 @@
 - `mcp-retry` `retry_audiogram({jobId})` only for failed/partial jobs; a completed job returns `isError` `This Audiogram job cannot be retried.`
 - `mcp-logs` `npm run audiogram:logs -- --job-id <UUID>` prints the job's stage events (`intake` … `artifact_verification`). Without `--job-id` it prints `jobId must be a valid UUID`.
 - `mcp-guard` requests with a non-loopback `Host` get `403`.
+- `mcp-modern` `server/discover` lists `supportedVersions: ["2026-07-28"]` and `tools`/`resources` capabilities, with no `events` capability. Modern requests must send `MCP-Protocol-Version`, `Mcp-Method`, and `Mcp-Name` (for `tools/call` / `resources/read`). If one is missing, the response is HTTP 400, JSON-RPC `-32020` (`the request headers and body disagree`). The pinned client `@modelcontextprotocol/client` 2.4.0 sends them for you.
+- Job progress/finish events (`plugins/audiogram-helper/mcp-event-contract.mjs`, `audiogram.job.progress` / `audiogram.job.finished`) are only a tested contract. They are not wired into the server and are not user-visible yet.
 
 ## How to get to it (user POV)
 
@@ -22,8 +24,9 @@ Preconditions:
 - Node >= 22.13, dependencies current (`clipctl doctor`), no `.env` in the checkout (or one without secrets). The startup check needs either `AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap` (no LLM) or an LLM provider, and both or neither of `TYPESAFE_JEV_ENDPOINT`/`TYPESAFE_JEV_API_KEY`.
 
 - **Start.** `AUDIOGRAM_DATA_ROOT=$STATE/data AUDIOGRAM_DIAGNOSTICS_ROOT=$STATE/diag AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap AUDIOGRAM_MCP_PORT=17331 node --env-file-if-exists=.env plugins/audiogram-helper/server.mjs`. Expect `Audiogram MCP listening on http://127.0.0.1:17331/mcp`.
-- **Call.** `curl -s -H content-type:application/json -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_video_templates","arguments":{}}}' http://127.0.0.1:17331/mcp` (response is one SSE `data:` line). Same shape for `tools/list`, `resources/read` and the other tools.
-- **Job.** `create_audiogram` with a public video; poll `get_audiogram_status` until `complete` (about 10 s with the heatmap selector); then `AUDIOGRAM_DIAGNOSTICS_ROOT=$STATE/diag npm run audiogram:logs -- --job-id <id>`.
+- **Call (legacy era).** `curl -s -H content-type:application/json -H 'accept: application/json, text/event-stream' -d '{"jsonrpc":"2.0","id":1,"method":"tools/call","params":{"name":"list_video_templates","arguments":{}}}' http://127.0.0.1:17331/mcp` (response is one SSE `data:` line). Same shape for `tools/list`, `resources/read` and the other tools.
+- **Call (modern era).** `skills/verify-just-a-clipper-engine/scripts/mcp-modern.mjs http://127.0.0.1:17331/mcp [TOOL [JSON_ARGS]]` connects with the pinned v2 client. It prints `{"era":"modern",...}`, the tool names and, optionally, one tool result. Exit 1 on `isError`. For raw modern requests, add the three headers and the `_meta` `io.modelcontextprotocol/{protocolVersion,clientInfo,clientCapabilities}` params (see `mcp-http.test.mjs`).
+- **Job.** `create_audiogram` with a public video, through either era; poll `get_audiogram_status` until `complete` (about 10 s with the heatmap selector); then `AUDIOGRAM_DIAGNOSTICS_ROOT=$STATE/diag npm run audiogram:logs -- --job-id <id>`.
 - **Validation.** `url: https://example.com/x` → `URL host is not a supported YouTube host.`; `templateId: nope` → `Unknown template selection. Available: classic / 1 / default.`; unknown job → `Audiogram job was not found.`
 
 ## Gotchas

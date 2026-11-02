@@ -24,3 +24,4 @@ Preconditions:
 ## Gotchas
 
 - `publish-live` and `publish-check` are unverifiable by policy without explicit user approval and credentials.
+- Recovering a failed upload is a separate operator command: [instagram-recovery](./instagram-recovery.md).
