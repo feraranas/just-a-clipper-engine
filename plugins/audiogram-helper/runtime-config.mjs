@@ -2,34 +2,76 @@ import process from "node:process";
 import path from "node:path";
 import { URL } from "node:url";
 import { resolveSelectionConfig } from "../../scripts/youtube-pipeline-config.mjs";
+import { createEventSecrets } from "./mcp-event-secrets.mjs";
 
-export function validateMcpRuntimeConfig(environment = process.env) {
-  const selection = resolveSelectionConfig(environment);
-  const authPath = environment.AUDIOGRAM_CHATGPT_AUTH_PATH;
-  const authRelative = authPath === undefined ? null : path.relative(
-    path.resolve(environment.AUDIOGRAM_PROJECT_ROOT ?? process.cwd()), authPath,
-  );
-  if (selection.providerId === "chatgpt-oauth" && authPath !== undefined &&
-      (!path.isAbsolute(authPath) || authPath !== path.resolve(authPath) ||
-       (authRelative !== ".." && !authRelative.startsWith(`..${path.sep}`) && !path.isAbsolute(authRelative)))) {
-    throw new Error("AUDIOGRAM_CHATGPT_AUTH_PATH must be an absolute normalized path outside the repository");
+export function validateMcpRuntimeConfig(
+  environment = process.env,
+  { principalResolver, validateProcessing = true } = {},
+) {
+  if (validateProcessing) {
+    const selection = resolveSelectionConfig(environment);
+    const authPath = environment.AUDIOGRAM_CHATGPT_AUTH_PATH;
+    const authRelative =
+      authPath === undefined
+        ? null
+        : path.relative(
+            path.resolve(environment.AUDIOGRAM_PROJECT_ROOT ?? process.cwd()),
+            authPath,
+          );
+    if (
+      selection.providerId === "chatgpt-oauth" &&
+      authPath !== undefined &&
+      (!path.isAbsolute(authPath) ||
+        authPath !== path.resolve(authPath) ||
+        (authRelative !== ".." &&
+          !authRelative.startsWith(`..${path.sep}`) &&
+          !path.isAbsolute(authRelative)))
+    ) {
+      throw new Error(
+        "AUDIOGRAM_CHATGPT_AUTH_PATH must be an absolute normalized path outside the repository",
+      );
+    }
+
+    const hasJevEndpoint = Boolean(environment.TYPESAFE_JEV_ENDPOINT);
+    const hasJevApiKey = Boolean(environment.TYPESAFE_JEV_API_KEY);
+    if (hasJevEndpoint !== hasJevApiKey) {
+      throw new Error(
+        "TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together",
+      );
+    }
+    if (hasJevEndpoint) {
+      let endpoint;
+      try {
+        endpoint = new URL(environment.TYPESAFE_JEV_ENDPOINT);
+      } catch {
+        /* Report only the setting name. */
+      }
+      if (
+        !endpoint ||
+        endpoint.protocol !== "https:" ||
+        !environment.TYPESAFE_JEV_ENDPOINT.startsWith("https://")
+      ) {
+        throw new Error("TYPESAFE_JEV_ENDPOINT must be an HTTPS URL");
+      }
+      if (!environment.TYPESAFE_JEV_API_KEY.trim()) {
+        throw new Error("TYPESAFE_JEV_API_KEY must be nonblank");
+      }
+    }
   }
-
-  const hasJevEndpoint = Boolean(environment.TYPESAFE_JEV_ENDPOINT);
-  const hasJevApiKey = Boolean(environment.TYPESAFE_JEV_API_KEY);
-  if (hasJevEndpoint !== hasJevApiKey) {
+  const enabled = environment.AUDIOGRAM_MCP_EVENTS_ENABLED;
+  if (enabled !== undefined && !["0", "1"].includes(enabled))
+    throw new Error("AUDIOGRAM_MCP_EVENTS_ENABLED must be 0 or 1.");
+  if (enabled !== "1") return { eventsEnabled: false };
+  const eventsMode = environment.AUDIOGRAM_MCP_EVENTS_MODE;
+  if (!["private-tunnel", "shared"].includes(eventsMode))
     throw new Error(
-      "TYPESAFE_JEV_ENDPOINT and TYPESAFE_JEV_API_KEY must be provided together",
+      "Events require an explicit private-tunnel or shared ownership mode.",
     );
-  }
-  if (hasJevEndpoint) {
-    let endpoint;
-    try { endpoint = new URL(environment.TYPESAFE_JEV_ENDPOINT); } catch { /* Report only the setting name. */ }
-    if (!endpoint || endpoint.protocol !== "https:" || !environment.TYPESAFE_JEV_ENDPOINT.startsWith("https://")) {
-      throw new Error("TYPESAFE_JEV_ENDPOINT must be an HTTPS URL");
-    }
-    if (!environment.TYPESAFE_JEV_API_KEY.trim()) {
-      throw new Error("TYPESAFE_JEV_API_KEY must be nonblank");
-    }
-  }
+  if (eventsMode === "shared" && typeof principalResolver !== "function")
+    throw new Error("Shared Events require a trusted principal resolver.");
+  const eventSecrets = createEventSecrets({
+    key: environment.AUDIOGRAM_EVENT_SECRET_KEY,
+    keyVersion: environment.AUDIOGRAM_EVENT_KEY_VERSION ?? "v1",
+  });
+  return { eventsEnabled: true, eventsMode, eventSecrets };
 }

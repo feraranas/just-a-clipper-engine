@@ -1,18 +1,39 @@
 import { resolveTemplateSelection } from "../../src/templates/catalog.mjs";
 import { DatabaseSync } from "node:sqlite";
 import { randomUUID } from "node:crypto";
-import { chmodSync, mkdirSync } from "node:fs";
+import { chmodSync, mkdirSync, existsSync } from "node:fs";
 import path from "node:path";
+import {
+  createMcpEventStore,
+  migrateMcpEventStore,
+} from "./mcp-event-store.mjs";
 
 export function createJobStore(
   filename,
-  { resolveSelection = resolveTemplateSelection } = {},
+  {
+    resolveSelection = resolveTemplateSelection,
+    busyTimeoutMs = 5000,
+    eventsEnabled = false,
+    eventOwnerMode,
+    ownerId,
+    now,
+  } = {},
 ) {
+  if (
+    !Number.isInteger(busyTimeoutMs) ||
+    busyTimeoutMs < 0 ||
+    busyTimeoutMs > 60000
+  )
+    throw new Error("Invalid SQLite busy timeout.");
   mkdirSync(path.dirname(filename), { recursive: true, mode: 0o700 });
   const db = new DatabaseSync(filename);
   chmodSync(filename, 0o600);
   chmodSync(path.dirname(filename), 0o700);
-  db.exec(`PRAGMA journal_mode = WAL; PRAGMA busy_timeout = 5000;`);
+  db.exec(
+    `PRAGMA foreign_keys=ON; PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL; PRAGMA busy_timeout=${busyTimeoutMs};`,
+  );
+  for (const suffix of ["-wal", "-shm"])
+    if (existsSync(filename + suffix)) chmodSync(filename + suffix, 0o600);
   try {
     db.exec(`BEGIN IMMEDIATE;
     CREATE TABLE IF NOT EXISTS jobs (
@@ -37,11 +58,14 @@ export function createJobStore(
       );
     if (!columns.has("retry_of_job_id"))
       db.exec("ALTER TABLE jobs ADD COLUMN retry_of_job_id TEXT");
+    migrateMcpEventStore(db, { eventOwnerMode, ownerId });
     db.exec("COMMIT");
   } catch (error) {
     try {
       db.exec("ROLLBACK");
-    } catch {}
+    } catch {
+      /* Preserve the migration error if rollback also fails. */
+    }
     db.close();
     throw error;
   }
@@ -57,11 +81,22 @@ export function createJobStore(
       pid: row.pid,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      runId: row.run_id,
+      ownerId: row.owner_id,
+      lastEventSequence: row.last_event_sequence,
+      captureHealth: row.capture_health,
+      finalizedAt: row.finalized_at,
       ...(row.result_json ? { result: JSON.parse(row.result_json) } : {}),
       ...(row.error ? { error: row.error } : {}),
     };
-  return {
-    createOrGetJob({ videoId, sourceUrl, selection, renderKey }) {
+  const api = {
+    createOrGetJob({
+      videoId,
+      sourceUrl,
+      selection,
+      renderKey,
+      ownerId: requestedOwnerId = ownerId,
+    }) {
       const resolved = resolveSelection(selection);
       if (renderKey !== undefined && renderKey !== resolved.renderKey)
         throw new Error("Render identity does not match selection");
@@ -73,6 +108,11 @@ export function createJobStore(
           )
           .get(videoId);
         if (existing) {
+          if (existing.owner_id !== (requestedOwnerId ?? null))
+            throw Object.assign(
+              new Error("This video already has an active job."),
+              { code: "VIDEO_BUSY" },
+            );
           if (existing.render_key !== resolved.renderKey) {
             throw Object.assign(
               new Error(
@@ -86,7 +126,7 @@ export function createJobStore(
         }
         const jobId = randomUUID();
         db.prepare(
-          "INSERT INTO jobs(job_id,video_id,source_url,status,render_key,selection_json) VALUES(?,?,?,?,?,?)",
+          "INSERT INTO jobs(job_id,video_id,source_url,status,render_key,selection_json,run_id,owner_id) VALUES(?,?,?,?,?,?,?,?)",
         ).run(
           jobId,
           videoId,
@@ -94,6 +134,8 @@ export function createJobStore(
           "queued",
           resolved.renderKey,
           JSON.stringify(resolved.selection),
+          jobId,
+          requestedOwnerId ?? null,
         );
         const job = decode(
           db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId),
@@ -105,18 +147,23 @@ export function createJobStore(
         throw error;
       }
     },
-    createRetryJob({ priorJobId }) {
+    createRetryJob({ priorJobId, ownerId: requestedOwnerId }) {
       db.exec("BEGIN IMMEDIATE");
       try {
         const prior = db
           .prepare("SELECT * FROM jobs WHERE job_id=?")
           .get(priorJobId);
         if (!prior) throw new Error("Audiogram job was not found.");
+        if (
+          requestedOwnerId !== undefined &&
+          prior.owner_id !== requestedOwnerId
+        )
+          throw new Error("Audiogram job was not found.");
         if (!["failed", "partial"].includes(prior.status))
           throw new Error("Retry requires a terminal failed or partial job.");
         const jobId = randomUUID();
         db.prepare(
-          "INSERT INTO jobs(job_id,video_id,source_url,status,retry_of_job_id,render_key,selection_json) VALUES(?,?,?,'queued',?,?,?)",
+          "INSERT INTO jobs(job_id,video_id,source_url,status,retry_of_job_id,render_key,selection_json,run_id,owner_id) VALUES(?,?,?,'queued',?,?,?,?,?)",
         ).run(
           jobId,
           prior.video_id,
@@ -124,6 +171,8 @@ export function createJobStore(
           priorJobId,
           prior.render_key,
           prior.selection_json,
+          jobId,
+          prior.owner_id,
         );
         const job = db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId);
         db.exec("COMMIT");
@@ -139,6 +188,14 @@ export function createJobStore(
       ).run(pid, jobId);
     },
     setResult(jobId, result) {
+      const existing = api.getJob(jobId);
+      if (eventsEnabled || existing?.finalizedAt)
+        return eventStore.finalizeJob(jobId, result, {
+          capture:
+            result.notificationHealth?.capture ??
+            existing?.captureHealth ??
+            "unknown",
+        });
       db.prepare(
         "UPDATE jobs SET status=?,result_json=?,error=?,updated_at=CURRENT_TIMESTAMP WHERE job_id=?",
       ).run(
@@ -151,6 +208,19 @@ export function createJobStore(
       );
     },
     setFailed(jobId, message) {
+      if (eventsEnabled || api.getJob(jobId)?.finalizedAt)
+        return eventStore.finalizeJob(jobId, {
+          status: "failed",
+          artifacts: [],
+          failures: [
+            {
+              stage: "worker",
+              code: "WORKER_FAILED",
+              message: "Worker failed.",
+            },
+          ],
+          error: message,
+        });
       db.prepare(
         "UPDATE jobs SET status='failed',error=?,updated_at=CURRENT_TIMESTAMP WHERE job_id=?",
       ).run(message, jobId);
@@ -158,8 +228,15 @@ export function createJobStore(
     getJob(jobId) {
       return decode(db.prepare("SELECT * FROM jobs WHERE job_id=?").get(jobId));
     },
+    hasUnownedJobs() {
+      return Boolean(
+        db.prepare("SELECT 1 FROM jobs WHERE owner_id IS NULL LIMIT 1").get(),
+      );
+    },
     close() {
       db.close();
     },
   };
+  const eventStore = createMcpEventStore({ db, getJob: api.getJob, now });
+  return Object.assign(api, eventStore);
 }
