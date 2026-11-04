@@ -20,6 +20,7 @@ import { z } from "zod";
 import path from "node:path";
 import { createJobStore } from "./job-store.mjs";
 import { JOB_STAGES } from "./job-stages.mjs";
+import { EVENT_NAMES } from "./mcp-event-contract.mjs";
 import { createLocalRunner, parseAndValidateUrl } from "./local-runner.mjs";
 import { validateMcpRuntimeConfig } from "./runtime-config.mjs";
 import {
@@ -57,6 +58,14 @@ const outputShape = {
     .optional(),
   retryOfJobId: z.string().uuid().optional(),
   diagnosticsIncomplete: z.boolean().optional(),
+  monitoring: z
+    .strictObject({
+      available: z.boolean(),
+      jobId: z.string(),
+      eventNames: z.array(z.enum(EVENT_NAMES)),
+      instruction: z.string(),
+    })
+    .optional(),
   notificationHealth: z
     .strictObject({
       capture: z.enum(["complete", "incomplete", "unknown"]),
@@ -77,8 +86,22 @@ const outputShape = {
     .optional(),
 };
 
-function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
+function makeMcpServer({
+  runner,
+  templateCatalog,
+  templateUi,
+  principal,
+  eventsEnabled,
+}) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
+  const monitoring = (jobId) => ({
+    available: Boolean(eventsEnabled),
+    jobId,
+    eventNames: eventsEnabled ? [...EVENT_NAMES] : [],
+    instruction: eventsEnabled
+      ? "If the user requests live updates, call events/subscribe for each event name with arguments.job_id set to this job ID. Confirm full monitoring only when both subscriptions are active. A job ID does not prove subscription activation."
+      : "Automatic updates are unavailable on this server. Use get_audiogram_status when the user requests a status check. Do not create another job to restore monitoring.",
+  });
   registerTemplateUi(server, templateUi);
   server.registerTool(
     "list_video_templates",
@@ -139,7 +162,7 @@ function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
     "create_audiogram",
     {
       description:
-        "Create local captioned clip drafts from one public YouTube video URL. Processing may take time; use get_audiogram_status to check it.",
+        "Create captioned clip drafts from one public YouTube URL. Return the job ID. Follow monitoring guidance for requested live updates. Job creation does not activate subscriptions.",
       inputSchema: {
         url: z.string().min(1).max(2048),
         templateId: z.string().optional(),
@@ -171,10 +194,15 @@ function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
           content: [
             {
               type: "text",
-              text: `Audiogram job ${state.jobId} is ${state.status}.`,
+              text: `Audiogram job ${state.jobId} is ${state.status}. ${monitoring(state.jobId).instruction}`,
             },
           ],
-          structuredContent: { title: null, artifacts: [], ...state },
+          structuredContent: {
+            title: null,
+            artifacts: [],
+            ...state,
+            monitoring: monitoring(state.jobId),
+          },
         };
       } catch (error) {
         return {
@@ -196,7 +224,7 @@ function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
     "get_audiogram_status",
     {
       description:
-        "Check a previously started Audiogram job and retrieve verified local artifact paths after completion.",
+        "Check a job's recorded status, verified artifacts, and notification health. Notification health is separate from processing status. This tool does not subscribe to updates.",
       inputSchema: { jobId: z.string().uuid() },
       outputSchema: outputShape,
     },
@@ -243,7 +271,7 @@ function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
     "retry_audiogram",
     {
       description:
-        "Retry a failed or partial Audiogram as a new job. Ask the user for explicit approval before calling this tool.",
+        "Retry a failed or partial job as a new attempt. Ask the user for explicit approval before calling this tool. Return the new job ID and parent ID. Follow monitoring guidance for the new ID.",
       inputSchema: { jobId: z.string().uuid() },
       outputSchema: outputShape,
     },
@@ -262,10 +290,15 @@ function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
           content: [
             {
               type: "text",
-              text: `Audiogram retry ${state.jobId} is ${state.status}.`,
+              text: `Audiogram retry ${state.jobId} is ${state.status}. ${monitoring(state.jobId).instruction}`,
             },
           ],
-          structuredContent: { title: null, artifacts: [], ...state },
+          structuredContent: {
+            title: null,
+            artifacts: [],
+            ...state,
+            monitoring: monitoring(state.jobId),
+          },
         };
       } catch {
         return {
@@ -392,8 +425,14 @@ export async function startMcpServer({
       })
     : undefined;
   const handler = createMcpHttpHandler({
-    makeServer: ({ principal }) =>
-      makeMcpServer({ runner, templateCatalog, templateUi, principal }),
+    makeServer: ({ principal, era }) =>
+      makeMcpServer({
+        runner,
+        templateCatalog,
+        templateUi,
+        principal,
+        eventsEnabled: config.eventsEnabled && era === "modern",
+      }),
     principalResolver: resolver,
     eventHandler: methods
       ? (server, { principal }) => {
