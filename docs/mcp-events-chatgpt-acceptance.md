@@ -41,16 +41,33 @@ Observe a progress reply before completion, then a final reply without another u
 
 | Case | Local evidence | Live ChatGPT evidence |
 | --- | --- | --- |
-| Create/retry guidance and four tools | Pending current run | Not run |
+| Create/retry guidance and four tools | Guidance wire tests pass, modern and legacy | Not run |
 | Both subscriptions and signed callback | Existing backend tests | Not run |
-| Stage start/completion/failure/recovery/skipping | Pending current run | Not run |
-| Two clip instances and partial artifacts | Pending current run | Not run |
-| Complete/failed/no-clips | Pending current run | Not run |
-| Fast completion before subscription | Pending current run | Not run |
-| Finish before delayed progress | Pending current run | Not run |
-| Duplicate delivery and catch-up history | Pending current run | Not run |
+| Stage start/completion/failure/recovery/skipping | Signed synthetic workflow tests pass | Not run |
+| Two clip instances and partial artifacts | Distinct instance IDs and package A failure verified | Not run |
+| Complete/failed/no-clips | All four terminal states verified locally | Not run |
+| Fast completion before subscription | Retained events delivered after subscription | Not run |
+| Finish before delayed progress | Independent stream delivery verified, not presentation | Not run |
+| Duplicate delivery and catch-up history | Stable duplicate ID and acknowledged replay verified | Not run |
 | Expiry/cancellation/restart | Existing backend tests | Not run |
 | Concise replies and measured batching | Not provable locally | Not run |
+
+Local workflow evidence uses the real logger, durable stage sink, SQLite store,
+event builders, subscription methods, dispatcher, and signing client. A fake receiver
+checks signatures and simulates lost acknowledgments and blocked progress delivery.
+Its synthetic MP4 bytes prove hash/availability validation, not video rendering.
+No live callback was contacted. No callback-to-ChatGPT latency was measured.
+
+Local verification on 2026-11-04: 81/81 CI files and 147 plugin tests passed.
+Repository lint/TypeScript, direct ESLint, feature-document validation, and
+whitespace checks passed. Instructions have zero hard findings in the local
+STE linter. These results do not change the NOT ACCEPTED status above.
+
+## Next gated step
+
+Request permission to inspect the owned plugin's current editable instructions.
+Then present the exact update mechanism and scope before any remote write.
+Keep visible server startup, tunnel changes, and live callbacks separately approved.
 
 For every live case, record the redacted chat reference, host surface, server commit,
 remote plugin version, job/subscription/event IDs, occurrence/receipt/display times,

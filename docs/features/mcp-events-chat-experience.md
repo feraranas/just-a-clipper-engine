@@ -76,5 +76,22 @@ Keep the PR draft until actual ChatGPT responses prove the acceptance criteria.
 
 ## Implementation reconciliation and deviations
 
-Pending implementation and actual ChatGPT acceptance. DESIGN follows the approved
-2026-10-25 plan. No remote source or live chat behavior is verified in this note.
+Partial comparison on 2026-11-04: tool results now include job-scoped monitoring
+guidance. Capability availability follows the negotiated protocol, not just the
+server flag. Legacy clients receive manual-status guidance. No response claims
+subscription activation. The four tools, template UI, and retry identity remain.
+
+`plugins/audiogram-helper/CHATGPT-INSTRUCTIONS.md` defines concise updates, partial
+subscription coverage, package identity, explicit retry approval, and replay rules.
+The ASD-STE100 skill guided its short, explicit instructions. Text checks establish
+only that these rules exist. They do not establish model compliance.
+
+Synthetic workflow tests compose the existing logger, stage sink, store, dispatcher,
+and signed receiver. They add no second state tracker or public test tool. The
+existing integration already passes these composition cases, so no new runtime
+delivery implementation was necessary. Author review stays inline under the cost policy.
+
+Reconciliation remains pending until actual ChatGPT acceptance. The remote plugin
+source and version are not inspected or changed. No server or tunnel is restarted.
+See `docs/mcp-events-chatgpt-acceptance.md` for the unmet live criteria. This note
+and the overall roadmap remain IN_PROGRESS. PR 5 must remain draft.
