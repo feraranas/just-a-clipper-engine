@@ -1,3 +1,4 @@
+import { LipSyncCloseup } from "./PresenterDemo/LipSyncCloseup";
 import { PresenterDemo } from "./PresenterDemo/Main";
 import presenterTiming from "./PresenterDemo/timing.json";
 import "./index.css";
@@ -13,6 +14,14 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Folder name="Presenter-comparison">
+        <Composition
+          id="LiamLipSyncCloseup"
+          component={LipSyncCloseup}
+          width={720}
+          height={1280}
+          fps={24}
+          durationInFrames={240}
+        />
         <Composition
           id="PresenterStatic"
           component={PresenterDemo}

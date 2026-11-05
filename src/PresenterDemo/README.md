@@ -23,3 +23,26 @@ The compositions are not entries in the production template catalog.
 Timing uses measured generated audio. The amplitude table controls mouth opening
 at each frame. Audio amplitude does not establish which phoneme is being spoken.
 A later accurate lip-sync comparison needs phoneme timing and proper mouth artwork.
+
+## Liam close-up
+
+LiamLipSyncCloseup is a ten-second review sample using accepted ElevenLabs
+audio and Rhubarb sound-based mouth cues. It uses nine SVG mouth drawings.
+The enlarged reference remains low resolution. This is a prototype for
+checking speech timing, not a production-ready character rig.
+
+Paid generation uses scripts/elevenlabs-narration.mjs. It saves a request
+checkpoint before contacting the provider and refuses to repeat that request
+in the same output directory. Never delete a checkpoint to force a retry
+before checking the saved response and outcome.
+
+Local cue preparation never generates paid audio:
+
+```sh
+node scripts/prepare-liam-lipsync.mjs --audio-dir /absolute/path/to/accepted-audio --rhubarb /absolute/path/to/rhubarb
+```
+
+The command checks the saved audio hash, converts it to WAV, supplies the
+approved text to Rhubarb, checks mouth-cue ordering, and prepares caption
+words from ElevenLabs character timing. It saves source metadata in
+src/PresenterDemo/liam-cues.json. It does not modify the earlier Samantha assets.
