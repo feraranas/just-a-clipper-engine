@@ -1,3 +1,5 @@
+import { deriveSceneTiming } from "../src/PresenterDemo/scene-timing.mjs";
+import baseline from "../src/PresenterDemo/timing.json" with { type: "json" };
 import { readFile, writeFile, mkdir, copyFile } from "node:fs/promises";
 import { resolve, join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -6,7 +8,11 @@ import { parseArgs } from "node:util";
 import { createHash } from "node:crypto";
 import { validateMouthCues } from "../src/PresenterDemo/mouth-timing.mjs";
 const { values } = parseArgs({
-  options: { "audio-dir": { type: "string" }, rhubarb: { type: "string" } },
+  options: {
+    "audio-dir": { type: "string" },
+    rhubarb: { type: "string" },
+    presenter: { type: "string" },
+  },
 });
 if (!values["audio-dir"] || !values.rhubarb)
   throw Error(
@@ -28,6 +34,11 @@ if (
   throw Error("Accepted audio fingerprint does not match");
 const output = join(root, "public/generated/presenter-lipsync");
 await mkdir(output, { recursive: true });
+if (values.presenter)
+  await copyFile(
+    resolve(values.presenter),
+    join(output, "original-presenter.png"),
+  );
 await copyFile(join(source, "narration.mp3"), join(output, "narration.mp3"));
 await writeFile(join(output, "dialog.txt"), request.request.text);
 execFileSync("ffmpeg", [
@@ -103,6 +114,11 @@ const result = {
   mouthCues: cues.mouthCues,
   words,
 };
+const scenes = deriveSceneTiming(baseline.segments, words, duration);
+await writeFile(
+  join(root, "src/PresenterDemo/liam-scene-timing.json"),
+  JSON.stringify(scenes, null, 2),
+);
 await writeFile(
   join(root, "src/PresenterDemo/liam-cues.json"),
   JSON.stringify(result, null, 2),

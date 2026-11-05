@@ -46,3 +46,18 @@ The command checks the saved audio hash, converts it to WAV, supplies the
 approved text to Rhubarb, checks mouth-cue ordering, and prepares caption
 words from ElevenLabs character timing. It saves source metadata in
 src/PresenterDemo/liam-cues.json. It does not modify the earlier Samantha assets.
+
+## Full Liam presenter comparison
+
+LiamOriginalStatic and LiamOriginalTalking use the same accepted narration,
+script-aligned scenes, and original presenter. Only the mouth changes. The
+original presenter is a local generated image, not a screenshot crop. It is
+not stored in Git. Its placement assumes the supplied 1024 by 1536 image.
+To prepare it along with Rhubarb cues, pass `--presenter` with the saved image:
+
+```sh
+node scripts/prepare-liam-lipsync.mjs --audio-dir /path/to/accepted-audio --rhubarb /path/to/rhubarb --presenter /path/to/original-presenter.png
+```
+
+Preparing locally reuses the accepted audio and does not call ElevenLabs.
+The command checks the audio hash, cue timing, and all approved script words.

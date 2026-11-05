@@ -7,7 +7,15 @@ import {
   staticFile,
   useCurrentFrame,
 } from "remotion";
-import data from "./timing.json";
+import legacyData from "./timing.json";
+import liamTiming from "./liam-scene-timing.json";
+import liamCues from "./liam-cues.json";
+import { mouthAt, validateMouthCues } from "./mouth-timing.mjs";
+import { OriginalMouth } from "./OriginalMouth";
+const checkedLiamCues = validateMouthCues(
+  liamCues.mouthCues,
+  liamCues.duration,
+);
 
 const ink = "#f5f0e5",
   muted = "#b6b7ce",
@@ -39,7 +47,11 @@ const box: React.CSSProperties = {
   padding: 28,
 };
 
-export const PresenterDemo: React.FC<{ talking: boolean }> = ({ talking }) => {
+export const PresenterDemo: React.FC<{ talking: boolean; liam?: boolean }> = ({
+  talking,
+  liam = false,
+}) => {
+  const data = liam ? liamTiming : legacyData;
   const frame = useCurrentFrame();
   const seconds = frame / data.fps;
   let index = data.segments.findIndex(
@@ -52,7 +64,8 @@ export const PresenterDemo: React.FC<{ talking: boolean }> = ({ talking }) => {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
-  const level = data.levels[Math.min(frame, data.levels.length - 1)] ?? 0;
+  const level =
+    legacyData.levels[Math.min(frame, legacyData.levels.length - 1)] ?? 0;
   return (
     <AbsoluteFill
       style={{
@@ -62,7 +75,13 @@ export const PresenterDemo: React.FC<{ talking: boolean }> = ({ talking }) => {
         padding: 48,
       }}
     >
-      <Audio src={staticFile("generated/presenter-demo/narration.wav")} />
+      <Audio
+        src={staticFile(
+          liam
+            ? "generated/presenter-lipsync/narration.mp3"
+            : "generated/presenter-demo/narration.wav",
+        )}
+      />
       <div
         style={{
           fontSize: 18,
@@ -331,52 +350,86 @@ export const PresenterDemo: React.FC<{ talking: boolean }> = ({ talking }) => {
           </>
         )}
       </div>
-      <div
-        style={{
-          position: "absolute",
-          left: 48,
-          top: 735,
-          width: 183,
-          height: 405,
-        }}
-      >
+      {liam ? (
         <div
           style={{
-            width: 144,
-            height: 321,
-            overflow: "hidden",
-            position: "relative",
-            scale: 1.25,
-            transformOrigin: "top left",
+            position: "absolute",
+            left: 22,
+            top: 720,
+            width: 240,
+            height: 360,
           }}
         >
           <Img
-            src={staticFile("generated/presenter-demo/presenter-reference.png")}
-            style={{
-              position: "absolute",
-              width: 526,
-              height: 942,
-              maxWidth: "none",
-              left: -11,
-              top: -374,
-            }}
+            src={staticFile(
+              "generated/presenter-lipsync/original-presenter.png",
+            )}
+            style={{ width: 240, height: 360 }}
           />
           {talking && (
             <div
               style={{
                 position: "absolute",
-                left: 62,
-                top: 71,
-                width: 17,
-                height: Math.max(2, level * 14),
-                borderRadius: "40% 40% 50% 50%",
-                background: "#322824",
-                border: "1px solid #b0aaa0",
+                left: 108,
+                top: 54,
+                width: 19,
+                height: 14,
               }}
-            />
+            >
+              <OriginalMouth shape={mouthAt(checkedLiamCues, seconds)} />
+            </div>
           )}
         </div>
-      </div>
+      ) : (
+        <div
+          style={{
+            position: "absolute",
+            left: 48,
+            top: 735,
+            width: 183,
+            height: 405,
+          }}
+        >
+          <div
+            style={{
+              width: 144,
+              height: 321,
+              overflow: "hidden",
+              position: "relative",
+              scale: 1.25,
+              transformOrigin: "top left",
+            }}
+          >
+            <Img
+              src={staticFile(
+                "generated/presenter-demo/presenter-reference.png",
+              )}
+              style={{
+                position: "absolute",
+                width: 526,
+                height: 942,
+                maxWidth: "none",
+                left: -11,
+                top: -374,
+              }}
+            />
+            {talking && (
+              <div
+                style={{
+                  position: "absolute",
+                  left: 62,
+                  top: 71,
+                  width: 17,
+                  height: Math.max(2, level * 14),
+                  borderRadius: "40% 40% 50% 50%",
+                  background: "#322824",
+                  border: "1px solid #b0aaa0",
+                }}
+              />
+            )}
+          </div>
+        </div>
+      )}
       <div
         style={{
           position: "absolute",
@@ -401,9 +454,11 @@ export const PresenterDemo: React.FC<{ talking: boolean }> = ({ talking }) => {
           fontSize: 16,
         }}
       >
-        {talking
-          ? "AUDIO-TIMED MOUTH · ROUGH PROTOTYPE"
-          : "STATIC PRESENTER · BASELINE"}
+        {liam
+          ? "ORIGINAL PRESENTER · LIAM"
+          : talking
+            ? "AUDIO-TIMED MOUTH · ROUGH PROTOTYPE"
+            : "STATIC PRESENTER · BASELINE"}
       </div>
       <div
         style={{

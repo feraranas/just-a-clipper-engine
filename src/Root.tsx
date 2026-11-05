@@ -1,6 +1,7 @@
 import { LipSyncCloseup } from "./PresenterDemo/LipSyncCloseup";
 import { PresenterDemo } from "./PresenterDemo/Main";
 import presenterTiming from "./PresenterDemo/timing.json";
+import liamTiming from "./PresenterDemo/liam-scene-timing.json";
 import "./index.css";
 import { ALL_FORMATS, Input, UrlSource } from "mediabunny";
 import { Composition, Folder, staticFile } from "remotion";
@@ -14,6 +15,24 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       <Folder name="Presenter-comparison">
+        <Composition
+          id="LiamOriginalStatic"
+          component={PresenterDemo}
+          width={720}
+          height={1280}
+          fps={24}
+          durationInFrames={Math.ceil(liamTiming.duration * 24)}
+          defaultProps={{ talking: false, liam: true }}
+        />
+        <Composition
+          id="LiamOriginalTalking"
+          component={PresenterDemo}
+          width={720}
+          height={1280}
+          fps={24}
+          durationInFrames={Math.ceil(liamTiming.duration * 24)}
+          defaultProps={{ talking: true, liam: true }}
+        />
         <Composition
           id="LiamLipSyncCloseup"
           component={LipSyncCloseup}
