@@ -86,7 +86,7 @@ durable work. No delivery failure starts a new job or changes render success.
 
 Reconciled against the implementation and isolated tests on 2026-10-26.
 `server.mjs` owns the store and dispatcher. Request-scoped MCP instances register
-the three Events methods only for the modern protocol when configuration is ready.
+the three Events methods for modern and legacy HTTP when configuration is ready.
 `local-runner.mjs` receives trusted identity for create, status, and retry. Shared
 mode rejects ownerless legacy jobs; private-tunnel migration uses `local-owner`.
 Startup recovers pending final results before a status lookup can classify a
@@ -106,6 +106,17 @@ wire discovery and subscription, ownership, migration, persisted replay, startup
 recovery, cancellation, expiry, competing renewal, rotation, retries, retention,
 destination pinning, signatures, bounded concurrency, and shutdown. Author review
 was inline under the repository cost policy; no independent agent review is claimed.
+
+Compatibility reconciliation on 2026-11-04: removed the modern-only registration
+and monitoring-guidance gates. Modern `server/discover` and legacy `initialize`
+now advertise the same configured Events capability. Legacy protocol versions
+2025-03-26 and 2025-11-25 pass real HTTP tests for catalog lookup, callback
+verification, progress and finish delivery, status, and cancellation. Shared-owner
+denial and Events-off behavior remain enforced. The handlers, store, and dispatcher
+are reused without schema, authentication, or secret-policy changes. Latest local
+verification: 81/81 CI files, 150 plugin tests, lint/TypeScript, and direct ESLint.
+This proves protocol compatibility against isolated fixtures, not the actual
+ChatGPT client's chosen protocol or event presentation. No live restart occurred.
 
 Events remains opt-in. No real key was installed, callback contacted, video
 processed, remote plugin changed, tunnel changed, or running server restarted.

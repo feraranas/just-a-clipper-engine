@@ -54,6 +54,7 @@ Observe a progress reply before completion, then a final reply without another u
 | Case | Local evidence | Live ChatGPT evidence |
 | --- | --- | --- |
 | Create/retry guidance and four tools | Guidance wire tests pass, modern and legacy | Not run |
+| Events through legacy initialize and modern discovery | 2025-03-26, 2025-11-25, and modern paths pass | ChatGPT negotiation not confirmed |
 | Both subscriptions and signed callback | Existing backend tests | Not run |
 | Stage start/completion/failure/recovery/skipping | Signed synthetic workflow tests pass | Not run |
 | Two clip instances and partial artifacts | Distinct instance IDs and package A failure verified | Not run |
@@ -74,6 +75,15 @@ Local verification on 2026-11-04: 81/81 CI files and 147 plugin tests passed.
 Repository lint/TypeScript, direct ESLint, feature-document validation, and
 whitespace checks passed. Instructions have zero hard findings in the local
 STE linter. These results do not change the NOT ACCEPTED status above.
+
+Later compatibility fix on the same date: 81/81 CI files and 150 plugin tests pass.
+Legacy HTTP now exercises the same configured Events methods and dispatcher as
+modern HTTP, including verification, both deliveries, cancellation, shared-owner
+denial, and feature-off behavior. A pasted chat claim that Events was absent did
+not establish the actual discovery response or negotiated protocol. Before the
+fix, direct checks proved modern Events was advertised but legacy Events was not.
+After the fix, isolated tests prove both paths. The operator must restart the test
+server and rescan before repeating the actual ChatGPT acceptance check.
 
 ## Next gated step
 

@@ -370,7 +370,8 @@ provide the durable-capture guarantees proposed here.
 [Official MCP Events documentation](https://developers.openai.com/plugins/build/mcp-events),
 checked 2026-10-25, describes webhook subscriptions, callback verification,
 refresh, and cancellation. It identifies supported Work chat environments and
-requires protocol `2026-07-28`. Confirm the actual target chat in acceptance
+supports modern protocol `2026-07-28` and legacy Streamable HTTP initialization.
+Both paths must expose the same enabled Events methods. Confirm the target chat in acceptance
 testing. Our event names and persistence choices are application design,
 not a claim of already implemented SDK support.
 

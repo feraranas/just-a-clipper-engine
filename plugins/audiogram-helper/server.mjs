@@ -425,13 +425,13 @@ export async function startMcpServer({
       })
     : undefined;
   const handler = createMcpHttpHandler({
-    makeServer: ({ principal, era }) =>
+    makeServer: ({ principal }) =>
       makeMcpServer({
         runner,
         templateCatalog,
         templateUi,
         principal,
-        eventsEnabled: config.eventsEnabled && era === "modern",
+        eventsEnabled: config.eventsEnabled,
       }),
     principalResolver: resolver,
     eventHandler: methods

@@ -19,6 +19,13 @@ automatically to both event names. Do not require a separate request for updates
 Respect an explicit request not to monitor and any host permission requirements.
 Use the discovered catalog, or request `events/list` if the names and schemas are unknown.
 
+Compatibility correction approved by the user: both modern discovery and legacy
+initialization must advertise the same enabled Events capability. Both paths must
+use the existing list/subscribe/unsubscribe handlers, trusted principal, shared
+store, and dispatcher. Events-off remains off for both. No second implementation
+or weakening of ownership/callback verification is permitted. Verify both paths
+with real HTTP requests against temporary test servers before restarting anything.
+
 Changed: subscription guidance, tool descriptions, tests, and acceptance records.
 Unchanged: event storage, processing decisions, retry approval, and publishing.
 
@@ -82,8 +89,8 @@ Keep the PR draft until actual ChatGPT responses prove the acceptance criteria.
 ## Implementation reconciliation and deviations
 
 Partial comparison on 2026-11-04: tool results now include job-scoped monitoring
-guidance. Capability availability follows the negotiated protocol, not just the
-server flag. Legacy clients receive manual-status guidance. No response claims
+guidance. Capability availability follows the validated Events configuration on
+both modern and legacy protocol paths. No response claims
 subscription activation. The four tools, template UI, and retry identity remain.
 
 `plugins/audiogram-helper/CHATGPT-INSTRUCTIONS.md` defines concise updates, partial
@@ -95,6 +102,13 @@ Synthetic workflow tests compose the existing logger, stage sink, store, dispatc
 and signed receiver. They add no second state tracker or public test tool. The
 existing integration already passes these composition cases, so no new runtime
 delivery implementation was necessary. Author review stays inline under the cost policy.
+
+The compatibility regression tests first reproduced missing legacy advertisement,
+missing subscription methods, and unavailable legacy monitoring guidance. Removing
+the two modern-only gates makes both legacy versions use the existing verified
+subscription/delivery path. Events-off and owner denial remain covered. Local
+verification passes 81/81 CI files and 150 plugin tests. The running server is not
+restarted, and live ChatGPT acceptance remains pending.
 
 The user clarified the default: automatically subscribe after create or an approved
 retry returns a job ID. The skill, tool guidance, regression checks, and review ZIP

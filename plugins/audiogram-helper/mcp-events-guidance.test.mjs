@@ -134,7 +134,7 @@ for (const enabled of [false, true])
           name: "create_audiogram",
           arguments: { url: "https://youtu.be/abcdefghijk" },
         });
-        assert.equal(result.structuredContent.monitoring.available, false);
+        assert.equal(result.structuredContent.monitoring.available, true);
       } finally {
         await legacy.close();
       }
