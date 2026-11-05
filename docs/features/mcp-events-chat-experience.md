@@ -14,6 +14,11 @@ Add versioned instructions and job-scoped subscription guidance to tool results.
 Test synthetic workflows through the existing store and signed dispatcher.
 Live ChatGPT acceptance remains a separate, operator-approved step.
 
+User clarification: after create or an approved retry returns a job ID, subscribe
+automatically to both event names. Do not require a separate request for updates.
+Respect an explicit request not to monitor and any host permission requirements.
+Use the discovered catalog, or request `events/list` if the names and schemas are unknown.
+
 Changed: subscription guidance, tool descriptions, tests, and acceptance records.
 Unchanged: event storage, processing decisions, retry approval, and publishing.
 
@@ -21,9 +26,9 @@ Unchanged: event storage, processing decisions, retry approval, and publishing.
 
 ```mermaid
 flowchart TD
-  User[User requests a job and live updates] --> Tools[Create or approved retry tool]
+  User[User requests a job] --> Tools[Create or approved retry tool]
   Tools --> Job[Job ID and subscription guidance]
-  Job --> Chat[ChatGPT follows versioned instructions]
+  Job --> Chat[ChatGPT automatically subscribes unless declined]
   Chat --> Subs[Progress and finish subscriptions]
   Facts[Existing stage facts and verified result] --> Delivery[Durable signed dispatcher]
   Subs --> Delivery
@@ -91,7 +96,15 @@ and signed receiver. They add no second state tracker or public test tool. The
 existing integration already passes these composition cases, so no new runtime
 delivery implementation was necessary. Author review stays inline under the cost policy.
 
-Reconciliation remains pending until actual ChatGPT acceptance. The remote plugin
-source and version are not inspected or changed. No server or tunnel is restarted.
+The user clarified the default: automatically subscribe after create or an approved
+retry returns a job ID. The skill, tool guidance, regression checks, and review ZIP
+now use that policy. Reuse known event definitions or discover unknown ones first.
+Respect monitoring opt-out and host permissions. No claim of automatic host execution
+follows from these instruction changes alone.
+
+Reconciliation remains pending until actual ChatGPT acceptance. The last inspected
+remote package is version 1.0.0 with only App binding and metadata. It is unchanged.
+The local 1.0.1 skill package is prepared for review, not uploaded.
+No server or tunnel is restarted.
 See `docs/mcp-events-chatgpt-acceptance.md` for the unmet live criteria. This note
 and the overall roadmap remain IN_PROGRESS. PR 5 must remain draft.

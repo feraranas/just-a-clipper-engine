@@ -124,8 +124,8 @@ Receipt acknowledgment does not prove a user-visible response.
 ## Job creation and subscription
 
 1. `create_audiogram` accepts the request and returns its job ID immediately.
-2. Plugin guidance tells ChatGPT to subscribe to that exact job when the user
-   requests live updates. The tool result points to that next step, but does
+2. Plugin guidance tells ChatGPT to subscribe automatically to that exact job
+   unless the user explicitly declines monitoring. The tool result points to that next step, but does
    not claim monitoring is already active.
 3. `events/list` describes both names, their required `job_id` filter, and data
    schemas. Discovery timing remains client-controlled.
@@ -287,8 +287,9 @@ Callback acceptance alone is not evidence of the requested user experience.
 
 ## Human approval and external-side-effect boundaries
 
-- Starting a job and subscribing are separate operations. A request for live
-  updates guides subscription; job creation alone proves no active monitoring.
+- Starting a job and subscribing are separate operations. A returned job ID
+  triggers automatic subscription guidance unless the user declines monitoring.
+  Job creation alone proves no active monitoring. Host permission requirements still apply.
 - Notifications authorize no new retry job or Instagram publishing action.
 - Local development has one private tunnel owner. Shared use requires
   authenticated ownership checks; possession of a job ID is not authorization.

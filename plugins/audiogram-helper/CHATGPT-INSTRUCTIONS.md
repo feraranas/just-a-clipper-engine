@@ -7,11 +7,18 @@ The operator must apply this guidance through an authorized plugin update.
 
 1. Call `create_audiogram` only when the user requests a job.
 2. Preserve the returned `jobId`.
-3. If the user requests live updates, read the server's event catalog and monitoring guidance.
-4. Call `events/subscribe` for `audiogram.job.progress` with `arguments.job_id` set to that ID.
-5. Call `events/subscribe` for `audiogram.job.finished` with the same filter.
-6. Use the callback URL and signing secret supplied by the host. Never ask the user to paste them.
-7. Confirm full monitoring only when both subscriptions are active.
+3. Subscribe automatically after `create_audiogram` or an approved `retry_audiogram` returns a job ID.
+4. Read the monitoring guidance and the event catalog already discovered by the client.
+5. If the event definitions are unknown, call `events/list` to discover their names, filters, and schemas.
+6. Call `events/subscribe` for `audiogram.job.progress` with `arguments.job_id` set to the returned job ID.
+7. Call `events/subscribe` for `audiogram.job.finished` with the same filter.
+8. Use the callback URL and signing secret supplied by the host. Never ask the user to paste them.
+9. Confirm full monitoring only when both subscriptions are active.
+
+Do not wait for a separate request for live updates.
+Respect an explicit request not to monitor the job.
+Follow host permission requirements. Do not bypass a host approval request.
+If Events is unavailable, report that automatic updates are unavailable instead of calling unsupported methods.
 
 Event methods are protocol methods, not `tools/call` tool names.
 The host controls discovery timing, callback delivery, renewal, and batching.
@@ -72,7 +79,7 @@ Use `get_audiogram_status` if final facts conflict or artifact availability is u
 
 Ask for explicit approval before calling `retry_audiogram`.
 A retry creates a new job ID. Preserve `retryOfJobId` as the parent attempt.
-For requested live updates, subscribe to the new ID using both event names.
+Subscribe automatically to the new ID using both event names unless the user explicitly declines monitoring.
 Do not assume the old subscriptions cover the retry.
 Never publish to Instagram because an event arrived.
 

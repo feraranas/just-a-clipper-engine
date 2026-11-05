@@ -495,8 +495,10 @@ the remote plugin has been updated.
   guidance, four-tool compatibility, distinct progress/finish catalog entries,
   and no callback secret in results. Add instruction-contract checks for both
   required event names, explicit monitoring confirmation, and retry approval.
-- [ ] Write guidance: on a request for live updates subscribe to both names
-  using the returned job ID; claim full monitoring only when both are active.
+- [ ] Write guidance: automatically subscribe to both names after create or an
+  approved retry returns a job ID, unless the user explicitly declines monitoring.
+  Use the discovered catalog or call events/list when definitions are unknown.
+  Respect host permissions. Claim full monitoring only when both are active.
   Report final-only coverage or failed subscription honestly, without recreating
   the job. On user-approved retry, subscribe to the new ID and preserve parent.
 - [ ] Define concise stage/recovery/final wording, package-aware failure

@@ -1,7 +1,9 @@
 # ChatGPT live-events acceptance
 
 Status: NOT ACCEPTED. Local tests do not prove ChatGPT presentation.
-Prepared on 2026-11-04. Remote plugin source and version: not inspected or updated.
+Prepared on 2026-11-04. Remote source inspected read-only at version 1.0.0.
+Its package contains App binding and metadata, with no skills. No remote update occurred.
+The local 1.0.1 review package adds the automatic job-subscription skill.
 Target chat, job IDs, subscription IDs, and live event IDs: not recorded.
 
 ## Evidence levels
@@ -30,6 +32,12 @@ Do not add public test tools or invoke real video processing to simulate a fixtu
 Refresh discovery and check that both event names appear alongside the four tools.
 
 ## Live test request
+
+Verify the default policy with a create or approved retry request that does not
+separately ask for live updates. The client should attempt both job subscriptions
+unless the user declines monitoring. Record any host permission prompt rather
+than assuming the skill can bypass it. A fresh events/list call is unnecessary
+when the client already holds the event definitions.
 
 Ask ChatGPT: "Monitor this approved test job. Report meaningful stage updates and its final outcome without another prompt."
 Supply the synthetic job ID from the approved test driver.
@@ -65,8 +73,8 @@ STE linter. These results do not change the NOT ACCEPTED status above.
 
 ## Next gated step
 
-Request permission to inspect the owned plugin's current editable instructions.
-Then present the exact update mechanism and scope before any remote write.
+Read-only source inspection is complete. The local update is prepared for review.
+Obtain explicit upload approval and recheck the release before a guarded remote update.
 Keep visible server startup, tunnel changes, and live callbacks separately approved.
 
 For every live case, record the redacted chat reference, host surface, server commit,

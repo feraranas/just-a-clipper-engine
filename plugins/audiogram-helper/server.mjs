@@ -99,7 +99,7 @@ function makeMcpServer({
     jobId,
     eventNames: eventsEnabled ? [...EVENT_NAMES] : [],
     instruction: eventsEnabled
-      ? "If the user requests live updates, call events/subscribe for each event name with arguments.job_id set to this job ID. Confirm full monitoring only when both subscriptions are active. A job ID does not prove subscription activation."
+      ? "After receiving this job ID, subscribe automatically to both event names using events/subscribe and arguments.job_id. Do not wait for a separate request for live updates. Respect an explicit request not to monitor and host approval requirements. Use the discovered event catalog, or call events/list if its definitions are unknown. Confirm full monitoring only when both subscriptions are active. A job ID does not prove subscription activation."
       : "Automatic updates are unavailable on this server. Use get_audiogram_status when the user requests a status check. Do not create another job to restore monitoring.",
   });
   registerTemplateUi(server, templateUi);
@@ -162,7 +162,7 @@ function makeMcpServer({
     "create_audiogram",
     {
       description:
-        "Create captioned clip drafts from one public YouTube URL. Return the job ID. Follow monitoring guidance for requested live updates. Job creation does not activate subscriptions.",
+        "Create captioned clip drafts from one public YouTube URL. Return the job ID. Follow monitoring guidance automatically unless the user declines updates. Job creation does not activate subscriptions.",
       inputSchema: {
         url: z.string().min(1).max(2048),
         templateId: z.string().optional(),
@@ -271,7 +271,7 @@ function makeMcpServer({
     "retry_audiogram",
     {
       description:
-        "Retry a failed or partial job as a new attempt. Ask the user for explicit approval before calling this tool. Return the new job ID and parent ID. Follow monitoring guidance for the new ID.",
+        "Retry a failed or partial job as a new attempt. Ask the user for explicit approval before calling this tool. Return the new job ID and parent ID. Follow monitoring guidance automatically for the new ID unless the user declines updates.",
       inputSchema: { jobId: z.string().uuid() },
       outputSchema: outputShape,
     },
