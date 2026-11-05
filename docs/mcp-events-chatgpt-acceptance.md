@@ -1,9 +1,13 @@
 # ChatGPT live-events acceptance
 
 Status: NOT ACCEPTED. Local tests do not prove ChatGPT presentation.
-Prepared on 2026-11-04. Remote source inspected read-only at version 1.0.0.
-Its package contains App binding and metadata, with no skills. No remote update occurred.
-The local 1.0.1 review package adds the automatic job-subscription skill.
+Prepared on 2026-11-04. Remote source initially inspected at version 1.0.0.
+The user then approved the prepared update. Version 1.0.1 is saved with the
+automatic job-subscription skill. Saved release: `pluginrel_6aebf2119b908191ba7fd068cec97038`.
+Plugin: `plugin_asdk_app_6ac2b34cf4c48191af8b462c067d7de2`.
+Read-back confirms the complete skill matches the prepared source. The App
+binding, USER scope, PRIVATE visibility, and null default prompt are preserved.
+This proves saved source, not host skill activation or automatic subscriptions.
 Target chat, job IDs, subscription IDs, and live event IDs: not recorded.
 
 ## Evidence levels
@@ -73,9 +77,10 @@ STE linter. These results do not change the NOT ACCEPTED status above.
 
 ## Next gated step
 
-Read-only source inspection is complete. The local update is prepared for review.
-Obtain explicit upload approval and recheck the release before a guarded remote update.
-Keep visible server startup, tunnel changes, and live callbacks separately approved.
+Source inspection and the guarded remote skill update are complete.
+Next, obtain approval for operator-visible service preparation and live testing.
+Refresh host discovery and verify skill activation and both event subscriptions.
+Keep server startup, tunnel changes, and live callbacks separately approved.
 
 For every live case, record the redacted chat reference, host surface, server commit,
 remote plugin version, job/subscription/event IDs, occurrence/receipt/display times,

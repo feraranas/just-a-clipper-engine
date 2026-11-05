@@ -102,9 +102,11 @@ now use that policy. Reuse known event definitions or discover unknown ones firs
 Respect monitoring opt-out and host permissions. No claim of automatic host execution
 follows from these instruction changes alone.
 
-Reconciliation remains pending until actual ChatGPT acceptance. The last inspected
-remote package is version 1.0.0 with only App binding and metadata. It is unchanged.
-The local 1.0.1 skill package is prepared for review, not uploaded.
+Reconciliation remains pending until actual ChatGPT acceptance. The user approved
+the remote 1.0.1 skill update. Release `pluginrel_6aebf2119b908191ba7fd068cec97038`
+is saved. Read-back verifies the skill matches its prepared source, with App
+binding and private personal scope preserved. Saved source is not proof of host
+skill activation, subscriptions, or visible unsolicited replies.
 No server or tunnel is restarted.
 See `docs/mcp-events-chatgpt-acceptance.md` for the unmet live criteria. This note
 and the overall roadmap remain IN_PROGRESS. PR 5 must remain draft.
