@@ -10,10 +10,13 @@ export const resolveInstagramConfig = (environment = process.env) => {
   for (const id of [accountId, pageId])
     if (typeof id !== "string" || !/^[0-9]+$/.test(id))
       throw new Error("Numeric account and Page IDs required");
+  const username = environment.INSTAGRAM_USERNAME;
+  if (typeof username !== "string" || !/^[A-Za-z0-9._]{1,30}$/.test(username))
+    throw new Error("Valid Instagram username required without @");
   const version = environment.INSTAGRAM_GRAPH_VERSION ?? "v26.0";
   if (!/^v[0-9]+\.[0-9]+$/.test(version))
     throw new Error("Valid Graph version required");
-  return { token, accountId, pageId, version, username: "theballooninquiries" };
+  return { token, accountId, pageId, version, username };
 };
 
 export const resolvePublishingAccountId = (environment = process.env) =>

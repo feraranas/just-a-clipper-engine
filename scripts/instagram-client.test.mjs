@@ -20,6 +20,9 @@ test("Facebook Login verifies both linked identity reads and rejects mismatches"
   await client.verifyAccount({ pageId: "1", accountId: "2", username: "theballooninquiries" });
   assert.equal(calls.length, 2);
   await assert.rejects(make(async () => Response.json({ id: "1", instagram_business_account: { id: "3" } })).verifyAccount({ pageId: "1", accountId: "2", username: "theballooninquiries" }), /ACCOUNT_MISMATCH/);
+  let reads = 0;
+  const mismatched = make(async () => Response.json(++reads === 1 ? { id: "1", instagram_business_account: { id: "2" } } : { id: "2", username: "different_account" }));
+  await assert.rejects(mismatched.verifyAccount({ pageId: "1", accountId: "2", username: "another_account" }), /ACCOUNT_MISMATCH/);
 });
 test("container creation and publication use exact form contracts and never retry POST", async () => {
   const client = make(async (url, options) => {

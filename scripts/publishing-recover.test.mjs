@@ -10,6 +10,7 @@ const environment = {
   INSTAGRAM_PAGE_ACCESS_TOKEN: "fixture-secret",
   INSTAGRAM_ACCOUNT_ID: "2",
   INSTAGRAM_PAGE_ID: "1",
+  INSTAGRAM_USERNAME: "theballooninquiries",
 };
 const invoke = async (f, extra = [], dependencies = {}) => {
   const output = [];
