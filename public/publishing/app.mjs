@@ -1,5 +1,3 @@
-import { initializeActivity } from "./activity.mjs";
-
 export const buildPreviewUrl = (itemId) => {
   if (typeof itemId !== "string" || itemId.trim() === "") {
     throw new Error("item ID is required");
@@ -55,17 +53,6 @@ const itemPath = (itemId, action) =>
 export const loadQueue = async (fetchImpl) => {
   const response = await fetchImpl("/api/items");
   return normalizeQueuePayload(await parseResponse(response));
-};
-
-export const loadLogs = async (fetchImpl, limit = 50, signal) => {
-  const response = await fetchImpl("/api/logs?limit=" + limit, {
-    signal,
-    cache: "no-store",
-  });
-  const payload = await parseResponse(response);
-  if (!payload || !Array.isArray(payload.events))
-    throw new Error("Invalid logs payload");
-  return payload.events;
 };
 
 export const saveCaption = (fetchImpl, itemId, caption) =>
@@ -239,9 +226,6 @@ export const initializePublishingPage = (root = document) => {
   const message = root.querySelector("#queue-message");
   const refresh = root.querySelector("#refresh-queue");
   if (!list || !message || !refresh) return;
-  const disposeActivity = initializeActivity(root, (signal) =>
-    loadLogs(fetch, 500, signal),
-  );
   const setMessage = (text, kind = "") => {
     message.textContent = text;
     message.className = `queue-message ${kind}`.trim();
@@ -271,7 +255,6 @@ export const initializePublishingPage = (root = document) => {
   refresh.addEventListener("click", reload);
   reload();
   return () => {
-    disposeActivity();
     refresh.removeEventListener("click", reload);
   };
 };

@@ -7,6 +7,8 @@ import { extname, join, resolve, sep } from "node:path";
 
 import { readPipelineEvents } from "./pipeline-logger.mjs";
 import { resolvePipelineLogPath } from "./publishing-config.mjs";
+import { createJobDebugReader } from "./job-debug-store.mjs";
+import { handleJobDebug } from "./job-debug-http.mjs";
 
 const json = (response, status, payload) => {
   const body = JSON.stringify(payload);
@@ -52,10 +54,27 @@ export const createPublishingServer = ({
   publicRoot = join(projectRoot, "public/publishing"),
   pipelineLogPath = resolvePipelineLogPath(process.env),
   artifactRoot = resolveStorageConfig().artifactRoot,
+  debugReader,
+  debugPublicRoot = join(projectRoot, "public/job-debug"),
 }) => {
   if (!ledger) throw new Error("ledger is required");
+  const diagnostics = debugReader ?? createJobDebugReader({
+    jobsDbPath:
+      process.env.AUDIOGRAM_DEBUG_JOBS_DB_PATH ??
+      process.env.AUDIOGRAM_JOB_STORE ??
+      join(projectRoot, ".local/audiogram-helper-jobs.sqlite"),
+    diagnosticsRoot:
+      process.env.AUDIOGRAM_DEBUG_DIAGNOSTICS_ROOT ??
+      process.env.AUDIOGRAM_DIAGNOSTICS_ROOT ??
+      join(projectRoot, ".local/audiogram-helper/runs"),
+    sourceLabel: process.env.AUDIOGRAM_DEBUG_SOURCE_LABEL ?? "Local jobs",
+  });
   return createServer(async (request, response) => {
     try {
+      if (await handleJobDebug(request, response, {
+        reader: diagnostics,
+        publicRoot: debugPublicRoot,
+      })) return;
       const url = new URL(request.url, "http://localhost");
       const parts = url.pathname.split("/").filter(Boolean);
       if (request.method === "GET" && url.pathname === "/api/items")

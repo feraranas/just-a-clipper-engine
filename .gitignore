@@ -1,5 +1,7 @@
 node_modules
 dist
+/public/job-debug/app.js
+/public/job-debug/app.css
 .DS_Store
 .env
 .local/audiogram-helper-jobs.sqlite*

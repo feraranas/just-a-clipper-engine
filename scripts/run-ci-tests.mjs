@@ -3,7 +3,7 @@ import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-export const TEST_DIRS = ['scripts', 'plugins/audiogram-helper', 'public/publishing'];
+export const TEST_DIRS = ['scripts', 'plugins/audiogram-helper', 'public/publishing', 'public/job-debug'];
 
 // Files every CI-safe run leaves out. Keep the reason next to each entry.
 export const ALWAYS_SKIP = new Map([
