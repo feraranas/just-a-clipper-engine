@@ -11,6 +11,7 @@ import legacyData from "./timing.json";
 import liamTiming from "./liam-scene-timing.json";
 import liamCues from "./liam-cues.json";
 import { mouthAt, validateMouthCues } from "./mouth-timing.mjs";
+import { LikenessPresenter } from "./LikenessPresenter";
 import { OriginalMouth } from "./OriginalMouth";
 const checkedLiamCues = validateMouthCues(
   liamCues.mouthCues,
@@ -47,10 +48,11 @@ const box: React.CSSProperties = {
   padding: 28,
 };
 
-export const PresenterDemo: React.FC<{ talking: boolean; liam?: boolean }> = ({
-  talking,
-  liam = false,
-}) => {
+export const PresenterDemo: React.FC<{
+  talking: boolean;
+  liam?: boolean;
+  likeness?: boolean;
+}> = ({ talking, liam = false, likeness = false }) => {
   const data = liam ? liamTiming : legacyData;
   const frame = useCurrentFrame();
   const seconds = frame / data.fps;
@@ -350,7 +352,9 @@ export const PresenterDemo: React.FC<{ talking: boolean; liam?: boolean }> = ({
           </>
         )}
       </div>
-      {liam ? (
+      {likeness ? (
+        <LikenessPresenter />
+      ) : liam ? (
         <div
           style={{
             position: "absolute",

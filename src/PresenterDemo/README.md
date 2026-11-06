@@ -61,3 +61,25 @@ node scripts/prepare-liam-lipsync.mjs --audio-dir /path/to/accepted-audio --rhub
 
 Preparing locally reuses the accepted audio and does not call ElevenLabs.
 The command checks the audio hash, cue timing, and all approved script words.
+
+
+## Happy likeness with twenty mouth drawings (local preview)
+
+Composition: `LiamLikeness20`. It reuses the saved Liam narration and cues. The
+face is fixed; only mouth and eye masks reveal alternate artwork. The atlas has
+five columns and four rows. Cue targets and intermediate cells are listed in
+`mouth-transitions.mjs`; short consonants bypass intermediate drawings.
+
+The personal images are deliberately ignored by Git. Copy `happy-sheet.png`,
+`blink-sheet.png` and `mouths-20.png` from the main checkout's
+`out/presenter-likeness-20/assets` into this worktree's
+`public/generated/presenter-likeness`. Prepare the existing Liam narration as
+documented above. Then run:
+
+```sh
+npx remotion render src/index.ts LiamLikeness20 out/presenter-likeness-20/preview.mp4
+```
+
+The drawing palette contains twenty cells; this recording uses nineteen because
+its F/V cues are too brief for their intermediate drawing. This remains a visual
+prototype, with discrete transitions and a feathered mouth mask.

@@ -16,6 +16,15 @@ export const RemotionRoot: React.FC = () => {
     <>
       <Folder name="Presenter-comparison">
         <Composition
+          id="LiamLikeness20"
+          component={PresenterDemo}
+          width={720}
+          height={1280}
+          fps={24}
+          durationInFrames={Math.ceil(liamTiming.duration * 24)}
+          defaultProps={{ talking: true, liam: true, likeness: true }}
+        />
+        <Composition
           id="LiamOriginalStatic"
           component={PresenterDemo}
           width={720}
