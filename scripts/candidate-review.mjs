@@ -20,11 +20,21 @@ export function createCandidateReviewStore(filename) {
       .get(id);
     let record = row ? JSON.parse(row.record) : null;
     if (record?.state === "preparing" && record.ownerPid) {
-      try { process.kill(record.ownerPid, 0); }
-      catch (error) { if(error.code === "ESRCH") {
-        record = {...record,state:"unknown",error:"Processing stopped before a complete result was saved. Inspect before retrying."};
-        db.prepare("UPDATE candidate_reviews SET record=? WHERE id=? AND record=?").run(JSON.stringify(record),id,row.record);
-      }}
+      try {
+        process.kill(record.ownerPid, 0);
+      } catch (error) {
+        if (error.code === "ESRCH") {
+          record = {
+            ...record,
+            state: "unknown",
+            error:
+              "Processing stopped before a complete result was saved. Inspect before retrying.",
+          };
+          db.prepare(
+            "UPDATE candidate_reviews SET record=? WHERE id=? AND record=?",
+          ).run(JSON.stringify(record), id, row.record);
+        }
+      }
     }
     if (record?.review && sha256Canonical(record.review) !== record.reviewHash)
       throw Error("Stored review fingerprint does not match");
@@ -57,6 +67,22 @@ export function createCandidateReviewStore(filename) {
   };
   return {
     get,
+    update(id, expected, transform) {
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        const current = get(id);
+        if (!current || sha256Canonical(current) !== expected)
+          throw Error("Saved progress changed; read it again");
+        const next = transform(current);
+        if (next.reviewId !== id) throw Error("Review identity cannot change");
+        save(next);
+        db.exec("COMMIT");
+        return next;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
     save,
     reserve,
     claim,
@@ -260,6 +286,30 @@ export async function prepareCandidateReview({
 }
 
 export function publicCandidateReview(record) {
- const {reviewId,source,state,step,selection,createdAt,reviewHash,review,error,diagnosticCategory}=record;
- return Object.fromEntries(Object.entries({reviewId,source,state,step,selection,createdAt,reviewHash,review,error,diagnosticCategory}).filter(([,value])=>value!==undefined));
+  const {
+    reviewId,
+    source,
+    state,
+    step,
+    selection,
+    createdAt,
+    reviewHash,
+    review,
+    error,
+    diagnosticCategory,
+  } = record;
+  return Object.fromEntries(
+    Object.entries({
+      reviewId,
+      source,
+      state,
+      step,
+      selection,
+      createdAt,
+      reviewHash,
+      review,
+      error,
+      diagnosticCategory,
+    }).filter(([, value]) => value !== undefined),
+  );
 }

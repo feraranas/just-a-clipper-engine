@@ -57,4 +57,4 @@ The sample uses 19 of the 20 available cells. Cell 15 is reserved for longer F/V
 
 Eleven focused tests, ESLint, TypeScript and feature-document validation passed. The offline Classic render passed under `evidence/presenter20-20261106`. Sampled rendered frames including a blink and open/closed mouths were inspected. A ten-second enlarged preview is provided for user review; subjective smoothness and phonetic artwork accuracy are not certified by these checks.
 
-Generated personal assets remain ignored under `public/generated/presenter-likeness`. A second local copy and the rendered outputs are stored in the main checkout under `out/presenter-likeness-20`. Code changes are uncommitted. No static version or production catalog change was made.
+Generated personal assets remain ignored under `public/generated/presenter-likeness`. A second local copy and the rendered outputs are stored in the main checkout under `out/presenter-likeness-20`. The twenty-pose presenter code is committed as `59dfff4`. No static version or production catalog change was made.

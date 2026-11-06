@@ -93,8 +93,8 @@ export const extractStructuredOutput = (response, limits) => {
       "Structured output is not valid JSON",
     );
   }
-  const validation = buildTranscriptZodSchema(
-    limits?.desiredClipCount,
+  const validation = (
+    limits?.outputSchema ?? buildTranscriptZodSchema(limits?.desiredClipCount)
   ).safeParse(json);
   if (!validation.success)
     throw new InvalidSelectionOutputError(

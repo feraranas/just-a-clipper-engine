@@ -1,3 +1,5 @@
+import { Explainer, type ExplainerProps } from "./Explainer/Main";
+import explainerSample from "./Explainer/sample.json";
 import { LipSyncCloseup } from "./PresenterDemo/LipSyncCloseup";
 import { PresenterDemo } from "./PresenterDemo/Main";
 import presenterTiming from "./PresenterDemo/timing.json";
@@ -14,6 +16,18 @@ import { FPS } from "./helpers/ms-to-frame";
 export const RemotionRoot: React.FC = () => {
   return (
     <>
+      <Composition
+        id="AnimatedExplainer"
+        component={Explainer}
+        width={720}
+        height={1280}
+        fps={24}
+        durationInFrames={Math.ceil(explainerSample.duration * 24)}
+        defaultProps={explainerSample as ExplainerProps}
+        calculateMetadata={({ props }) => ({
+          durationInFrames: Math.ceil(props.duration * 24),
+        })}
+      />
       <Folder name="Presenter-comparison">
         <Composition
           id="LiamLikeness20"

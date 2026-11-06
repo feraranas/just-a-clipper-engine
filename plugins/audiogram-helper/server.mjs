@@ -1,3 +1,5 @@
+import { registerExplainerTools } from "./explainer-tools.mjs";
+import { createExplainerRunner } from "./explainer-runner.mjs";
 import { createCandidateReviewRunner } from "./candidate-review-runner.mjs";
 import { registerCandidateReviewTools } from "./candidate-review-tools.mjs";
 import {
@@ -54,9 +56,16 @@ const outputShape = {
   diagnosticsIncomplete: z.boolean().optional(),
 };
 
-function makeMcpServer({ runner, templateCatalog, templateUi, candidateRunner }) {
+function makeMcpServer({
+  runner,
+  templateCatalog,
+  templateUi,
+  candidateRunner,
+  explainerRunner,
+}) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
   registerTemplateUi(server, templateUi);
+  if (explainerRunner) registerExplainerTools(server, explainerRunner);
   if (candidateRunner) registerCandidateReviewTools(server, candidateRunner);
   server.registerTool(
     "list_video_templates",
@@ -259,10 +268,12 @@ export async function startMcpServer({
   templateCatalog,
   principalResolver,
   candidateRunner,
+  explainerRunner,
 } = {}) {
   if (!projectRoot) throw new Error("projectRoot is required.");
   const templateUi = await buildTemplateUi();
   candidateRunner ??= createCandidateReviewRunner({ projectRoot });
+  explainerRunner ??= createExplainerRunner({ projectRoot });
   let store;
   if (!runner) {
     store = createJobStore(JOB_STORE_PATH(projectRoot));
@@ -276,7 +287,14 @@ export async function startMcpServer({
     });
   }
   const handler = createMcpHttpHandler({
-    makeServer: () => makeMcpServer({ runner, templateCatalog, templateUi, candidateRunner }),
+    makeServer: () =>
+      makeMcpServer({
+        runner,
+        templateCatalog,
+        templateUi,
+        candidateRunner,
+        explainerRunner,
+      }),
     principalResolver,
   });
   const httpServer = createServer(async (req, res) => {

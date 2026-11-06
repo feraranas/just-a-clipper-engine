@@ -1,16 +1,27 @@
 import React from "react";
 import { Img, staticFile, useCurrentFrame, useVideoConfig } from "remotion";
-import cues from "./liam-cues.json";
+import defaultCues from "./liam-cues.json";
 import { validateMouthCues } from "./mouth-timing.mjs";
 import { mouthPoseAt } from "./mouth-transitions.mjs";
-const checked = validateMouthCues(cues.mouthCues, cues.duration);
-const assets = "generated/presenter-likeness/";
+
 const mouthMask =
   "radial-gradient(ellipse 23% 11% at 51% 57%, black 58%, transparent 100%)";
 const eyeMask =
   "radial-gradient(ellipse 38% 9% at 50% 35%, black 70%, transparent 100%)";
 
-export const LikenessPresenter: React.FC = () => {
+export const LikenessPresenter: React.FC<{
+  cues?: { start: number; end: number; value: string }[];
+  assets?: string;
+  inset?: boolean;
+}> = ({
+  cues = defaultCues.mouthCues,
+  assets = "generated/presenter-likeness/",
+  inset = false,
+}) => {
+  const checked = validateMouthCues(
+    cues,
+    Math.max(0.1, ...cues.map((c) => c.end)),
+  );
   const frame = useCurrentFrame();
   const { fps } = useVideoConfig();
   const cell = mouthPoseAt(checked, frame, fps);
@@ -19,8 +30,8 @@ export const LikenessPresenter: React.FC = () => {
     <div
       style={{
         position: "absolute",
-        left: 22,
-        top: 720,
+        left: inset ? 0 : 22,
+        top: inset ? 0 : 720,
         width: 240,
         height: 320,
         overflow: "hidden",

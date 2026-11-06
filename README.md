@@ -306,3 +306,66 @@ Legacy files without manifests get an explicit legacy-import record with unknown
 input hashes. Migration checkpoints support reruns after interrupted DB updates.
 Historical helper job results are not rewritten by this command; their old paths
 still need the original checkout. New helper jobs use durable references.
+
+
+### Selected topic to an explanation video (experimental)
+
+Continue an existing, explicitly selected candidate. This uses the same candidate
+review database. It does not extract the video or ask Jev to rank it again.
+
+```sh
+npm run explainer -- --action get --review REVIEW_ID
+npm run explainer -- --action research --review REVIEW_ID --revision 0 --input /absolute/path/research.json
+npm run explainer -- --action draft --review REVIEW_ID --revision CURRENT_REVISION
+```
+
+Use the returned revision for each following step. Research JSON contains
+`summary` and `sources`, each with `id`, `url`, `title` and `passage`. The calling
+assistant gathers these sources with web search. The worker does not browse.
+`draft` uses the configured `AUDIOGRAM_LLM_PROVIDER`. To submit a reviewed draft
+instead, use `script` with JSON containing `title` and `segments`; each segment
+has `id`, `text`, `kind` (`factual` or `illustration`) and `sourceIds`.
+
+Review the exact script and sources returned by `get`. Source IDs alone do not
+prove a claim. After human approval:
+
+```sh
+npm run explainer -- --action approve_script --review REVIEW_ID --revision CURRENT_REVISION --hash SCRIPT_HASH
+npm run explainer -- --action narrate --review REVIEW_ID --revision CURRENT_REVISION
+```
+
+`narrate` spends ElevenLabs credits. It needs `ELEVENLABS_API_KEY`, an executable
+`AUDIOGRAM_RHUBARB_PATH`, ffmpeg and ffprobe. It uses the existing Liam settings.
+To reuse a completed recording without spending credits, the CLI-only
+`import_audio` action accepts `--input` pointing to JSON with a `directory` field.
+That directory must contain the saved request, outcome, audio, alignment and
+Rhubarb cues. Its text must match the approved script.
+
+Listen to the audio path in `get` and explicitly accept its SHA-256 hash:
+
+```sh
+npm run explainer -- --action accept_audio --review REVIEW_ID --revision CURRENT_REVISION --hash AUDIO_SHA256
+npm run explainer -- --action plan --review REVIEW_ID --revision CURRENT_REVISION
+npm run explainer -- --action render --review REVIEW_ID --revision CURRENT_REVISION
+```
+
+`plan` uses the LLM to select comparison, process or branch-history scenes.
+Use `scenes --input /absolute/path/plan.json` to supply a plan directly. Each
+scene has `segmentId`, `kind`, `version: 1`, `title` and `items`. Scenes must match
+the script segments in order. The same contracts are discoverable through
+`list_scene_blocks` and `continue_explainer` in the existing MCP server. Long MCP
+steps return an `operationId`; poll `get` with that ID to see startup failures
+and completion. These tools return local artifact paths, not hosted media URLs.
+
+Set `AUDIOGRAM_PRESENTER_ASSETS` to the local directory containing
+`happy-sheet.png`, `blink-sheet.png` and `mouths-20.png`; the default is the ignored
+`public/generated/presenter-likeness` directory. Set `CHROME_PATH` if needed.
+Artwork is personal and is not included in Git. This does not add an audiogram
+template selection; the new Remotion composition is `AnimatedExplainer`.
+
+Artifacts and progress use shared storage outside the checkout. Diagram edits
+reuse accepted audio. Script edits require new script approval and narration.
+Failed or interrupted generation is never retried automatically. Only local
+rendering has `recover_render`, which requires its saved revision and attempt
+token via `--hash`. Inspect other unconfirmed attempts manually. Nothing here
+queues or publishes a video.

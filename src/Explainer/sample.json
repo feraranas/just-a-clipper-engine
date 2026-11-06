@@ -1,0 +1,1734 @@
+{
+  "title": "Check the consequence. Then choose the action.",
+  "audioSrc": "generated/presenter-lipsync/narration.mp3",
+  "duration": 40.124063,
+  "scenes": [
+    {
+      "segmentId": "s1",
+      "kind": "process",
+      "version": 1,
+      "title": "Before anything runs",
+      "items": [
+        "Proposed command",
+        "Assess the consequence",
+        "Apply the permission rule"
+      ],
+      "text": "Your coding agent is about to run a command. How do you decide whether to let it?",
+      "start": 0,
+      "end": 5.352
+    },
+    {
+      "segmentId": "s2",
+      "kind": "comparison",
+      "version": 1,
+      "title": "Recognize a pattern or inspect its effect",
+      "items": ["Known command patterns", "Consequences of this action"],
+      "text": "A blocklist checks for commands you already marked as dangerous.",
+      "start": 5.352,
+      "end": 8.998
+    },
+    {
+      "segmentId": "s3",
+      "kind": "process",
+      "version": 1,
+      "title": "Ask two concrete questions",
+      "items": ["What could change?", "How hard is it to undo?"],
+      "text": "An intent check asks a different question: what could this action change, and how difficult would it be to undo?",
+      "start": 8.998,
+      "end": 16.254
+    },
+    {
+      "segmentId": "s4",
+      "kind": "branch",
+      "version": 1,
+      "title": "A force push can replace shared work",
+      "items": ["Shared base", "Branch point", "Teammate work", "Current tip"],
+      "text": "Take a force push. It can overwrite shared Git history. A small classifier can flag that consequence before execution.",
+      "start": 16.254,
+      "end": 25.6
+    },
+    {
+      "segmentId": "s5",
+      "kind": "process",
+      "version": 1,
+      "title": "The application makes the decision",
+      "items": [
+        "Receive the assessment",
+        "Apply allow / block / ask rules",
+        "Execute only with permission"
+      ],
+      "text": "Your application then applies the rule: allow, block, or ask you.",
+      "start": 25.6,
+      "end": 30.081
+    },
+    {
+      "segmentId": "s6",
+      "kind": "process",
+      "version": 1,
+      "title": "Keep more than one safeguard",
+      "items": [
+        "The model can misjudge",
+        "Restrict available permissions",
+        "Ask before consequential actions"
+      ],
+      "text": "The classifier can be wrong. Keep permission limits and human approval around consequential actions.",
+      "start": 30.081,
+      "end": 36.931
+    },
+    {
+      "segmentId": "s7",
+      "kind": "comparison",
+      "version": 1,
+      "title": "Judgment informs. Rules control.",
+      "items": ["MODEL: assess risk", "CODE: enforce permissions"],
+      "text": "Use the model to assess risk. Keep the rules in code.",
+      "start": 36.931,
+      "end": 40.124063
+    }
+  ],
+  "mouthCues": [
+    {
+      "start": 0,
+      "end": 0.06,
+      "value": "X"
+    },
+    {
+      "start": 0.06,
+      "end": 0.13,
+      "value": "C"
+    },
+    {
+      "start": 0.13,
+      "end": 0.41,
+      "value": "E"
+    },
+    {
+      "start": 0.41,
+      "end": 0.55,
+      "value": "B"
+    },
+    {
+      "start": 0.55,
+      "end": 0.69,
+      "value": "C"
+    },
+    {
+      "start": 0.69,
+      "end": 1.04,
+      "value": "B"
+    },
+    {
+      "start": 1.04,
+      "end": 1.12,
+      "value": "A"
+    },
+    {
+      "start": 1.12,
+      "end": 1.24,
+      "value": "C"
+    },
+    {
+      "start": 1.24,
+      "end": 1.45,
+      "value": "F"
+    },
+    {
+      "start": 1.45,
+      "end": 1.59,
+      "value": "B"
+    },
+    {
+      "start": 1.59,
+      "end": 1.73,
+      "value": "C"
+    },
+    {
+      "start": 1.73,
+      "end": 1.8,
+      "value": "B"
+    },
+    {
+      "start": 1.8,
+      "end": 1.88,
+      "value": "A"
+    },
+    {
+      "start": 1.88,
+      "end": 2.05,
+      "value": "C"
+    },
+    {
+      "start": 2.05,
+      "end": 2.19,
+      "value": "B"
+    },
+    {
+      "start": 2.19,
+      "end": 2.73,
+      "value": "X"
+    },
+    {
+      "start": 2.73,
+      "end": 2.8,
+      "value": "C"
+    },
+    {
+      "start": 2.8,
+      "end": 3.01,
+      "value": "F"
+    },
+    {
+      "start": 3.01,
+      "end": 3.29,
+      "value": "B"
+    },
+    {
+      "start": 3.29,
+      "end": 3.36,
+      "value": "C"
+    },
+    {
+      "start": 3.36,
+      "end": 3.5,
+      "value": "B"
+    },
+    {
+      "start": 3.5,
+      "end": 3.57,
+      "value": "F"
+    },
+    {
+      "start": 3.57,
+      "end": 3.64,
+      "value": "C"
+    },
+    {
+      "start": 3.64,
+      "end": 3.71,
+      "value": "B"
+    },
+    {
+      "start": 3.71,
+      "end": 3.81,
+      "value": "F"
+    },
+    {
+      "start": 3.81,
+      "end": 3.85,
+      "value": "E"
+    },
+    {
+      "start": 3.85,
+      "end": 3.99,
+      "value": "H"
+    },
+    {
+      "start": 3.99,
+      "end": 4.27,
+      "value": "B"
+    },
+    {
+      "start": 4.27,
+      "end": 5.35,
+      "value": "X"
+    },
+    {
+      "start": 5.35,
+      "end": 5.52,
+      "value": "A"
+    },
+    {
+      "start": 5.52,
+      "end": 5.57,
+      "value": "H"
+    },
+    {
+      "start": 5.57,
+      "end": 5.62,
+      "value": "D"
+    },
+    {
+      "start": 5.62,
+      "end": 6.11,
+      "value": "B"
+    },
+    {
+      "start": 6.11,
+      "end": 6.18,
+      "value": "C"
+    },
+    {
+      "start": 6.18,
+      "end": 6.25,
+      "value": "B"
+    },
+    {
+      "start": 6.25,
+      "end": 6.32,
+      "value": "G"
+    },
+    {
+      "start": 6.32,
+      "end": 6.39,
+      "value": "E"
+    },
+    {
+      "start": 6.39,
+      "end": 6.46,
+      "value": "C"
+    },
+    {
+      "start": 6.46,
+      "end": 6.54,
+      "value": "A"
+    },
+    {
+      "start": 6.54,
+      "end": 6.68,
+      "value": "C"
+    },
+    {
+      "start": 6.68,
+      "end": 6.96,
+      "value": "F"
+    },
+    {
+      "start": 6.96,
+      "end": 7.1,
+      "value": "E"
+    },
+    {
+      "start": 7.1,
+      "end": 7.38,
+      "value": "B"
+    },
+    {
+      "start": 7.38,
+      "end": 7.46,
+      "value": "A"
+    },
+    {
+      "start": 7.46,
+      "end": 7.53,
+      "value": "D"
+    },
+    {
+      "start": 7.53,
+      "end": 7.67,
+      "value": "B"
+    },
+    {
+      "start": 7.67,
+      "end": 7.74,
+      "value": "C"
+    },
+    {
+      "start": 7.74,
+      "end": 7.81,
+      "value": "B"
+    },
+    {
+      "start": 7.81,
+      "end": 7.95,
+      "value": "C"
+    },
+    {
+      "start": 7.95,
+      "end": 8.09,
+      "value": "B"
+    },
+    {
+      "start": 8.09,
+      "end": 8.16,
+      "value": "E"
+    },
+    {
+      "start": 8.16,
+      "end": 8.23,
+      "value": "C"
+    },
+    {
+      "start": 8.23,
+      "end": 8.37,
+      "value": "B"
+    },
+    {
+      "start": 8.37,
+      "end": 9.03,
+      "value": "X"
+    },
+    {
+      "start": 9.03,
+      "end": 9.09,
+      "value": "C"
+    },
+    {
+      "start": 9.09,
+      "end": 9.28,
+      "value": "B"
+    },
+    {
+      "start": 9.28,
+      "end": 9.49,
+      "value": "C"
+    },
+    {
+      "start": 9.49,
+      "end": 9.63,
+      "value": "B"
+    },
+    {
+      "start": 9.63,
+      "end": 9.98,
+      "value": "C"
+    },
+    {
+      "start": 9.98,
+      "end": 10.47,
+      "value": "B"
+    },
+    {
+      "start": 10.47,
+      "end": 10.54,
+      "value": "G"
+    },
+    {
+      "start": 10.54,
+      "end": 10.75,
+      "value": "B"
+    },
+    {
+      "start": 10.75,
+      "end": 10.82,
+      "value": "F"
+    },
+    {
+      "start": 10.82,
+      "end": 10.89,
+      "value": "C"
+    },
+    {
+      "start": 10.89,
+      "end": 11.03,
+      "value": "B"
+    },
+    {
+      "start": 11.03,
+      "end": 11.17,
+      "value": "C"
+    },
+    {
+      "start": 11.17,
+      "end": 11.92,
+      "value": "X"
+    },
+    {
+      "start": 11.92,
+      "end": 11.98,
+      "value": "F"
+    },
+    {
+      "start": 11.98,
+      "end": 12.45,
+      "value": "B"
+    },
+    {
+      "start": 12.45,
+      "end": 12.59,
+      "value": "C"
+    },
+    {
+      "start": 12.59,
+      "end": 13.01,
+      "value": "B"
+    },
+    {
+      "start": 13.01,
+      "end": 13.08,
+      "value": "C"
+    },
+    {
+      "start": 13.08,
+      "end": 13.64,
+      "value": "B"
+    },
+    {
+      "start": 13.64,
+      "end": 13.92,
+      "value": "C"
+    },
+    {
+      "start": 13.92,
+      "end": 14.2,
+      "value": "B"
+    },
+    {
+      "start": 14.2,
+      "end": 14.27,
+      "value": "G"
+    },
+    {
+      "start": 14.27,
+      "end": 14.34,
+      "value": "C"
+    },
+    {
+      "start": 14.34,
+      "end": 14.55,
+      "value": "B"
+    },
+    {
+      "start": 14.55,
+      "end": 14.62,
+      "value": "F"
+    },
+    {
+      "start": 14.62,
+      "end": 14.69,
+      "value": "B"
+    },
+    {
+      "start": 14.69,
+      "end": 14.77,
+      "value": "A"
+    },
+    {
+      "start": 14.77,
+      "end": 14.92,
+      "value": "B"
+    },
+    {
+      "start": 14.92,
+      "end": 14.99,
+      "value": "F"
+    },
+    {
+      "start": 14.99,
+      "end": 15.13,
+      "value": "C"
+    },
+    {
+      "start": 15.13,
+      "end": 15.55,
+      "value": "F"
+    },
+    {
+      "start": 15.55,
+      "end": 16.14,
+      "value": "X"
+    },
+    {
+      "start": 16.14,
+      "end": 16.23,
+      "value": "B"
+    },
+    {
+      "start": 16.23,
+      "end": 16.58,
+      "value": "C"
+    },
+    {
+      "start": 16.58,
+      "end": 16.65,
+      "value": "G"
+    },
+    {
+      "start": 16.65,
+      "end": 16.79,
+      "value": "E"
+    },
+    {
+      "start": 16.79,
+      "end": 16.87,
+      "value": "A"
+    },
+    {
+      "start": 16.87,
+      "end": 17.26,
+      "value": "F"
+    },
+    {
+      "start": 17.26,
+      "end": 18.2,
+      "value": "X"
+    },
+    {
+      "start": 18.2,
+      "end": 18.27,
+      "value": "B"
+    },
+    {
+      "start": 18.27,
+      "end": 18.55,
+      "value": "C"
+    },
+    {
+      "start": 18.55,
+      "end": 18.62,
+      "value": "E"
+    },
+    {
+      "start": 18.62,
+      "end": 18.69,
+      "value": "F"
+    },
+    {
+      "start": 18.69,
+      "end": 18.76,
+      "value": "G"
+    },
+    {
+      "start": 18.76,
+      "end": 18.83,
+      "value": "E"
+    },
+    {
+      "start": 18.83,
+      "end": 18.9,
+      "value": "B"
+    },
+    {
+      "start": 18.9,
+      "end": 18.97,
+      "value": "C"
+    },
+    {
+      "start": 18.97,
+      "end": 19.25,
+      "value": "B"
+    },
+    {
+      "start": 19.25,
+      "end": 19.32,
+      "value": "C"
+    },
+    {
+      "start": 19.32,
+      "end": 19.95,
+      "value": "B"
+    },
+    {
+      "start": 19.95,
+      "end": 20.09,
+      "value": "E"
+    },
+    {
+      "start": 20.09,
+      "end": 20.23,
+      "value": "B"
+    },
+    {
+      "start": 20.23,
+      "end": 21.29,
+      "value": "X"
+    },
+    {
+      "start": 21.29,
+      "end": 21.37,
+      "value": "C"
+    },
+    {
+      "start": 21.37,
+      "end": 21.44,
+      "value": "B"
+    },
+    {
+      "start": 21.44,
+      "end": 21.52,
+      "value": "A"
+    },
+    {
+      "start": 21.52,
+      "end": 21.6,
+      "value": "E"
+    },
+    {
+      "start": 21.6,
+      "end": 21.81,
+      "value": "H"
+    },
+    {
+      "start": 21.81,
+      "end": 21.88,
+      "value": "C"
+    },
+    {
+      "start": 21.88,
+      "end": 22.02,
+      "value": "B"
+    },
+    {
+      "start": 22.02,
+      "end": 22.16,
+      "value": "G"
+    },
+    {
+      "start": 22.16,
+      "end": 22.23,
+      "value": "C"
+    },
+    {
+      "start": 22.23,
+      "end": 22.51,
+      "value": "B"
+    },
+    {
+      "start": 22.51,
+      "end": 22.65,
+      "value": "G"
+    },
+    {
+      "start": 22.65,
+      "end": 22.72,
+      "value": "H"
+    },
+    {
+      "start": 22.72,
+      "end": 22.86,
+      "value": "C"
+    },
+    {
+      "start": 22.86,
+      "end": 22.93,
+      "value": "B"
+    },
+    {
+      "start": 22.93,
+      "end": 23,
+      "value": "C"
+    },
+    {
+      "start": 23,
+      "end": 23.07,
+      "value": "B"
+    },
+    {
+      "start": 23.07,
+      "end": 23.28,
+      "value": "D"
+    },
+    {
+      "start": 23.28,
+      "end": 23.35,
+      "value": "C"
+    },
+    {
+      "start": 23.35,
+      "end": 23.49,
+      "value": "B"
+    },
+    {
+      "start": 23.49,
+      "end": 23.56,
+      "value": "F"
+    },
+    {
+      "start": 23.56,
+      "end": 23.63,
+      "value": "C"
+    },
+    {
+      "start": 23.63,
+      "end": 23.71,
+      "value": "A"
+    },
+    {
+      "start": 23.71,
+      "end": 23.85,
+      "value": "B"
+    },
+    {
+      "start": 23.85,
+      "end": 23.92,
+      "value": "G"
+    },
+    {
+      "start": 23.92,
+      "end": 24.06,
+      "value": "E"
+    },
+    {
+      "start": 24.06,
+      "end": 24.13,
+      "value": "B"
+    },
+    {
+      "start": 24.13,
+      "end": 24.2,
+      "value": "C"
+    },
+    {
+      "start": 24.2,
+      "end": 24.27,
+      "value": "B"
+    },
+    {
+      "start": 24.27,
+      "end": 24.55,
+      "value": "F"
+    },
+    {
+      "start": 24.55,
+      "end": 24.62,
+      "value": "B"
+    },
+    {
+      "start": 24.62,
+      "end": 24.83,
+      "value": "C"
+    },
+    {
+      "start": 24.83,
+      "end": 25.62,
+      "value": "X"
+    },
+    {
+      "start": 25.62,
+      "end": 25.69,
+      "value": "F"
+    },
+    {
+      "start": 25.69,
+      "end": 25.76,
+      "value": "C"
+    },
+    {
+      "start": 25.76,
+      "end": 25.84,
+      "value": "A"
+    },
+    {
+      "start": 25.84,
+      "end": 25.91,
+      "value": "H"
+    },
+    {
+      "start": 25.91,
+      "end": 26.11,
+      "value": "C"
+    },
+    {
+      "start": 26.11,
+      "end": 26.39,
+      "value": "B"
+    },
+    {
+      "start": 26.39,
+      "end": 26.46,
+      "value": "C"
+    },
+    {
+      "start": 26.46,
+      "end": 26.54,
+      "value": "A"
+    },
+    {
+      "start": 26.54,
+      "end": 26.74,
+      "value": "H"
+    },
+    {
+      "start": 26.74,
+      "end": 26.88,
+      "value": "B"
+    },
+    {
+      "start": 26.88,
+      "end": 27.02,
+      "value": "C"
+    },
+    {
+      "start": 27.02,
+      "end": 27.3,
+      "value": "F"
+    },
+    {
+      "start": 27.3,
+      "end": 27.64,
+      "value": "B"
+    },
+    {
+      "start": 27.64,
+      "end": 27.7,
+      "value": "C"
+    },
+    {
+      "start": 27.7,
+      "end": 27.83,
+      "value": "H"
+    },
+    {
+      "start": 27.83,
+      "end": 27.9,
+      "value": "C"
+    },
+    {
+      "start": 27.9,
+      "end": 28.04,
+      "value": "E"
+    },
+    {
+      "start": 28.04,
+      "end": 28.2,
+      "value": "B"
+    },
+    {
+      "start": 28.2,
+      "end": 28.35,
+      "value": "A"
+    },
+    {
+      "start": 28.35,
+      "end": 28.4,
+      "value": "H"
+    },
+    {
+      "start": 28.4,
+      "end": 28.52,
+      "value": "D"
+    },
+    {
+      "start": 28.52,
+      "end": 28.86,
+      "value": "B"
+    },
+    {
+      "start": 28.86,
+      "end": 28.92,
+      "value": "E"
+    },
+    {
+      "start": 28.92,
+      "end": 28.97,
+      "value": "B"
+    },
+    {
+      "start": 28.97,
+      "end": 29.16,
+      "value": "C"
+    },
+    {
+      "start": 29.16,
+      "end": 29.21,
+      "value": "E"
+    },
+    {
+      "start": 29.21,
+      "end": 29.53,
+      "value": "F"
+    },
+    {
+      "start": 29.53,
+      "end": 30,
+      "value": "X"
+    },
+    {
+      "start": 30,
+      "end": 30.14,
+      "value": "B"
+    },
+    {
+      "start": 30.14,
+      "end": 30.28,
+      "value": "H"
+    },
+    {
+      "start": 30.28,
+      "end": 30.42,
+      "value": "C"
+    },
+    {
+      "start": 30.42,
+      "end": 30.49,
+      "value": "B"
+    },
+    {
+      "start": 30.49,
+      "end": 30.56,
+      "value": "C"
+    },
+    {
+      "start": 30.56,
+      "end": 30.63,
+      "value": "G"
+    },
+    {
+      "start": 30.63,
+      "end": 30.7,
+      "value": "C"
+    },
+    {
+      "start": 30.7,
+      "end": 30.84,
+      "value": "E"
+    },
+    {
+      "start": 30.84,
+      "end": 30.91,
+      "value": "B"
+    },
+    {
+      "start": 30.91,
+      "end": 30.99,
+      "value": "A"
+    },
+    {
+      "start": 30.99,
+      "end": 31.15,
+      "value": "B"
+    },
+    {
+      "start": 31.15,
+      "end": 31.57,
+      "value": "E"
+    },
+    {
+      "start": 31.57,
+      "end": 32.14,
+      "value": "X"
+    },
+    {
+      "start": 32.14,
+      "end": 32.37,
+      "value": "B"
+    },
+    {
+      "start": 32.37,
+      "end": 32.54,
+      "value": "A"
+    },
+    {
+      "start": 32.54,
+      "end": 32.66,
+      "value": "E"
+    },
+    {
+      "start": 32.66,
+      "end": 32.74,
+      "value": "A"
+    },
+    {
+      "start": 32.74,
+      "end": 33.12,
+      "value": "B"
+    },
+    {
+      "start": 33.12,
+      "end": 33.2,
+      "value": "A"
+    },
+    {
+      "start": 33.2,
+      "end": 33.48,
+      "value": "B"
+    },
+    {
+      "start": 33.48,
+      "end": 33.7,
+      "value": "C"
+    },
+    {
+      "start": 33.7,
+      "end": 33.77,
+      "value": "B"
+    },
+    {
+      "start": 33.77,
+      "end": 33.98,
+      "value": "F"
+    },
+    {
+      "start": 33.98,
+      "end": 34.04,
+      "value": "A"
+    },
+    {
+      "start": 34.04,
+      "end": 34.1,
+      "value": "B"
+    },
+    {
+      "start": 34.1,
+      "end": 34.18,
+      "value": "A"
+    },
+    {
+      "start": 34.18,
+      "end": 34.34,
+      "value": "F"
+    },
+    {
+      "start": 34.34,
+      "end": 34.41,
+      "value": "G"
+    },
+    {
+      "start": 34.41,
+      "end": 34.48,
+      "value": "C"
+    },
+    {
+      "start": 34.48,
+      "end": 34.76,
+      "value": "E"
+    },
+    {
+      "start": 34.76,
+      "end": 34.83,
+      "value": "C"
+    },
+    {
+      "start": 34.83,
+      "end": 35.04,
+      "value": "D"
+    },
+    {
+      "start": 35.04,
+      "end": 35.18,
+      "value": "C"
+    },
+    {
+      "start": 35.18,
+      "end": 35.25,
+      "value": "B"
+    },
+    {
+      "start": 35.25,
+      "end": 35.32,
+      "value": "F"
+    },
+    {
+      "start": 35.32,
+      "end": 35.53,
+      "value": "C"
+    },
+    {
+      "start": 35.53,
+      "end": 35.6,
+      "value": "H"
+    },
+    {
+      "start": 35.6,
+      "end": 35.74,
+      "value": "C"
+    },
+    {
+      "start": 35.74,
+      "end": 36.16,
+      "value": "B"
+    },
+    {
+      "start": 36.16,
+      "end": 36.9,
+      "value": "X"
+    },
+    {
+      "start": 36.9,
+      "end": 37.11,
+      "value": "F"
+    },
+    {
+      "start": 37.11,
+      "end": 37.18,
+      "value": "B"
+    },
+    {
+      "start": 37.18,
+      "end": 37.26,
+      "value": "A"
+    },
+    {
+      "start": 37.26,
+      "end": 37.3,
+      "value": "D"
+    },
+    {
+      "start": 37.3,
+      "end": 37.41,
+      "value": "B"
+    },
+    {
+      "start": 37.41,
+      "end": 37.62,
+      "value": "F"
+    },
+    {
+      "start": 37.62,
+      "end": 37.76,
+      "value": "B"
+    },
+    {
+      "start": 37.76,
+      "end": 37.9,
+      "value": "C"
+    },
+    {
+      "start": 37.9,
+      "end": 38.39,
+      "value": "B"
+    },
+    {
+      "start": 38.39,
+      "end": 38.53,
+      "value": "X"
+    },
+    {
+      "start": 38.53,
+      "end": 38.74,
+      "value": "B"
+    },
+    {
+      "start": 38.74,
+      "end": 38.83,
+      "value": "A"
+    },
+    {
+      "start": 38.83,
+      "end": 38.9,
+      "value": "B"
+    },
+    {
+      "start": 38.9,
+      "end": 38.96,
+      "value": "C"
+    },
+    {
+      "start": 38.96,
+      "end": 39.1,
+      "value": "F"
+    },
+    {
+      "start": 39.1,
+      "end": 39.38,
+      "value": "B"
+    },
+    {
+      "start": 39.38,
+      "end": 39.59,
+      "value": "E"
+    },
+    {
+      "start": 39.59,
+      "end": 39.8,
+      "value": "B"
+    },
+    {
+      "start": 39.8,
+      "end": 40.12,
+      "value": "X"
+    }
+  ],
+  "words": [
+    {
+      "text": "Your",
+      "start": 0.058,
+      "end": 0.244
+    },
+    {
+      "text": "coding",
+      "start": 0.313,
+      "end": 0.615
+    },
+    {
+      "text": "agent",
+      "start": 0.673,
+      "end": 0.94
+    },
+    {
+      "text": "is",
+      "start": 0.987,
+      "end": 1.068
+    },
+    {
+      "text": "about",
+      "start": 1.115,
+      "end": 1.335
+    },
+    {
+      "text": "to",
+      "start": 1.37,
+      "end": 1.428
+    },
+    {
+      "text": "run",
+      "start": 1.509,
+      "end": 1.649
+    },
+    {
+      "text": "a",
+      "start": 1.683,
+      "end": 1.707
+    },
+    {
+      "text": "command.",
+      "start": 1.765,
+      "end": 2.334
+    },
+    {
+      "text": "How",
+      "start": 2.694,
+      "end": 2.844
+    },
+    {
+      "text": "do",
+      "start": 2.879,
+      "end": 2.926
+    },
+    {
+      "text": "you",
+      "start": 2.972,
+      "end": 3.042
+    },
+    {
+      "text": "decide",
+      "start": 3.111,
+      "end": 3.495
+    },
+    {
+      "text": "whether",
+      "start": 3.518,
+      "end": 3.75
+    },
+    {
+      "text": "to",
+      "start": 3.796,
+      "end": 3.855
+    },
+    {
+      "text": "let",
+      "start": 3.924,
+      "end": 4.087
+    },
+    {
+      "text": "it?",
+      "start": 4.133,
+      "end": 4.447
+    },
+    {
+      "text": "A",
+      "start": 5.352,
+      "end": 5.433
+    },
+    {
+      "text": "blocklist",
+      "start": 5.492,
+      "end": 5.968
+    },
+    {
+      "text": "checks",
+      "start": 6.014,
+      "end": 6.258
+    },
+    {
+      "text": "for",
+      "start": 6.293,
+      "end": 6.397
+    },
+    {
+      "text": "commands",
+      "start": 6.444,
+      "end": 6.769
+    },
+    {
+      "text": "you",
+      "start": 6.803,
+      "end": 6.896
+    },
+    {
+      "text": "already",
+      "start": 7.012,
+      "end": 7.396
+    },
+    {
+      "text": "marked",
+      "start": 7.454,
+      "end": 7.697
+    },
+    {
+      "text": "as",
+      "start": 7.732,
+      "end": 7.802
+    },
+    {
+      "text": "dangerous.",
+      "start": 7.848,
+      "end": 8.51
+    },
+    {
+      "text": "An",
+      "start": 8.998,
+      "end": 9.149
+    },
+    {
+      "text": "intent",
+      "start": 9.207,
+      "end": 9.555
+    },
+    {
+      "text": "check",
+      "start": 9.59,
+      "end": 9.81
+    },
+    {
+      "text": "asks",
+      "start": 9.88,
+      "end": 10.182
+    },
+    {
+      "text": "a",
+      "start": 10.228,
+      "end": 10.263
+    },
+    {
+      "text": "different",
+      "start": 10.356,
+      "end": 10.693
+    },
+    {
+      "text": "question:",
+      "start": 10.728,
+      "end": 11.308
+    },
+    {
+      "text": "what",
+      "start": 11.889,
+      "end": 12.074
+    },
+    {
+      "text": "could",
+      "start": 12.121,
+      "end": 12.26
+    },
+    {
+      "text": "this",
+      "start": 12.295,
+      "end": 12.446
+    },
+    {
+      "text": "action",
+      "start": 12.516,
+      "end": 12.852
+    },
+    {
+      "text": "change,",
+      "start": 12.922,
+      "end": 13.456
+    },
+    {
+      "text": "and",
+      "start": 13.688,
+      "end": 13.827
+    },
+    {
+      "text": "how",
+      "start": 13.897,
+      "end": 14.013
+    },
+    {
+      "text": "difficult",
+      "start": 14.129,
+      "end": 14.558
+    },
+    {
+      "text": "would",
+      "start": 14.582,
+      "end": 14.709
+    },
+    {
+      "text": "it",
+      "start": 14.744,
+      "end": 14.802
+    },
+    {
+      "text": "be",
+      "start": 14.849,
+      "end": 14.953
+    },
+    {
+      "text": "to",
+      "start": 14.988,
+      "end": 15.035
+    },
+    {
+      "text": "undo?",
+      "start": 15.116,
+      "end": 15.673
+    },
+    {
+      "text": "Take",
+      "start": 16.254,
+      "end": 16.486
+    },
+    {
+      "text": "a",
+      "start": 16.521,
+      "end": 16.544
+    },
+    {
+      "text": "force",
+      "start": 16.602,
+      "end": 16.88
+    },
+    {
+      "text": "push.",
+      "start": 16.927,
+      "end": 17.403
+    },
+    {
+      "text": "It",
+      "start": 18.181,
+      "end": 18.332
+    },
+    {
+      "text": "can",
+      "start": 18.378,
+      "end": 18.506
+    },
+    {
+      "text": "overwrite",
+      "start": 18.576,
+      "end": 19.098
+    },
+    {
+      "text": "shared",
+      "start": 19.144,
+      "end": 19.481
+    },
+    {
+      "text": "Git",
+      "start": 19.539,
+      "end": 19.713
+    },
+    {
+      "text": "history.",
+      "start": 19.771,
+      "end": 20.363
+    },
+    {
+      "text": "A",
+      "start": 21.269,
+      "end": 21.35
+    },
+    {
+      "text": "small",
+      "start": 21.42,
+      "end": 21.675
+    },
+    {
+      "text": "classifier",
+      "start": 21.722,
+      "end": 22.349
+    },
+    {
+      "text": "can",
+      "start": 22.395,
+      "end": 22.5
+    },
+    {
+      "text": "flag",
+      "start": 22.569,
+      "end": 22.894
+    },
+    {
+      "text": "that",
+      "start": 22.953,
+      "end": 23.103
+    },
+    {
+      "text": "consequence",
+      "start": 23.161,
+      "end": 23.73
+    },
+    {
+      "text": "before",
+      "start": 23.765,
+      "end": 24.102
+    },
+    {
+      "text": "execution.",
+      "start": 24.16,
+      "end": 24.938
+    },
+    {
+      "text": "Your",
+      "start": 25.6,
+      "end": 25.762
+    },
+    {
+      "text": "application",
+      "start": 25.809,
+      "end": 26.319
+    },
+    {
+      "text": "then",
+      "start": 26.377,
+      "end": 26.505
+    },
+    {
+      "text": "applies",
+      "start": 26.54,
+      "end": 26.888
+    },
+    {
+      "text": "the",
+      "start": 26.923,
+      "end": 26.993
+    },
+    {
+      "text": "rule:",
+      "start": 27.039,
+      "end": 27.399
+    },
+    {
+      "text": "allow,",
+      "start": 27.631,
+      "end": 28.189
+    },
+    {
+      "text": "block,",
+      "start": 28.305,
+      "end": 28.746
+    },
+    {
+      "text": "or",
+      "start": 28.839,
+      "end": 28.99
+    },
+    {
+      "text": "ask",
+      "start": 29.059,
+      "end": 29.303
+    },
+    {
+      "text": "you.",
+      "start": 29.35,
+      "end": 29.663
+    },
+    {
+      "text": "The",
+      "start": 30.081,
+      "end": 30.186
+    },
+    {
+      "text": "classifier",
+      "start": 30.232,
+      "end": 30.836
+    },
+    {
+      "text": "can",
+      "start": 30.883,
+      "end": 30.999
+    },
+    {
+      "text": "be",
+      "start": 31.045,
+      "end": 31.138
+    },
+    {
+      "text": "wrong.",
+      "start": 31.173,
+      "end": 31.672
+    },
+    {
+      "text": "Keep",
+      "start": 32.253,
+      "end": 32.485
+    },
+    {
+      "text": "permission",
+      "start": 32.578,
+      "end": 33.007
+    },
+    {
+      "text": "limits",
+      "start": 33.065,
+      "end": 33.402
+    },
+    {
+      "text": "and",
+      "start": 33.518,
+      "end": 33.785
+    },
+    {
+      "text": "human",
+      "start": 33.866,
+      "end": 34.145
+    },
+    {
+      "text": "approval",
+      "start": 34.168,
+      "end": 34.517
+    },
+    {
+      "text": "around",
+      "start": 34.575,
+      "end": 34.83
+    },
+    {
+      "text": "consequential",
+      "start": 34.9,
+      "end": 35.596
+    },
+    {
+      "text": "actions.",
+      "start": 35.666,
+      "end": 36.27
+    },
+    {
+      "text": "Use",
+      "start": 36.931,
+      "end": 37.152
+    },
+    {
+      "text": "the",
+      "start": 37.175,
+      "end": 37.245
+    },
+    {
+      "text": "model",
+      "start": 37.28,
+      "end": 37.5
+    },
+    {
+      "text": "to",
+      "start": 37.558,
+      "end": 37.605
+    },
+    {
+      "text": "assess",
+      "start": 37.674,
+      "end": 37.988
+    },
+    {
+      "text": "risk.",
+      "start": 38.058,
+      "end": 38.476
+    },
+    {
+      "text": "Keep",
+      "start": 38.638,
+      "end": 38.847
+    },
+    {
+      "text": "the",
+      "start": 38.893,
+      "end": 38.963
+    },
+    {
+      "text": "rules",
+      "start": 39.021,
+      "end": 39.311
+    },
+    {
+      "text": "in",
+      "start": 39.358,
+      "end": 39.416
+    },
+    {
+      "text": "code.",
+      "start": 39.486,
+      "end": 39.904
+    }
+  ],
+  "presenterAssets": "generated/presenter-likeness/"
+}
