@@ -63,6 +63,7 @@
     "test:youtube": "node --test scripts/*.test.mjs",
     "test:ci": "node scripts/run-ci-tests.mjs",
     "publishing:run": "node scripts/publishing-run.mjs",
+    "publishing:dispatch": "node scripts/publishing-dispatcher.mjs",
     "test:publishing": "node --test scripts/publishing-*.test.mjs scripts/instagram-client.test.mjs public/publishing/app.test.mjs",
     "youtube:discover": "node scripts/youtube-inbox.mjs",
     "artifacts:migrate": "node scripts/migrate-artifact-storage.mjs",
