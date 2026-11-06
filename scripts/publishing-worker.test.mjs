@@ -7,6 +7,7 @@ import { createHash } from "node:crypto";
 import { createPublishingLedger } from "./publishing-ledger.mjs";
 import { createPublishingExecution, acquireWorkerLock } from "./publishing-execution.mjs";
 import { runPublishingOnce } from "./publishing-worker.mjs";
+import { dispatchPass } from "./publishing-dispatcher.mjs";
 
 const now = () => "2026-10-03T12:00:00.000Z";
 const config = { accountId: "2", pageId: "1", username: "theballooninquiries" };
@@ -32,6 +33,15 @@ const fixture = async (t, changes = {}) => {
   const args = { ledger, execution, lock, client, config: { ...config, projectRoot: root }, itemId: item.id, now, sleep: async () => {} };
   return { ...args, args, calls, root, id: item.id };
 };
+
+test("dispatcher runs a due approved fixture through the real worker once", async (t) => {
+  const f = await fixture(t);
+  const pass = () => dispatchPass({ list: () => f.ledger.getQueue(), accountId: "2", now, run: id => runPublishingOnce({ ...f.args, itemId: id }) });
+  await pass();
+  await pass();
+  assert.equal(f.ledger.getPublishingItem(f.id).state, "published");
+  assert.equal(f.calls.filter(name => name === "publishContainer").length, 1);
+});
 
 test("one approved item publishes in order and another invocation does not publish again", async (t) => {
   const f = await fixture(t);
