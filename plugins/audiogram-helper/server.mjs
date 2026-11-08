@@ -1,3 +1,7 @@
+import { registerExplainerTools } from "./explainer-tools.mjs";
+import { createExplainerRunner } from "./explainer-runner.mjs";
+import { createCandidateReviewRunner } from "./candidate-review-runner.mjs";
+import { registerCandidateReviewTools } from "./candidate-review-tools.mjs";
 import {
   buildTemplateListing,
   templateListingShape,
@@ -77,9 +81,18 @@ const outputShape = {
     .optional(),
 };
 
-function makeMcpServer({ runner, templateCatalog, templateUi, principal }) {
+function makeMcpServer({
+  runner,
+  templateCatalog,
+  templateUi,
+  candidateRunner,
+  explainerRunner,
+  principal,
+}) {
   const server = new McpServer({ name: "audiogram-helper", version: "0.1.0" });
   registerTemplateUi(server, templateUi);
+  if (explainerRunner) registerExplainerTools(server, explainerRunner);
+  if (candidateRunner) registerCandidateReviewTools(server, candidateRunner);
   server.registerTool(
     "list_video_templates",
     {
@@ -305,6 +318,8 @@ export async function startMcpServer({
   port = 7331,
   templateCatalog,
   principalResolver,
+  candidateRunner,
+  explainerRunner,
   environment = process.env,
   webhookClient,
   spawnProcess,
@@ -317,6 +332,8 @@ export async function startMcpServer({
     validateProcessing: !runner,
   });
   const templateUi = await buildTemplateUi();
+  candidateRunner ??= createCandidateReviewRunner({ projectRoot, environment });
+  explainerRunner ??= createExplainerRunner({ projectRoot, environment });
   const controller = new AbortController();
   let store;
   const storePath = JOB_STORE_PATH(projectRoot, environment);
@@ -393,7 +410,14 @@ export async function startMcpServer({
     : undefined;
   const handler = createMcpHttpHandler({
     makeServer: ({ principal }) =>
-      makeMcpServer({ runner, templateCatalog, templateUi, principal }),
+      makeMcpServer({
+        runner,
+        templateCatalog,
+        templateUi,
+        candidateRunner,
+        explainerRunner,
+        principal,
+      }),
     principalResolver: resolver,
     eventHandler: methods
       ? (server, { principal }) => {

@@ -1,0 +1,41 @@
+{
+  "duration": 40.124063,
+  "fps": 24,
+  "segments": [
+    {
+      "text": "Your coding agent is about to run a command. How do you decide whether to let it?",
+      "start": 0,
+      "end": 5.352
+    },
+    {
+      "text": "A blocklist checks for commands you already marked as dangerous.",
+      "start": 5.352,
+      "end": 8.998
+    },
+    {
+      "text": "An intent check asks a different question: what could this action change, and how difficult would it be to undo?",
+      "start": 8.998,
+      "end": 16.254
+    },
+    {
+      "text": "Take a force push. It can overwrite shared Git history. A small classifier can flag that consequence before execution.",
+      "start": 16.254,
+      "end": 25.6
+    },
+    {
+      "text": "Your application then applies the rule: allow, block, or ask you.",
+      "start": 25.6,
+      "end": 30.081
+    },
+    {
+      "text": "The classifier can be wrong. Keep permission limits and human approval around consequential actions.",
+      "start": 30.081,
+      "end": 36.931
+    },
+    {
+      "text": "Use the model to assess risk. Keep the rules in code.",
+      "start": 36.931,
+      "end": 40.124063
+    }
+  ]
+}

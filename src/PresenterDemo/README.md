@@ -1,0 +1,85 @@
+# Local presenter comparison
+
+Two experimental compositions share the approved script, local Samantha narration,
+seven scene timings, captions, and diagrams. PresenterTalking adds an amplitude-driven
+mouth overlay. It is not phoneme-accurate lip synchronization. PresenterStatic
+uses the supplied reference without animated mouth changes.
+
+The screenshot is a presenter reference, not evidence for the video's topic.
+It is copied unchanged and cropped by layout. The script is in
+`scripts/prepare-presenter-demo.py`. Local screenshot/audio files stay untracked.
+
+Prepare from macOS with say and ffmpeg installed:
+
+```sh
+python3 scripts/prepare-presenter-demo.py --reference /absolute/path/to/reference.png
+```
+
+The crop expects the specific 526 by 942 reference supplied for this comparison.
+It is not a general image-import facility. Preview PresenterStatic or PresenterTalking
+in Studio. Render with the usual Remotion CLI and choose the composition ID.
+The compositions are not entries in the production template catalog.
+
+Timing uses measured generated audio. The amplitude table controls mouth opening
+at each frame. Audio amplitude does not establish which phoneme is being spoken.
+A later accurate lip-sync comparison needs phoneme timing and proper mouth artwork.
+
+## Liam close-up
+
+LiamLipSyncCloseup is a ten-second review sample using accepted ElevenLabs
+audio and Rhubarb sound-based mouth cues. It uses nine SVG mouth drawings.
+The enlarged reference remains low resolution. This is a prototype for
+checking speech timing, not a production-ready character rig.
+
+Paid generation uses scripts/elevenlabs-narration.mjs. It saves a request
+checkpoint before contacting the provider and refuses to repeat that request
+in the same output directory. Never delete a checkpoint to force a retry
+before checking the saved response and outcome.
+
+Local cue preparation never generates paid audio:
+
+```sh
+node scripts/prepare-liam-lipsync.mjs --audio-dir /absolute/path/to/accepted-audio --rhubarb /absolute/path/to/rhubarb
+```
+
+The command checks the saved audio hash, converts it to WAV, supplies the
+approved text to Rhubarb, checks mouth-cue ordering, and prepares caption
+words from ElevenLabs character timing. It saves source metadata in
+src/PresenterDemo/liam-cues.json. It does not modify the earlier Samantha assets.
+
+## Full Liam presenter comparison
+
+LiamOriginalStatic and LiamOriginalTalking use the same accepted narration,
+script-aligned scenes, and original presenter. Only the mouth changes. The
+original presenter is a local generated image, not a screenshot crop. It is
+not stored in Git. Its placement assumes the supplied 1024 by 1536 image.
+To prepare it along with Rhubarb cues, pass `--presenter` with the saved image:
+
+```sh
+node scripts/prepare-liam-lipsync.mjs --audio-dir /path/to/accepted-audio --rhubarb /path/to/rhubarb --presenter /path/to/original-presenter.png
+```
+
+Preparing locally reuses the accepted audio and does not call ElevenLabs.
+The command checks the audio hash, cue timing, and all approved script words.
+
+
+## Happy likeness with twenty mouth drawings (local preview)
+
+Composition: `LiamLikeness20`. It reuses the saved Liam narration and cues. The
+face is fixed; only mouth and eye masks reveal alternate artwork. The atlas has
+five columns and four rows. Cue targets and intermediate cells are listed in
+`mouth-transitions.mjs`; short consonants bypass intermediate drawings.
+
+The personal images are deliberately ignored by Git. Copy `happy-sheet.png`,
+`blink-sheet.png` and `mouths-20.png` from the main checkout's
+`out/presenter-likeness-20/assets` into this worktree's
+`public/generated/presenter-likeness`. Prepare the existing Liam narration as
+documented above. Then run:
+
+```sh
+npx remotion render src/index.ts LiamLikeness20 out/presenter-likeness-20/preview.mp4
+```
+
+The drawing palette contains twenty cells; this recording uses nineteen because
+its F/V cues are too brief for their intermediate drawing. This remains a visual
+prototype, with discrete transitions and a feathered mouth mask.

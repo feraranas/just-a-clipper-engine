@@ -104,10 +104,7 @@ const safeHttpStatus = (error) =>
     ? error.status
     : undefined;
 
-export const createStructuredGenerationProvider = (
-  config,
-  dependencies = {},
-) => {
+const createProvider = (config, dependencies = {}, task = null) => {
   exactKeys(dependencies, dependencyKeys, "provider dependency");
   const providerId = config?.providerId;
   const invalidConfigurationMessage =
@@ -157,7 +154,14 @@ export const createStructuredGenerationProvider = (
       ? apiKeyFrom(dependencies)
       : "unused-oauth-placeholder";
   const selectionRecipe = buildSelectionRecipe(config);
-  const { recipe, sha256: recipeSha256 } = selectionRecipe;
+  const { recipe } = selectionRecipe;
+  const recipeSha256 = task
+    ? sha256Canonical({
+        name: task.name,
+        instructions: task.instructions,
+        jsonSchema: task.jsonSchema,
+      })
+    : selectionRecipe.sha256;
   if (
     recipe.limits.officialMaximumOutputTokens !==
       TRANSCRIPT_LIMITS.officialMaximumOutputTokens ||
@@ -165,8 +169,12 @@ export const createStructuredGenerationProvider = (
       TRANSCRIPT_LIMITS.maximumOutputTextUtf8Bytes
   )
     throw new Error(invalidConfigurationMessage);
-  const expectedInstructionsSha256 = recipe.prompt.sha256;
-  const expectedJsonSchemaSha256 = recipe.outputSchema.sha256;
+  const expectedInstructionsSha256 = task
+    ? sha256Canonical(task.instructions)
+    : recipe.prompt.sha256;
+  const expectedJsonSchemaSha256 = task
+    ? sha256Canonical(task.jsonSchema)
+    : recipe.outputSchema.sha256;
   const desiredClipCount = recipe.desiredClipCount;
   const maximumOutputTextUtf8Bytes = recipe.limits.maximumOutputTextUtf8Bytes;
   const officialClient =
@@ -200,10 +208,12 @@ export const createStructuredGenerationProvider = (
           "Structured generation jsonSchema does not match the configured selection recipe",
         );
       const transcript = JSON.parse(request.input);
-      const boundSchema = buildTranscriptJsonSchema(
-        desiredClipCount,
-        transcript.cues?.map((cue) => cue.id) ?? [],
-      );
+      const boundSchema =
+        task?.jsonSchema ??
+        buildTranscriptJsonSchema(
+          desiredClipCount,
+          transcript.cues?.map((cue) => cue.id) ?? [],
+        );
       const body = {
         model: SELECTOR_MODEL,
         store: false,
@@ -216,7 +226,7 @@ export const createStructuredGenerationProvider = (
         input: request.input,
         text: {
           format: {
-            name: FORMAT_NAME,
+            name: task?.name ?? FORMAT_NAME,
             type: "json_schema",
             schema: boundSchema,
             strict: true,
@@ -320,6 +330,7 @@ export const createStructuredGenerationProvider = (
         extracted = extractStructuredOutput(response, {
           desiredClipCount,
           maximumOutputTextUtf8Bytes,
+          ...(task ? { outputSchema: task.outputSchema } : {}),
         });
       } catch (error) {
         throw new SafeDiagnosticError({
@@ -344,3 +355,22 @@ export const createStructuredGenerationProvider = (
     },
   };
 };
+
+export const createStructuredGenerationProvider = (config, dependencies = {}) =>
+  createProvider(config, dependencies);
+// Explicitly separated from the immutable transcript-selector contract.
+export function createTaskGenerationProvider(config, task, dependencies = {}) {
+  if (
+    !/^[a-z][a-z0-9_]{1,60}$/.test(task?.name ?? "") ||
+    typeof task?.instructions !== "string" ||
+    !task.instructions ||
+    !task.jsonSchema ||
+    typeof task.outputSchema?.safeParse !== "function"
+  )
+    throw Error("Invalid generation task contract");
+  const fixed = {
+    ...task,
+    jsonSchema: JSON.parse(canonicalJson(task.jsonSchema)),
+  };
+  return createProvider(config, dependencies, fixed);
+}

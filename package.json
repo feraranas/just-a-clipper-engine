@@ -72,7 +72,11 @@
     "youtube:discover": "node scripts/youtube-inbox.mjs",
     "artifacts:migrate": "node scripts/migrate-artifact-storage.mjs",
     "samples:serve": "node --env-file-if-exists=.env scripts/template-sample-server.mjs",
-    "samples:render": "node --env-file-if-exists=.env scripts/render-template-sample.mjs"
+    "samples:render": "node --env-file-if-exists=.env scripts/render-template-sample.mjs",
+    "candidates:review": "node scripts/candidate-review-run.mjs",
+    "test:candidate-review": "node --test scripts/candidate-review.test.mjs plugins/audiogram-helper/candidate-review*.test.mjs",
+    "explainer": "node --env-file-if-exists=.env scripts/explainer/run.mjs",
+    "test:explainer": "node --test scripts/explainer-*.test.mjs plugins/audiogram-helper/explainer*.test.mjs"
   },
   "sideEffects": [
     "*.css"

@@ -20,7 +20,7 @@ export const createHttpJevClient = ({
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), timeoutMs);
       try {
-        const candidateWindows = Array.isArray(candidates) ? candidates.map((candidate) => ({ startMs: candidate.startMs - 30_000, endMs: candidate.endMs + 30_000 })) : [];
+        const candidateWindows = Array.isArray(candidates) ? candidates.filter((candidate) => Number.isFinite(candidate.startMs) && Number.isFinite(candidate.endMs)).map((candidate) => ({ startMs: candidate.startMs - 30_000, endMs: candidate.endMs + 30_000 })) : [];
         const boundedCues = Array.isArray(transcript?.cues) && candidateWindows.length > 0
           ? transcript.cues.filter((cue) => candidateWindows.some((window) => cue.endMs > window.startMs && cue.startMs < window.endMs)).slice(0, 1_200)
           : transcript?.cues;

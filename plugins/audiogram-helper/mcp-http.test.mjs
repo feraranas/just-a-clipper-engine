@@ -86,12 +86,7 @@ test("modern requests can list tools and read the existing template preview reso
   });
   t.after(() => server.close());
   const tools = (await rpc(server.url, "tools/list")).body.result;
-  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), [
-    "create_audiogram",
-    "get_audiogram_status",
-    "list_video_templates",
-    "retry_audiogram",
-  ]);
+  assert.deepEqual(tools.tools.map((tool) => tool.name).sort(), ["continue_explainer", "create_audiogram", "get_audiogram_status", "get_candidate_review", "list_scene_blocks", "list_video_templates", "prepare_candidate_review", "retry_audiogram", "select_candidate_review"]);
   const listing = (
     await rpc(server.url, "tools/call", {
       name: "list_video_templates",

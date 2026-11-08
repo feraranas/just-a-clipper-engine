@@ -135,3 +135,39 @@ hosting. Test actual playback before claiming the preview works.
 
 This page is separate from the MCP tools. It does not create a ChatGPT preview
 card or change `list_video_templates`. That integration remains separate work.
+
+## Candidate review before making an explanation video
+
+The candidate-review tools reuse transcript extraction, the current LLM selector,
+and Jev. They save a review in the shared data folder, not in the source checkout.
+They do not generate a script, narration, video, or publishing item.
+
+- `prepare_candidate_review`: supply a public YouTube URL and a UUID requestId.
+- `get_candidate_review`: supply the returned reviewId to read saved progress,
+  candidates, timestamped evidence, exact questions, and raw Jev answers.
+- `select_candidate_review`: supply reviewId, reviewHash, and the candidateId the
+  user explicitly chose. The fingerprint prevents selection against changed data.
+
+An identical preparation request ID retrieves its prior progress. A different
+source cannot reuse that ID. Explicit retry uses a new requestId. Inspect uncertain
+attempts first, since another request can incur another provider charge.
+
+The first version intentionally uses the existing clip-drafting recipe and its
+length/count constraints. Eight existing framework questions receive per-candidate
+scores for inspection. The overall ranking retains the existing relevance,
+insight, and self-containedness weights. It does not select a topic automatically.
+Missing Jev or LLM configuration prevents preparation. Reading a saved review
+and selecting a topic do not require provider credentials.
+
+From this checkout, use the existing environment setup and run:
+
+```sh
+npm run candidates:review -- --url "https://www.youtube.com/watch?v=_U-O5lYhJ7Q"
+npm run candidates:review -- --review REVIEW_ID
+npm run candidates:review -- --review REVIEW_ID --hash REVIEW_HASH --select candidate-1
+```
+
+The shared file is `candidate-reviews.sqlite` under AUDIOGRAM_DATA_ROOT.
+Output includes public source text, so avoid publishing full trial output by accident.
+Start the MCP server from this checkout to load the added tools. Existing running
+servers do not acquire new tools until restarted with this code.
