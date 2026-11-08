@@ -922,20 +922,20 @@ test("result artifact paths must be existing nonempty mp4 files under treatments
     title: "Talk",
     artifacts: ["out/treatments/../../secret.mp4"],
   });
-  assert.equal((await runner.getStatus(job.jobId)).status, "failed");
+  await assert.rejects(runner.getStatus(job.jobId), { code: "ARTIFACT_UNAVAILABLE" });
   await writeFile(path.join(treatmentDir, "empty.mp4"), Buffer.alloc(0));
   await store.setResult(job.jobId, {
     status: "complete",
     title: "Talk",
     artifacts: ["out/treatments/empty.mp4"],
   });
-  assert.equal((await runner.getStatus(job.jobId)).status, "failed");
+  await assert.rejects(runner.getStatus(job.jobId), { code: "ARTIFACT_UNAVAILABLE" });
   await store.setResult(job.jobId, {
     status: "complete",
     title: "Talk",
     artifacts: ["out/treatments/missing.mp4"],
   });
-  assert.equal((await runner.getStatus(job.jobId)).status, "failed");
+  await assert.rejects(runner.getStatus(job.jobId), { code: "ARTIFACT_UNAVAILABLE" });
   store.close();
 });
 

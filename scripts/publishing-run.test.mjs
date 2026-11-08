@@ -11,6 +11,7 @@ const environment = {
   INSTAGRAM_PAGE_ACCESS_TOKEN: "secret-test-token",
   INSTAGRAM_ACCOUNT_ID: "2",
   INSTAGRAM_PAGE_ID: "1",
+  INSTAGRAM_USERNAME: "another_account",
 };
 test("CLI without arguments exits nonzero without exposing inherited credentials", () => {
   const result = spawnSync(
@@ -61,7 +62,7 @@ test("check-account uses only identity reads and never opens any ledger", async 
         assert.deepEqual(identity, {
           pageId: "1",
           accountId: "2",
-          username: "theballooninquiries",
+          username: "another_account",
         });
         return identity;
       },

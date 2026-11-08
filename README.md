@@ -50,6 +50,32 @@ start the loopback-only MCP service with `npm run audiogram:mcp`. Connect it
 through the Secure MCP Tunnel; this development bridge does not expose a
 public endpoint or publish rendered clips.
 
+Optional MCP Events uses the same SQLite job store and stage logger. Set
+`AUDIOGRAM_MCP_EVENTS_ENABLED=1` and explicitly select
+`AUDIOGRAM_MCP_EVENTS_MODE=private-tunnel` for a private development tunnel.
+Supply `AUDIOGRAM_EVENT_SECRET_KEY` securely at runtime: a persistent base64
+encoding of 32 random bytes. Do not put a real key in Git, chat, or command
+arguments. Keep it stable across restarts; replacing it makes stored callback
+secrets and cursors unreadable. Key rotation needs a separate migration.
+
+The modern MCP endpoint then advertises `events/list`, `events/subscribe`, and
+`events/unsubscribe`. Clients subscribe by job ID to `audiogram.job.progress`
+or `audiogram.job.finished`. The server verifies the signed callback before
+activation, encrypts its secret, and resumes pending delivery after restart.
+Safe job status includes capture health, delivery health, and subscription IDs.
+This change does not update the remote plugin or prove ChatGPT presentation.
+
+`shared` mode requires a trusted authenticated `principalResolver` supplied to
+`startMcpServer`; it cannot be enabled safely through the CLI alone. Existing
+ownerless jobs require an explicit owner migration in shared mode. Private
+tunnel mode assigns these jobs to `local-owner`; do not use that mode for
+multiple users. No owner field is accepted in public tool arguments.
+
+Start the service visibly with `npm run audiogram:mcp`; stop it with Ctrl-C.
+Shutdown stops new claims, aborts callback requests, waits for the dispatcher,
+and closes its store. Notification failures never retry processing or change a
+render result. A successful HTTP receipt does not prove ChatGPT displayed it.
+
 Jev reranking is opt-in. Without both Typesafe settings, transcript-LLM ranks
 its generated candidates without Jev:
 

@@ -6,6 +6,10 @@ import { join } from "node:path";
 import { readJobDiagnostics } from "../plugins/audiogram-helper/job-diagnostics.mjs";
 
 import { runAudiogramUrlCli } from "./audiogram-url.mjs";
+import { createJobStore } from "../plugins/audiogram-helper/job-store.mjs";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
+import { fileURLToPath, URL } from "node:url";
 
 const successResult = {
   contractVersion: 1,
@@ -30,6 +34,101 @@ const makeIO = () => {
     },
   };
 };
+
+test("managed CLI process opens its own durable sink, flushes it and returns capture health", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "mcp-cli-child-"));
+  const file = join(root, "jobs.sqlite");
+  const store = createJobStore(file);
+  t.after(async () => {
+    store.close();
+    await rm(root, { recursive: true, force: true });
+  });
+  const job = store.createOrGetJob({
+    videoId: "video",
+    sourceUrl: "https://youtu.be/abcdefghijk",
+  }).job;
+  const moduleUrl = new URL("./audiogram-url.mjs", import.meta.url).href;
+  const script = `import {runAudiogramUrlCli} from ${JSON.stringify(moduleUrl)};
+    await runAudiogramUrlCli(["--url", "https://youtu.be/abcdefghijk", "--job-id", process.env.AUDIOGRAM_JOB_ID],
+      {stdout:process.stdout,stderr:process.stderr}, {runPipeline:async ({dependencies})=>{
+        await dependencies.onEvent({stage:"transcript",status:"completed"});
+        await dependencies.onEvent({stage:"jev",status:"skipped"});
+        return {contractVersion:1,status:"no_clips",artifactPaths:[]};
+      }});`;
+  const { stdout } = await promisify(execFile)(
+    process.execPath,
+    ["--input-type=module", "-e", script],
+    {
+      cwd: fileURLToPath(new URL("../", import.meta.url)),
+      env: {
+        ...process.env,
+        AUDIOGRAM_EVENT_CAPTURE_ENABLED: "1",
+        AUDIOGRAM_EVENT_STORE_PATH: file,
+        AUDIOGRAM_JOB_ID: job.jobId,
+        AUDIOGRAM_RUN_ID: job.jobId,
+        AUDIOGRAM_DIAGNOSTICS_ROOT: join(root, "runs"),
+      },
+    },
+  );
+  const result = JSON.parse(stdout);
+  assert.equal(result.notificationHealth.capture, "complete");
+  const events = store.listJobEvents({ jobId: job.jobId });
+  assert.deepEqual(
+    events.map((event) => event.data.kind),
+    ["stage_completed", "stage_skipped"],
+  );
+  assert.equal(events[0].data.job_id, job.jobId);
+});
+
+test("managed capture rejects mismatched run identity before pipeline execution", async () => {
+  const { io, stdout } = makeIO();
+  const id = "7bb07aec-e580-4ca4-a2fe-d96bc02b8035";
+  let calls = 0;
+  await runAudiogramUrlCli(
+    ["--url", successResult.source.url, "--job-id", id],
+    io,
+    {
+      environment: {
+        AUDIOGRAM_EVENT_CAPTURE_ENABLED: "1",
+        AUDIOGRAM_JOB_ID: id,
+        AUDIOGRAM_RUN_ID: "11111111-1111-4111-8111-111111111111",
+        AUDIOGRAM_EVENT_STORE_PATH: "/tmp/not-opened.sqlite",
+      },
+      runPipeline: async () => {
+        calls++;
+        return successResult;
+      },
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(JSON.parse(stdout.join("")).status, "failed");
+});
+
+test("managed capture rejects a missing stored job instead of running untracked work", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "mcp-cli-missing-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const { io, stdout } = makeIO();
+  const id = "7bb07aec-e580-4ca4-a2fe-d96bc02b8035";
+  let calls = 0;
+  await runAudiogramUrlCli(
+    ["--url", successResult.source.url, "--job-id", id],
+    io,
+    {
+      environment: {
+        AUDIOGRAM_EVENT_CAPTURE_ENABLED: "1",
+        AUDIOGRAM_JOB_ID: id,
+        AUDIOGRAM_RUN_ID: id,
+        AUDIOGRAM_EVENT_STORE_PATH: join(root, "jobs.sqlite"),
+      },
+      runPipeline: async () => {
+        calls++;
+        return successResult;
+      },
+    },
+  );
+  assert.equal(calls, 0);
+  assert.equal(JSON.parse(stdout.join("")).status, "failed");
+});
 
 test("rejects a missing URL as a usage error without writing JSON", async () => {
   const { io, stdout, stderr } = makeIO();
@@ -63,7 +162,10 @@ test("with a job ID, CLI creates its own logger and passes it into the pipeline"
       environment: {},
       runPipeline: async (input) => {
         pipelineDependencies = input.dependencies;
-        await input.dependencies.onEvent({ stage: "transcript", status: "completed" });
+        await input.dependencies.onEvent({
+          stage: "transcript",
+          status: "completed",
+        });
         return successResult;
       },
     },

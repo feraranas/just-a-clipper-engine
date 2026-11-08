@@ -48,6 +48,7 @@ export function createJobDiagnostics({
   ),
   currentTime = Date.now(),
   maxFileBytes = defaultMaxFileBytes,
+  durableSink,
 } = {}) {
   validateJobId(jobId);
   if (
@@ -79,6 +80,7 @@ export function createJobDiagnostics({
     logPath: files.events,
     now,
     maxFileBytes,
+    durableSink,
     onError: async (error) => {
       diagnosticsIncomplete = true;
       await onError?.(error);
@@ -106,6 +108,12 @@ export function createJobDiagnostics({
         .map(async (entry) => {
           const oldPath = join(root, entry.name);
           try {
+            try {
+              await stat(join(oldPath, "finalization-result.json"));
+              return; // Pending final results remain pinned until confirmed commit.
+            } catch (error) {
+              if (error.code !== "ENOENT") return;
+            }
             if ((await stat(oldPath)).mtimeMs < cutoff)
               await rm(oldPath, { recursive: true, force: true });
           } catch {
@@ -131,6 +139,14 @@ export function createJobDiagnostics({
   const event = async (input) => {
     try {
       await ready;
+      if (
+        durableSink &&
+        ((input.jobId !== undefined && input.jobId !== jobId) ||
+          (input.runId !== undefined && input.runId !== jobId))
+      ) {
+        await durableSink.record(input);
+        return undefined;
+      }
       return await logger.event({ ...input, jobId, runId: jobId });
     } catch (error) {
       diagnosticsIncomplete = true;
@@ -142,7 +158,7 @@ export function createJobDiagnostics({
       return undefined;
     }
   };
-  const scopedLogger = Object.freeze({ event });
+  const scopedLogger = Object.freeze({ event, flush: logger.flush });
 
   return Object.freeze({
     jobId,

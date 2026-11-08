@@ -28,7 +28,7 @@ command; this slice preserves the existing approval and scheduling UI.
 
 The Meta adapter uses Facebook Login and the Page access token. Before claiming
 an item, verify the configured Page links to the configured Instagram ID and
-that the Instagram username matches `theballooninquiries`. Claim only records
+that the Instagram username matches the required `INSTAGRAM_USERNAME` setting. Claim only records
 for that account with explicit approval and a due UTC timestamp. Never map
 legacy `local-approval` records to the real account automatically.
 
@@ -146,6 +146,14 @@ Deferred: broader scheduling UX redesign, multiple accounts, token onboarding
 UI, automatic service installation and other social networks.
 
 ## Implementation reconciliation and deviations
+
+The worker and recovery command require `INSTAGRAM_USERNAME` without `@`.
+Missing or invalid values stop before Meta calls; the account check compares
+the configured username with Meta's response and rejects mismatches. Existing
+deployments must set this variable before their next worker invocation. This
+changes the expected username's configuration only; account-ID linkage and
+human approval checks remain unchanged. Publishing tests cover configuration,
+command propagation, and mismatched usernames.
 
 Implemented in `publishing-ledger.mjs`, `publishing-execution.mjs`,
 `instagram-client.mjs`, `publishing-worker.mjs` and `publishing-run.mjs`.

@@ -8,6 +8,7 @@
 - `url-heatmap` `AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap` selects from YouTube Most Replayed (no LLM).
 - `url-transcript-llm` the default selector, which needs `AUDIOGRAM_LLM_PROVIDER` and credentials.
 - `url-queue` completed renders appear in the approval queue.
+- `url-failed` metadata/download failures still exit 0 with `status: failed` and a `failures` list.
 - `url-retry` `--retry-failed-renders` re-renders failed clips.
 
 ## How to get to it (user POV)
@@ -18,13 +19,14 @@
 
 Preconditions:
 
-- yt-dlp, ffmpeg, ffprobe on PATH; `AUDIOGRAM_DATA_ROOT=$STATE/data` (absolute); a public video with a Most Replayed heatmap.
+- Node >= 22.13; yt-dlp, ffmpeg, ffprobe on PATH; `AUDIOGRAM_DATA_ROOT=$STATE/data` (absolute); a public video with a Most Replayed heatmap (`dQw4w9WgXcQ` works).
 
 - **Usage.** Run `node scripts/audiogram-url.mjs`. Exit `2`; stderr `--url is required.` plus usage.
-- **Heatmap run.** Run `AUDIOGRAM_DATA_ROOT=$STATE/data AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap npm run audiogram:url -- --url <url>`. stdout JSON `status: complete`; MP4s under `out/treatments/...`; the queue lists them.
+- **Heatmap run.** Run `AUDIOGRAM_DATA_ROOT=$STATE/data AUDIOGRAM_CLIP_SELECTOR=youtube-heatmap node scripts/audiogram-url.mjs --url <url>` (about 10–30 s). stdout JSON `status: complete` with `artifactPaths` relative to the data root: `$STATE/data/artifacts/<hash>/<hash>/video.mp4` plus `video.manifest.json`. ffprobe: h264 1080×1920 + AAC. `/api/items` on the approval UI lists one `queued` item for the video.
 
 ## Gotchas
 
-- Not proved. The heatmap run reads from YouTube (no writes, no paid API) but depends on a live video having heatmap data.
 - The default selector calls an LLM (paid API or ChatGPT OAuth). Do not use it for verification without approval.
-- `public/generated/` and `out/` are gitignored but shared across checkouts; key outputs by run.
+- `AUDIOGRAM_MAX_CLIPS` defaults to 1 and a heatmap clip is one Most Replayed marker, so the clip can be very short (about 2 s for `dQw4w9WgXcQ`, interval 0–2.14 s).
+- YouTube may answer `Sign in to confirm you're not a bot`; the run then returns `status: failed`, stage `metadata`. Retry with another video or later; it is not a product failure.
+- The run leaves unkeyed intermediates in the checkout: `public/generated/<videoId>/` and `out/treatments/audiogram-basic/1/<videoId>/` (both gitignored, shared across runs). Delete them during cleanup.

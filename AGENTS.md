@@ -61,4 +61,4 @@ skills/verify-just-a-clipper-engine/scripts/clipctl journey render-classic-fixtu
 skills/verify-just-a-clipper-engine/scripts/clipctl cleanup
 ```
 
-It renders the synthetic `tests/fixtures/classic-v1` fixture offline with no OAuth, LLM, YouTube or Instagram calls. Never run `publishing:run --live` for verification. Feature recipes, including what is not yet proved, are in `skills/verify-just-a-clipper-engine/features/`.
+It renders the synthetic `tests/fixtures/classic-v1` fixture offline with no OAuth, LLM, YouTube or Instagram calls. Never run `publishing:run --live`, or `publishing-recover.mjs --apply` against a real ledger, for verification. Feature recipes, including what is not yet proved, are in `skills/verify-just-a-clipper-engine/features/`.

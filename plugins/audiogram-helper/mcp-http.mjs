@@ -15,14 +15,17 @@ export function createMcpHttpHandler({
     typeof principalResolver !== "function"
   )
     throw new TypeError("principalResolver must be a function.");
-  if (eventHandler !== undefined)
-    throw new TypeError(
-      "Events handlers are not enabled in this protocol slice.",
-    );
+  if (eventHandler !== undefined && typeof eventHandler !== "function")
+    throw new TypeError("eventHandler must be a function.");
   const context = new AsyncLocalStorage();
   const handler = createMcpHandler(
-    (request) =>
-      makeServer({ ...request, principal: context.getStore()?.principal }),
+    async (request) => {
+      const ctx = { ...request, principal: context.getStore()?.principal };
+      const server = await makeServer(ctx);
+      if (eventHandler && request.era === "modern")
+        await eventHandler(server, ctx);
+      return server;
+    },
     { legacy: "stateless", maxRequestBodySize: 1024 * 1024 },
   );
   const handleNode = toNodeHandler(handler, {
@@ -38,15 +41,13 @@ export function createMcpHttpHandler({
           /* Deny failed authentication. */
         }
         if (!principal) {
-          res
-            .writeHead(403, { "content-type": "application/json" })
-            .end(
-              JSON.stringify({
-                jsonrpc: "2.0",
-                id: body?.id ?? null,
-                error: { code: -32001, message: "Forbidden" },
-              }),
-            );
+          res.writeHead(403, { "content-type": "application/json" }).end(
+            JSON.stringify({
+              jsonrpc: "2.0",
+              id: body?.id ?? null,
+              error: { code: -32001, message: "Forbidden" },
+            }),
+          );
           return;
         }
       }

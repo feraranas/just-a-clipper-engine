@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { DatabaseSync } from "node:sqlite";
+import { readPublishingHistory } from "./publishing-recovery-store.mjs";
 
 import { sanitizeErrorDiagnostic } from "./error-diagnostics.mjs";
 
@@ -350,6 +351,7 @@ export const createPublishingLedger = (
         .map(mapItem);
     },
     getPublishingItem: getItem,
+    getAttemptHistory: id => readPublishingHistory(dbPath, id),
     updateCaption: (id, caption) => withImmediateTransaction(() => {
       if (typeof caption !== "string") throw new Error("caption must be a string");
       const value = caption;

@@ -11,7 +11,11 @@ Surfaces (from README, `package.json` scripts and `scripts/`):
 - Pipelines: `npm run audiogram:url -- --url <youtube-url>` and `npm run youtube:inbox`. They need yt-dlp/YouTube, and, for the default `transcript-llm` selector, an LLM provider (OpenAI API key or ChatGPT OAuth).
 - Local approval UI: `node scripts/publishing-server.mjs` on `http://127.0.0.1:8787/` (`PORT`), backed by the SQLite ledger.
 - Instagram publishing: `npm run publishing:run -- --item ID --live`. This is a real external post; never drive it for verification.
-- MCP helper: `npm run audiogram:mcp`.
+- Instagram upload recovery: `node scripts/publishing-recover.mjs --item ID [--apply ...]`. Inspection calls Meta GETs; drive only its offline guards.
+- MCP helper: `npm run audiogram:mcp` on `http://127.0.0.1:7331/mcp` (modern protocol `2026-07-28` and legacy clients).
+- Template samples: `npm run samples:render` (macOS `say`) and `npm run samples:serve` on `http://127.0.0.1:8790/`.
+
+The render also works on Node 20; everything else imports `node:sqlite` and needs Node >= 22.13.
 
 All driving goes through `scripts/clipctl`, which resolves its own real path (works from `skills/`, `.cursor/skills/` or `.claude/skills/`).
 
@@ -22,7 +26,7 @@ export RUN_ID=$(date +%s)        # state in /tmp/verify-clipper-$RUN_ID
 skills/verify-just-a-clipper-engine/scripts/clipctl launch
 ```
 
-Runs `npm ci` if `node_modules/.bin/remotion` is missing. Then it stages the synthetic fixture (`tests/fixtures/classic-v1/{audio.wav,thumbnail.svg,captions.json}`) into `public/generated/verify-$RUN_ID/` and writes `$STATE/props.json` (the fixture's `props.json` repointed there). The staged dir is verification scaffolding under the gitignored `public/generated/`; cleanup removes it. Ready = `READY state=... staged=...`. Short-lived CLI: no server to keep alive.
+Runs `npm ci` if `node_modules/.bin/remotion` is missing or `package-lock.json` is newer than `node_modules/.package-lock.json` (new dependencies after a pull). Then it stages the synthetic fixture (`tests/fixtures/classic-v1/{audio.wav,thumbnail.svg,captions.json}`) into `public/generated/verify-$RUN_ID/` and writes `$STATE/props.json` (the fixture's `props.json` repointed there). The staged dir is verification scaffolding under the gitignored `public/generated/`; cleanup removes it. Ready = `READY state=... staged=...`. Short-lived CLI: no server to keep alive.
 
 ## Doctor
 
@@ -30,7 +34,7 @@ Runs `npm ci` if `node_modules/.bin/remotion` is missing. Then it stages the syn
 skills/verify-just-a-clipper-engine/scripts/clipctl doctor
 ```
 
-Read-only. All `OK`: remotion CLI present, `@remotion/cli` is 4.0.525 (the manifest pin), ffmpeg/ffprobe on PATH, fixture staged, `remotion compositions` lists `AudiogramBasic`. It also prints the Node version (README requires 22), the browser in use and repo HEAD.
+Read-only. All `OK`: remotion CLI present, `node_modules` not older than `package-lock.json`, `@remotion/cli` is 4.0.525 (the manifest pin), ffmpeg/ffprobe on PATH, fixture staged, `remotion compositions` lists `AudiogramBasic`. It prints `OK` or `WARN` for `node:sqlite` (a `WARN`, as on Node 20, blocks every feature except the render), then the Node version (README requires 22), the browser in use and repo HEAD.
 
 ## Drive
 
@@ -61,6 +65,8 @@ Removes only `public/generated/verify-$RUN_ID` and `/tmp/verify-clipper-$RUN_ID`
 ## Helpers
 
 - `scripts/clipctl launch | doctor | journey render-classic-fixture | cleanup` (env `RUN_ID`, `CHROME_PATH`, optional `CLIP_VERIFY_STATE`, `CLIP_VERIFY_EVIDENCE`).
+- `scripts/ui-shot.mjs URL OUT.png [WAIT_MS]`: screenshots a local page plus its text with headless Chrome (`CHROME_PATH` or system Chrome). Used for the [approval UI](features/approval-ui.md).
+- `scripts/mcp-modern.mjs URL [TOOL [JSON_ARGS]]`: calls a running MCP helper with the pinned modern-protocol client. Used for the [MCP helper](features/mcp-helper.md). Both need Node 22 and the checkout's `node_modules`.
 
 ## Maintenance
 
