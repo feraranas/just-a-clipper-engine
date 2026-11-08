@@ -216,6 +216,7 @@ export function createJobDebugReader({
           subscriptions = db
             .prepare(
               `SELECT s.event_name,s.state,s.expires_at,
+          EXISTS(SELECT 1 FROM event_deliveries d WHERE d.subscription_id=s.id AND d.status='stopped') AS stopped,
           EXISTS(SELECT 1 FROM event_deliveries d WHERE d.subscription_id=s.id AND (d.status='stopped' OR (d.status='pending' AND d.attempts>0))) AS degraded
           FROM event_subscriptions s WHERE s.job_id=? LIMIT 100`,
             )
@@ -233,7 +234,9 @@ export function createJobDebugReader({
                       "cancelled",
                     ]),
               degraded: !!s.degraded,
+              stopped: !!s.stopped,
             }));
+        const active = subscriptions.filter((s) => s.state === "active");
         return {
           source: text(sourceLabel, 80),
           job,
@@ -244,11 +247,11 @@ export function createJobDebugReader({
               ? "unavailable"
               : !subscriptions.length
                 ? "not_subscribed"
-                : subscriptions.some((s) => s.degraded)
-                  ? "degraded"
-                  : subscriptions.some((s) => s.state === "active")
-                    ? "active"
-                    : "stopped",
+                : !active.length || active.every((s) => s.stopped)
+                  ? "stopped"
+                  : active.some((s) => s.degraded)
+                    ? "degraded"
+                    : "active",
           },
         };
       });
