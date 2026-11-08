@@ -58,7 +58,8 @@ encoding of 32 random bytes. Do not put a real key in Git, chat, or command
 arguments. Keep it stable across restarts; replacing it makes stored callback
 secrets and cursors unreadable. Key rotation needs a separate migration.
 
-The modern MCP endpoint then advertises `events/list`, `events/subscribe`, and
+Both modern discovery and legacy initialization then advertise Events. The same
+MCP endpoint exposes `events/list`, `events/subscribe`, and
 `events/unsubscribe`. Clients subscribe by job ID to `audiogram.job.progress`
 or `audiogram.job.finished`. The server verifies the signed callback before
 activation, encrypts its secret, and resumes pending delivery after restart.

@@ -22,8 +22,7 @@ export function createMcpHttpHandler({
     async (request) => {
       const ctx = { ...request, principal: context.getStore()?.principal };
       const server = await makeServer(ctx);
-      if (eventHandler && request.era === "modern")
-        await eventHandler(server, ctx);
+      if (eventHandler) await eventHandler(server, ctx);
       return server;
     },
     { legacy: "stateless", maxRequestBodySize: 1024 * 1024 },

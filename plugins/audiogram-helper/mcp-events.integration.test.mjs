@@ -33,22 +33,23 @@ const params = (extra) => ({
     "io.modelcontextprotocol/clientCapabilities": {},
   },
 });
-async function rpc(url, method, input = {}, owner) {
+async function rpc(url, method, input = {}, owner, version = "2026-07-28") {
+  const modern = version === "2026-07-28";
   const response = await fetch(url, {
     method: "POST",
     headers: {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
-      "MCP-Protocol-Version": "2026-07-28",
-      "Mcp-Method": method,
-      ...(method === "tools/call" ? { "Mcp-Name": input.name } : {}),
+      "MCP-Protocol-Version": version,
+      ...(modern ? { "Mcp-Method": method } : {}),
+      ...(modern && method === "tools/call" ? { "Mcp-Name": input.name } : {}),
       ...(owner ? { "test-owner": owner } : {}),
     },
     body: JSON.stringify({
       jsonrpc: "2.0",
       id: 1,
       method,
-      params: params(input),
+      params: modern ? params(input) : input,
     }),
   });
   const text = await response.text();
@@ -123,6 +124,165 @@ async function fixture(t, options = {}) {
     webhookClient,
   };
 }
+
+for (const version of ["2025-03-26", "2025-11-25"])
+  test(`legacy ${version} advertises and executes verified job Events through the shared dispatcher`, async (t) => {
+    const f = await fixture(t);
+    const call = (method, input) =>
+      rpc(f.server.url, method, input, undefined, version);
+    const initialized = await call("initialize", {
+      protocolVersion: version,
+      capabilities: {},
+      clientInfo: { name: "legacy-events-test", version: "1" },
+    });
+    assert.deepEqual(initialized.result.capabilities.events, {});
+    const catalog = await call("events/list");
+    assert.deepEqual(
+      catalog.result.events.map((event) => event.name),
+      ["audiogram.job.progress", "audiogram.job.finished"],
+    );
+    const created = await call("tools/call", {
+      name: "create_audiogram",
+      arguments: { url: "https://youtu.be/abcdefghijk" },
+    });
+    assert.equal(created.result.structuredContent.monitoring.available, true);
+    const jobId = created.result.structuredContent.jobId;
+    const delivery = {
+      mode: "webhook",
+      url: "https://receiver.example.com/callback",
+      secret,
+    };
+    for (const name of ["audiogram.job.progress", "audiogram.job.finished"]) {
+      const subscription = await call("events/subscribe", {
+        name,
+        arguments: { job_id: jobId },
+        delivery,
+        cursor: null,
+      });
+      assert.match(subscription.result.id, /^sub_/);
+    }
+    assert.ok(
+      f.received.some(
+        (entry) => JSON.parse(entry.body).type === "verification",
+      ),
+    );
+    const job = f.store.getJob(jobId),
+      sourceId = randomUUID();
+    f.store.appendProgress({
+      jobId,
+      sourceId,
+      fact: projectStageFact({
+        job,
+        sourceId,
+        stageInstanceId: randomUUID(),
+        normalized: { stage: "transcript", status: "completed" },
+      }),
+    });
+    f.store.finalizeJob(
+      jobId,
+      { status: "no_clips", artifacts: [], title: null },
+      { capture: "complete" },
+    );
+    const deadline = Date.now() + 2500;
+    const events = () =>
+      f.received
+        .map((entry) => JSON.parse(entry.body))
+        .filter((event) => event.name);
+    while (events().length < 2 && Date.now() < deadline) await wait(10);
+    assert.deepEqual(
+      events()
+        .map((event) => event.name)
+        .sort(),
+      ["audiogram.job.finished", "audiogram.job.progress"],
+    );
+    assert.ok(events().every((event) => event.data.job_id === jobId));
+    const status = await call("tools/call", {
+      name: "get_audiogram_status",
+      arguments: { jobId },
+    });
+    assert.equal(status.result.structuredContent.status, "no_clips");
+    assert.equal(
+      status.result.structuredContent.notificationHealth.delivery,
+      "active",
+    );
+    for (const name of ["audiogram.job.progress", "audiogram.job.finished"]) {
+      const cancelled = await call("events/unsubscribe", {
+        name,
+        arguments: { job_id: jobId },
+        delivery: { mode: "webhook", url: delivery.url },
+      });
+      assert.deepEqual(cancelled.result, {});
+    }
+    assert.equal(
+      f.store.getNotificationHealth(jobId, { principal: { id: "local-owner" } })
+        .delivery,
+      "stopped",
+    );
+    assert.equal(f.store.getJob(jobId).status, "no_clips");
+  });
+
+test("legacy Events obey shared ownership and the feature-off gate", async (t) => {
+  const f = await fixture(t, {
+    environment: { ...environment, AUDIOGRAM_MCP_EVENTS_MODE: "shared" },
+    principalResolver: async (req) =>
+      req.headers["test-owner"] ? { id: req.headers["test-owner"] } : null,
+  });
+  const call = (method, input, owner) =>
+    rpc(f.server.url, method, input, owner, "2025-11-25");
+  const created = await call(
+    "tools/call",
+    {
+      name: "create_audiogram",
+      arguments: { url: "https://youtu.be/abcdefghijk" },
+    },
+    "owner-a",
+  );
+  const jobId = created.result.structuredContent.jobId;
+  const denied = await call(
+    "events/subscribe",
+    {
+      name: "audiogram.job.progress",
+      arguments: { job_id: jobId },
+      delivery: {
+        mode: "webhook",
+        url: "https://receiver.example.com",
+        secret,
+      },
+    },
+    "owner-b",
+  );
+  assert.equal(denied.error.code, -32001);
+  assert.equal(f.received.length, 0);
+  const status = await call(
+    "tools/call",
+    { name: "get_audiogram_status", arguments: { jobId } },
+    "owner-b",
+  );
+  assert.equal(status.result.isError, true);
+  const off = await fixture(t, {
+    environment: { AUDIOGRAM_MCP_EVENTS_ENABLED: "0" },
+  });
+  const initialized = await rpc(
+    off.server.url,
+    "initialize",
+    {
+      protocolVersion: "2025-11-25",
+      capabilities: {},
+      clientInfo: { name: "off-test", version: "1" },
+    },
+    undefined,
+    "2025-11-25",
+  );
+  assert.equal(initialized.result.capabilities.events, undefined);
+  const missing = await rpc(
+    off.server.url,
+    "events/list",
+    {},
+    undefined,
+    "2025-11-25",
+  );
+  assert.equal(missing.error.code, -32601);
+});
 
 test("Events startup rejects missing protection keys and shared mode without trusted identity", () => {
   assert.throws(

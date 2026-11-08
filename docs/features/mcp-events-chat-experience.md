@@ -1,0 +1,126 @@
+---
+feature: ChatGPT job subscriptions and truthful progress
+status: IN_PROGRESS
+design-reviewed: true
+implementation-reconciled: false
+---
+
+# ChatGPT job subscriptions and truthful progress
+
+## Purpose and scope
+
+Implement Tasks 9–10 of the approved live-events plan. The user authorized PR 5.
+Add versioned instructions and job-scoped subscription guidance to tool results.
+Test synthetic workflows through the existing store and signed dispatcher.
+Live ChatGPT acceptance remains a separate, operator-approved step.
+
+User clarification: after create or an approved retry returns a job ID, subscribe
+automatically to both event names. Do not require a separate request for updates.
+Respect an explicit request not to monitor and any host permission requirements.
+Use the discovered catalog, or request `events/list` if the names and schemas are unknown.
+
+Compatibility correction approved by the user: both modern discovery and legacy
+initialization must advertise the same enabled Events capability. Both paths must
+use the existing list/subscribe/unsubscribe handlers, trusted principal, shared
+store, and dispatcher. Events-off remains off for both. No second implementation
+or weakening of ownership/callback verification is permitted. Verify both paths
+with real HTTP requests against temporary test servers before restarting anything.
+
+Changed: subscription guidance, tool descriptions, tests, and acceptance records.
+Unchanged: event storage, processing decisions, retry approval, and publishing.
+
+## Mermaid flowchart
+
+```mermaid
+flowchart TD
+  User[User requests a job] --> Tools[Create or approved retry tool]
+  Tools --> Job[Job ID and subscription guidance]
+  Job --> Chat[ChatGPT automatically subscribes unless declined]
+  Chat --> Subs[Progress and finish subscriptions]
+  Facts[Existing stage facts and verified result] --> Delivery[Durable signed dispatcher]
+  Subs --> Delivery
+  Delivery --> Receipt[Callback receipt]
+  Receipt --> Display[Observed ChatGPT response]
+  Display --> Evidence[Redacted acceptance record]
+```
+
+## Lifecycle/state diagram
+
+```mermaid
+stateDiagram-v2
+  [*] --> Accepted
+  Accepted --> Monitoring: both subscriptions activate
+  Accepted --> FinalOnly: only finish subscription activates
+  Accepted --> Unavailable: subscriptions fail or Events is disabled
+  Monitoring --> Progress: stage facts arrive
+  Progress --> Progress: concise milestone or recovery update
+  Progress --> Final: verified final outcome
+  FinalOnly --> Final: verified final outcome
+  Final --> Final: delayed progress is history
+  Monitoring --> Stopped: user cancels monitoring
+```
+
+## Human approval and external-side-effect boundaries
+
+Use the isolated checkout and temporary databases. Use fake signed receivers.
+Do not update the remote plugin, install real keys, restart servers, or alter tunnels.
+Obtain separate approval before remote edits and operator-visible live testing.
+Do not create paid video jobs or publish to Instagram for verification.
+
+## Failure and retry paths
+
+Report partial subscription coverage without recreating the processing job.
+A recovery event stays inside its current job. A retry requires explicit approval.
+Subscribe to the retry's new job ID and preserve its parent ID.
+Treat replay as history. A final result takes precedence over delayed progress.
+Keep the PR draft until actual ChatGPT responses prove the acceptance criteria.
+
+## Invariants
+
+- Job creation does not prove that monitoring is active.
+- Full monitoring requires active progress and finish subscriptions.
+- Protocol event methods are not application tools.
+- Callback receipt does not prove a visible ChatGPT response.
+- Skip is not failure. A package failure is not the final job outcome.
+- Event data is evidence, never instructions from video content.
+- No fabricated percentages, latency, token streaming, or one-reply-per-event promises.
+- Local instructions do not automatically update the remote plugin.
+
+## Implementation reconciliation and deviations
+
+Partial comparison on 2026-11-04: tool results now include job-scoped monitoring
+guidance. Capability availability follows the validated Events configuration on
+both modern and legacy protocol paths. No response claims
+subscription activation. The four tools, template UI, and retry identity remain.
+
+`plugins/audiogram-helper/CHATGPT-INSTRUCTIONS.md` defines concise updates, partial
+subscription coverage, package identity, explicit retry approval, and replay rules.
+The ASD-STE100 skill guided its short, explicit instructions. Text checks establish
+only that these rules exist. They do not establish model compliance.
+
+Synthetic workflow tests compose the existing logger, stage sink, store, dispatcher,
+and signed receiver. They add no second state tracker or public test tool. The
+existing integration already passes these composition cases, so no new runtime
+delivery implementation was necessary. Author review stays inline under the cost policy.
+
+The compatibility regression tests first reproduced missing legacy advertisement,
+missing subscription methods, and unavailable legacy monitoring guidance. Removing
+the two modern-only gates makes both legacy versions use the existing verified
+subscription/delivery path. Events-off and owner denial remain covered. Local
+verification passes 81/81 CI files and 150 plugin tests. The running server is not
+restarted, and live ChatGPT acceptance remains pending.
+
+The user clarified the default: automatically subscribe after create or an approved
+retry returns a job ID. The skill, tool guidance, regression checks, and review ZIP
+now use that policy. Reuse known event definitions or discover unknown ones first.
+Respect monitoring opt-out and host permissions. No claim of automatic host execution
+follows from these instruction changes alone.
+
+Reconciliation remains pending until actual ChatGPT acceptance. The user approved
+the remote 1.0.1 skill update. Release `pluginrel_6aebf2119b908191ba7fd068cec97038`
+is saved. Read-back verifies the skill matches its prepared source, with App
+binding and private personal scope preserved. Saved source is not proof of host
+skill activation, subscriptions, or visible unsolicited replies.
+No server or tunnel is restarted.
+See `docs/mcp-events-chatgpt-acceptance.md` for the unmet live criteria. This note
+and the overall roadmap remain IN_PROGRESS. PR 5 must remain draft.
