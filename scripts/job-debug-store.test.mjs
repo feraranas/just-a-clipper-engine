@@ -180,6 +180,20 @@ test("delivery results expose safe fields and acknowledge missing attempt histor
   assert.ok(!JSON.stringify(result).includes("PRIVATE"));
   assert.deepEqual(f.reader.deliveries(b).deliveries, []);
 });
+test("notification health distinguishes stopped deliveries, retries, and expired subscriptions", async (t) => {
+  const f = await debugFixture(t);
+  const db = new DatabaseSync(f.jobsDbPath);
+  t.after(() => db.close());
+  db.prepare("UPDATE event_deliveries SET status='stopped',attempts=3").run();
+  assert.equal(f.reader.getJob(a).notification.delivery, "stopped");
+  db.prepare("UPDATE event_deliveries SET status='pending',attempts=1").run();
+  assert.equal(f.reader.getJob(a).notification.delivery, "degraded");
+  db.prepare("UPDATE event_subscriptions SET expires_at=0").run();
+  db.prepare("INSERT INTO event_subscriptions VALUES(?,?,?,?,?,?,?)").run(
+    "replacement", a, "audiogram.job.finished", "active", Date.now() + 60000, "", "",
+  );
+  assert.equal(f.reader.getJob(a).notification.delivery, "active");
+});
 test("missing sources are not created and symlink escapes are rejected", async (t) => {
   const f = await debugFixture(t);
   const missing = join(f.root, "missing.sqlite");
