@@ -29,4 +29,5 @@ Preconditions:
 - The default selector calls an LLM (paid API or ChatGPT OAuth). Do not use it for verification without approval.
 - `AUDIOGRAM_MAX_CLIPS` defaults to 1 and a heatmap clip is one Most Replayed marker, so the clip can be very short (about 2 s for `dQw4w9WgXcQ`, interval 0–2.14 s).
 - YouTube may answer `Sign in to confirm you're not a bot`; the run then returns `status: failed`, stage `metadata`. Retry with another video or later; it is not a product failure.
+- YouTube may also rate-limit caption fetches: `yt-dlp ... --write-subs` returns `HTTP Error 429: Too Many Requests`, and the run fails at stage `assets` (`ASSET_FAILED`; via MCP the job is `failed` with `Clip assets could not be prepared.`) even though metadata and the partial-audio download succeeded. Environmental, not a product failure; retry later or from another network. Wrap `yt-dlp` with a logging shim on `PATH` to see the real error, since the ledger keeps no message.
 - The run leaves unkeyed intermediates in the checkout: `public/generated/<videoId>/` and `out/treatments/audiogram-basic/1/<videoId>/` (both gitignored, shared across runs). Delete them during cleanup.
