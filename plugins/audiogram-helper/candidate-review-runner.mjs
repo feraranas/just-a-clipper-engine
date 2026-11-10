@@ -4,7 +4,11 @@ import {
   candidateDependencies,
   reviewDatabase,
 } from "../../scripts/candidate-review-run.mjs";
-import { createCandidateReviewStore, publicCandidateReview } from "../../scripts/candidate-review.mjs";
+import {
+  createCandidateReviewStore,
+  publicCandidateReview,
+  retryCandidateTranscript,
+} from "../../scripts/candidate-review.mjs";
 import { parseYouTubeVideoUrl } from "../../scripts/youtube-url-core.mjs";
 
 export function createCandidateReviewRunner({
@@ -19,6 +23,26 @@ export function createCandidateReviewRunner({
     } finally {
       store.close();
     }
+  };
+  const start = (requestId, args) => {
+    const child = launch(
+      process.execPath,
+      [join(projectRoot, "scripts/candidate-review-run.mjs"), ...args],
+      { cwd: projectRoot, env: environment, stdio: "ignore" },
+    );
+    const finish = () =>
+      access((s) => {
+        const current = s.get(requestId);
+        if (current?.state === "preparing")
+          s.save({
+            ...current,
+            state: current.step === "queued" ? "failed" : "unknown",
+            error:
+              "Processing ended before a complete review was saved. Inspect before retrying.",
+          });
+      });
+    child.once("error", finish);
+    child.once("exit", finish);
   };
   return {
     async prepare({ url, requestId }) {
@@ -44,30 +68,29 @@ export function createCandidateReviewRunner({
           throw Error("Request ID belongs to another source");
         return publicCandidateReview(reserved.record);
       }
-      const child = launch(
-        process.execPath,
-        [
-          join(projectRoot, "scripts/candidate-review-run.mjs"),
-          "--url",
-          url,
-          "--review-id",
-          requestId,
-        ],
-        { cwd: projectRoot, env: environment, stdio: "ignore" },
-      );
-      const finish = () =>
-        access((s) => {
-          const current = s.get(requestId);
-          if (current?.state === "preparing")
-            s.save({
-              ...current,
-              state: current.step === "queued" ? "failed" : "unknown",
-              error:
-                "Processing ended before a complete review was saved. Inspect before retrying.",
-            });
-        });
-      child.once("error", finish);
-      child.once("exit", finish);
+      start(requestId, ["--url", url, "--review-id", requestId]);
+      return publicCandidateReview(record);
+    },
+    async retry({ reviewId, requestId }) {
+      const prior = access((s) => s.get(reviewId));
+      retryCandidateTranscript(prior, prior?.source?.videoId);
+      candidateDependencies(environment);
+      const record = {
+        reviewId: requestId,
+        source: prior.source,
+        state: "preparing",
+        step: "queued",
+        selection: null,
+        createdAt: new Date().toISOString(),
+        retryOf: reviewId,
+      };
+      const reservation = access((s) => s.reserve(record));
+      if (!reservation.created) {
+        if (reservation.record.retryOf !== reviewId)
+          throw Error("Request ID belongs to another attempt");
+        return publicCandidateReview(reservation.record);
+      }
+      start(requestId, ["--retry-review", reviewId, "--review-id", requestId]);
       return publicCandidateReview(record);
     },
     async get({ reviewId }) {
@@ -76,7 +99,9 @@ export function createCandidateReviewRunner({
       return publicCandidateReview(record);
     },
     async select({ reviewId, reviewHash, candidateId }) {
-      return publicCandidateReview(access((s) => s.select(reviewId, reviewHash, candidateId)));
+      return publicCandidateReview(
+        access((s) => s.select(reviewId, reviewHash, candidateId)),
+      );
     },
   };
 }

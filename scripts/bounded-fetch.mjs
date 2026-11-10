@@ -54,7 +54,14 @@ export const createBoundedAllowlistedFetch = ({
   scheduler = defaultScheduler,
   signal,
   onError = () => {},
+  responsesTimeoutMs = 120_000,
 } = {}) => {
+  if (
+    !Number.isSafeInteger(responsesTimeoutMs) ||
+    responsesTimeoutMs < 120_000 ||
+    responsesTimeoutMs > 600_000
+  )
+    throw new Error("Responses timeout must be between 120000 and 600000 ms");
   let fatal;
   const remember = (error) => {
     fatal ??= error;
@@ -66,6 +73,8 @@ export const createBoundedAllowlistedFetch = ({
     let operation;
     try {
       operation = operationFor(input);
+      if (operation.code === "oauth_responses_timeout")
+        operation.ms = responsesTimeoutMs;
     } catch (error) {
       throw remember(error);
     }

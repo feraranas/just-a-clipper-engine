@@ -6,7 +6,76 @@ import { join } from "node:path";
 import {
   createCandidateReviewStore,
   prepareCandidateReview,
+  publicCandidateReview,
 } from "./candidate-review.mjs";
+import { sha256Canonical } from "./canonical-json.mjs";
+
+test("explicit timeout retry reuses verified transcript and preserves the original", async () => {
+  const store = createCandidateReviewStore(
+    join(mkdtempSync(join(tmpdir(), "candidate-retry-")), "reviews.sqlite"),
+  );
+  const transcript = {
+    source: "youtube_auto",
+    language: "en",
+    cues: [{ id: "c000001", startMs: 0, endMs: 40000, text: "Evidence" }],
+  };
+  const original = {
+    reviewId: "original",
+    source: { videoId: "_U-O5lYhJ7Q" },
+    state: "unknown",
+    step: "drafting",
+    diagnosticCode: "oauth_responses_timeout",
+    transcript,
+    sourceRevision: sha256Canonical(transcript),
+  };
+  store.save(original);
+  assert.equal(
+    publicCandidateReview(original).diagnosticCode,
+    "oauth_responses_timeout",
+  );
+  assert.equal(
+    publicCandidateReview({ ...original, diagnosticCode: "private-token" })
+      .diagnosticCode,
+    undefined,
+  );
+  let fetches = 0,
+    drafts = 0;
+  const args = {
+    store,
+    url: "https://youtu.be/_U-O5lYhJ7Q",
+    reviewId: "retry",
+    retryFrom: "original",
+    fetchTranscript: async () => {
+      fetches++;
+      throw Error("must not fetch");
+    },
+    draft: async (t) => {
+      drafts++;
+      assert.deepEqual(t, transcript);
+      throw Error("test failure");
+    },
+    jevClient: {},
+  };
+  await assert.rejects(
+    prepareCandidateReview(args),
+    /Candidate preparation failed/,
+  );
+  assert.equal(fetches, 0);
+  assert.equal(drafts, 1);
+  assert.deepEqual(store.get("original"), original);
+  assert.equal(store.get("retry").retryOf, "original");
+  await assert.rejects(prepareCandidateReview(args), /already started/);
+  await assert.rejects(
+    prepareCandidateReview({
+      ...args,
+      reviewId: "wrong",
+      url: "https://youtu.be/j6UOJJqVVAs",
+    }),
+    /not eligible/,
+  );
+  assert.equal(drafts, 1);
+  store.close();
+});
 
 test("review survives reopen, keeps questions and evidence, and requires explicit valid selection", async () => {
   const filename = join(
@@ -173,8 +242,16 @@ test("actual noul responses need no confidence field and framework answers remai
   store.close();
 });
 
-test('reading progress after processing stopped reports unknown without reissuing requests',()=>{
- const store=createCandidateReviewStore(join(mkdtempSync(join(tmpdir(),'candidate-crash-')),'reviews.sqlite'));
- store.save({reviewId:'dead',state:'preparing',step:'judging',ownerPid:2147483647});
- assert.equal(store.get('dead').state,'unknown');store.close();
+test("reading progress after processing stopped reports unknown without reissuing requests", () => {
+  const store = createCandidateReviewStore(
+    join(mkdtempSync(join(tmpdir(), "candidate-crash-")), "reviews.sqlite"),
+  );
+  store.save({
+    reviewId: "dead",
+    state: "preparing",
+    step: "judging",
+    ownerPid: 2147483647,
+  });
+  assert.equal(store.get("dead").state, "unknown");
+  store.close();
 });
