@@ -60,7 +60,10 @@ MCP client discovery, listing and existing approval forwarding, catalog routing,
 UI, server and HTTP tests pass; lint and TypeScript pass. The running connected
 plugin was observed to expose only the older four tools. Reloading the local
 service and refreshing the plugin connection remain necessary before a live
-plugin trial. The current local environment lacks AUDIOGRAM_RHUBARB_PATH and
-AUDIOGRAM_PRESENTER_ASSETS; the presenter artwork exists separately under the
-main checkout's out/presenter-likeness-20/assets. These checks do not establish
-live paid narration or playable hosted media. Output paths remain local.
+plugin trial. Rhubarb 1.14.0 is installed locally and was tested on ten seconds
+of saved audio; a separate local environment file identifies it and the existing
+presenter artwork. A temporary MCP server returned both designs and a saved
+trial's accessible audio and video paths; the audio hash matched. The tool
+instructs the caller to ask the user to listen locally before accepting audio.
+These checks do not establish a new live paid narration or hosted media. Output
+paths remain local and cannot be played in ChatGPT on a different machine.

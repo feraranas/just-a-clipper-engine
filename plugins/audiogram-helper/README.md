@@ -173,3 +173,14 @@ The shared file is `candidate-reviews.sqlite` under AUDIOGRAM_DATA_ROOT.
 Output includes public source text, so avoid publishing full trial output by accident.
 Start the MCP server from this checkout to load the added tools. Existing running
 servers do not acquire new tools until restarted with this code.
+
+### Review the explainer audio and video locally
+
+The connected app does not upload or stream private explainer files. After
+`narrate` completes, call `continue_explainer` with `action: get` and the
+review ID. Ask the user to open `documents.audio.path` on the Mac running
+this service and listen. Only after the user accepts that recording, call
+`accept_audio` with `documents.audio.sha256` and the current revision.
+After render completes, `get` returns the video path in `documents.render.path`.
+The user can open that local file. A user who cannot access the service's Mac
+cannot currently listen to or view these files through ChatGPT.

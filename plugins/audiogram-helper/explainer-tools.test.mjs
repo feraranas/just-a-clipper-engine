@@ -23,6 +23,12 @@ test("actual MCP discovery exposes scene blocks and forwards exact approval iden
     );
     const tools = await client.listTools();
     assert.ok(tools.tools.some((t) => t.name === "continue_explainer"));
+    const description = tools.tools.find(
+      (t) => t.name === "continue_explainer",
+    ).description;
+    assert.match(description, /documents\.audio\.path/);
+    assert.match(description, /documents\.render\.path/);
+    assert.match(description, /only after explicit acceptance/);
     const listing = await client.callTool({
       name: "list_video_templates",
       arguments: {},
