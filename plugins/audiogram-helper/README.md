@@ -53,9 +53,10 @@ Each job keeps structured stage events and separate worker/CLI stdout and stderr
 
 Call `list_video_templates` with `{}` to discover the supported designs.
 It returns `contractVersion: 1`, descriptions, supported input types, variations,
-and a `defaultSelection` for each template. It reads the same catalog used by
-creation. It does not start a job or check provider readiness.
-Show the choices to the user, then pass their selection to `create_audiogram`.
+and a `defaultSelection` for each template. It does not start a job or check
+provider readiness. Classic uses `create_audiogram`; Animated Explainer uses
+`prepare_candidate_review`, `select_candidate_review`, and `continue_explainer`.
+It requires script and narration approval, local presenter assets and Rhubarb.
 
 Classic V1's default variation includes `preview.pageUrl`, `preview.posterUrl`,
 and `preview.videoUrl`, hosted at `https://media.ferarana.work/templates/classic/v1/`.
@@ -74,9 +75,10 @@ Restart the MCP service and refresh its tools in ChatGPT to load these changes.
 To add or withdraw a public sample, edit `template-previews.mjs` using the exact
 template/version/variation identity. Verify the page, poster and MP4 range
 response before adding a mapping. Never use private job media in this map.
-Classic V1 / Default is currently the only available design. Preview images
-and planned designs are not included. Restart the MCP server after deploying
-this change so clients can discover the new tool.
+Animated Explainer is listed without a public sample. Its rendered files and
+audio remain local paths; the plugin does not provide hosted playback. Restart
+the MCP server and refresh the connection after deploying this change so
+clients can discover the candidate and explainer tools.
 
 `create_audiogram` accepts optional `templateId`, `templateVersion` and `variationId` fields.
 The current values are `classic`, `1` and `default`.

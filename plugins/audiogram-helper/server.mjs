@@ -97,7 +97,7 @@ function makeMcpServer({
     "list_video_templates",
     {
       description:
-        "List available video templates, their variations, public sample preview links, and valid selections for create_audiogram. Show the preview page link when available so the user can watch the sample before choosing. Video and poster URLs point directly to the public media host. This tool does not start a job.",
+        "List video designs and previews. Classic uses create_audiogram; Animated Explainer uses prepare_candidate_review, explicit candidate selection, and continue_explainer. Never send the explainer selection to create_audiogram. Show available previews and ask the user to choose. Listing does not start a job.",
       inputSchema: z.strictObject({}),
       outputSchema: templateListingShape,
       _meta: {
@@ -123,7 +123,7 @@ function makeMcpServer({
                 listing.templates
                   .map(
                     (t) =>
-                      `${t.name}: ${t.description} Input: ${t.supportedInput}. Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.${t.variations
+                      `${t.name}: ${t.description} Input: ${t.supportedInput}. ${t.workflow === "explainer" ? "Start with prepare_candidate_review, then select_candidate_review and continue_explainer; do not use create_audiogram." : "Start with create_audiogram."} Variations: ${t.variations.map((v) => `${v.variationId} (${v.description})`).join(", ")}. Default selection: ${JSON.stringify(t.defaultSelection)}.${t.variations
                         .filter((v) => v.preview)
                         .map(
                           (v) =>

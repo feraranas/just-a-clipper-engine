@@ -23,6 +23,17 @@ test("actual MCP discovery exposes scene blocks and forwards exact approval iden
     );
     const tools = await client.listTools();
     assert.ok(tools.tools.some((t) => t.name === "continue_explainer"));
+    const listing = await client.callTool({
+      name: "list_video_templates",
+      arguments: {},
+    });
+    const design = listing.structuredContent.templates.find(
+      (t) => t.templateId === "animated-explainer",
+    );
+    assert.equal(design.workflow, "explainer");
+    assert.match(listing.content[0].text, /prepare_candidate_review/);
+    assert.ok(tools.tools.some((t) => t.name === "prepare_candidate_review"));
+    assert.ok(tools.tools.some((t) => t.name === "select_candidate_review"));
     const blocks = await client.callTool({
       name: "list_scene_blocks",
       arguments: {},

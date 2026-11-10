@@ -37,7 +37,7 @@ export function renderTemplates(doc, data, openLink) {
     return;
   }
   status.textContent = data.templates.length
-    ? "Play a sample, then tell ChatGPT which template you want."
+    ? "Choose a design. Play a sample where available, then tell ChatGPT what you want."
     : "No templates are available.";
   const el = (tag, text) => {
     const node = doc.createElement(tag);
@@ -48,6 +48,13 @@ export function renderTemplates(doc, data, openLink) {
     for (const v of t.variations) {
       const card = el("article");
       card.append(el("h2", `${t.name} · ${v.name}`), el("p", v.description));
+      if (t.workflow === "explainer")
+        card.append(
+          el(
+            "p",
+            "Includes topic selection and review of the script and narration.",
+          ),
+        );
       const selection = el(
         "p",
         `${t.templateId} / ${t.templateVersion} / ${v.variationId}`,
