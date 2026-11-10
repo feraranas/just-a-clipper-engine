@@ -2,10 +2,13 @@ import { z } from "zod";
 import { listTemplates } from "../../src/templates/catalog.mjs";
 import { findTemplatePreview } from "./template-previews.mjs";
 
-const publicUrl = z.string().url().refine((value) => {
-  const url = new URL(value);
-  return url.protocol === "https:" && !url.username && !url.password;
-});
+const publicUrl = z
+  .string()
+  .url()
+  .refine((value) => {
+    const url = new URL(value);
+    return url.protocol === "https:" && !url.username && !url.password;
+  });
 const previewSchema = z.object({
   status: z.literal("video-configured"),
   pageUrl: publicUrl,
@@ -31,8 +34,16 @@ export const templateListingShape = {
       name: text,
       description: text,
       supportedInput: text,
+      workflow: z.enum(["audiogram", "explainer"]).optional(),
       variations: z
-        .array(z.object({ variationId: text, name: text, description: text, preview: previewSchema.optional() }))
+        .array(
+          z.object({
+            variationId: text,
+            name: text,
+            description: text,
+            preview: previewSchema.optional(),
+          }),
+        )
         .min(1),
       defaultSelection: selection,
     }),
@@ -60,8 +71,9 @@ const catalogSchema = z.array(
   }),
 );
 
-export function buildTemplateListing(entries = listTemplates()) {
-  const catalog = catalogSchema.parse(entries);
+export function buildTemplateListing(entries) {
+  const includeExplainer = entries === undefined;
+  const catalog = catalogSchema.parse(entries ?? listTemplates());
   const identities = new Set();
   const templates = catalog.map((t) => {
     const identity = JSON.stringify([t.id, t.version]);
@@ -98,6 +110,29 @@ export function buildTemplateListing(entries = listTemplates()) {
       },
     };
   });
+  if (includeExplainer)
+    templates.push({
+      templateId: "animated-explainer",
+      templateVersion: "1",
+      name: "Animated Explainer V1",
+      description:
+        "A narrated explanation with a presenter and animated diagrams. Select a topic and review the script and narration before rendering.",
+      supportedInput: "public-youtube-url",
+      workflow: "explainer",
+      variations: [
+        {
+          variationId: "default",
+          name: "Presenter and diagrams",
+          description:
+            "A presenter explains the selected topic alongside diagrams.",
+        },
+      ],
+      defaultSelection: {
+        templateId: "animated-explainer",
+        templateVersion: "1",
+        variationId: "default",
+      },
+    });
   return z
     .object(templateListingShape)
     .parse({ contractVersion: 1, templates });

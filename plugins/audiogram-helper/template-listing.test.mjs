@@ -14,7 +14,11 @@ test("sample links match the exact template, version and variation", () => {
   otherTemplate.id = "other";
   const withVariation = structuredClone(original);
   withVariation.variations.push({ ...original.variations[0], id: "other" });
-  const result = buildTemplateListing([withVariation, otherVersion, otherTemplate]);
+  const result = buildTemplateListing([
+    withVariation,
+    otherVersion,
+    otherTemplate,
+  ]);
   assert.deepEqual(result.templates[0].variations[0].preview, {
     status: "video-configured",
     pageUrl: "https://media.ferarana.work/templates/classic/v1/",
@@ -26,8 +30,13 @@ test("sample links match the exact template, version and variation", () => {
   assert.equal(result.templates[2].variations[0].preview, undefined);
 });
 
-test("every advertised variation and default resolves through the creation catalog", () => {
+test("Classic resolves through the audiogram catalog; explainer uses its own flow", () => {
   for (const t of buildTemplateListing().templates) {
+    if (t.workflow === "explainer") {
+      assert.equal(t.templateId, "animated-explainer");
+      assert.throws(() => resolveTemplateSelection(t.defaultSelection));
+      continue;
+    }
     resolveTemplateSelection(t.defaultSelection);
     for (const v of t.variations)
       resolveTemplateSelection({
@@ -36,6 +45,15 @@ test("every advertised variation and default resolves through the creation catal
         variationId: v.variationId,
       });
   }
+});
+test("default listing exposes both designs and their correct workflow", () => {
+  const templates = buildTemplateListing().templates;
+  assert.deepEqual(
+    templates.map((t) => t.templateId),
+    ["classic", "animated-explainer"],
+  );
+  assert.equal(templates[1].workflow, "explainer");
+  assert.equal(templates[1].variations[0].preview, undefined);
 });
 test("projection discovers an added catalog entry and excludes renderer details", () => {
   const entry = JSON.parse(JSON.stringify(listTemplates()[0]));

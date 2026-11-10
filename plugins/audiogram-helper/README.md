@@ -53,9 +53,10 @@ Each job keeps structured stage events and separate worker/CLI stdout and stderr
 
 Call `list_video_templates` with `{}` to discover the supported designs.
 It returns `contractVersion: 1`, descriptions, supported input types, variations,
-and a `defaultSelection` for each template. It reads the same catalog used by
-creation. It does not start a job or check provider readiness.
-Show the choices to the user, then pass their selection to `create_audiogram`.
+and a `defaultSelection` for each template. It does not start a job or check
+provider readiness. Classic uses `create_audiogram`; Animated Explainer uses
+`prepare_candidate_review`, `select_candidate_review`, and `continue_explainer`.
+It requires script and narration approval, local presenter assets and Rhubarb.
 
 Classic V1's default variation includes `preview.pageUrl`, `preview.posterUrl`,
 and `preview.videoUrl`, hosted at `https://media.ferarana.work/templates/classic/v1/`.
@@ -74,9 +75,10 @@ Restart the MCP service and refresh its tools in ChatGPT to load these changes.
 To add or withdraw a public sample, edit `template-previews.mjs` using the exact
 template/version/variation identity. Verify the page, poster and MP4 range
 response before adding a mapping. Never use private job media in this map.
-Classic V1 / Default is currently the only available design. Preview images
-and planned designs are not included. Restart the MCP server after deploying
-this change so clients can discover the new tool.
+Animated Explainer is listed without a public sample. Its rendered files and
+audio remain local paths; the plugin does not provide hosted playback. Restart
+the MCP server and refresh the connection after deploying this change so
+clients can discover the candidate and explainer tools.
 
 `create_audiogram` accepts optional `templateId`, `templateVersion` and `variationId` fields.
 The current values are `classic`, `1` and `default`.
@@ -171,3 +173,14 @@ The shared file is `candidate-reviews.sqlite` under AUDIOGRAM_DATA_ROOT.
 Output includes public source text, so avoid publishing full trial output by accident.
 Start the MCP server from this checkout to load the added tools. Existing running
 servers do not acquire new tools until restarted with this code.
+
+### Review the explainer audio and video locally
+
+The connected app does not upload or stream private explainer files. After
+`narrate` completes, call `continue_explainer` with `action: get` and the
+review ID. Ask the user to open `documents.audio.path` on the Mac running
+this service and listen. Only after the user accepts that recording, call
+`accept_audio` with `documents.audio.sha256` and the current revision.
+After render completes, `get` returns the video path in `documents.render.path`.
+The user can open that local file. A user who cannot access the service's Mac
+cannot currently listen to or view these files through ChatGPT.
