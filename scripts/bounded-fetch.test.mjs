@@ -32,6 +32,22 @@ const clock = () => {
     },
   };
 };
+test("configured Responses deadline is bounded and does not change other operations", async () => {
+  const scheduler = clock();
+  const fetch = createBoundedAllowlistedFetch({
+    scheduler,
+    responsesTimeoutMs: 300000,
+    fetch: async () => new Promise(() => {}),
+  });
+  const pending = fetch("https://chatgpt.com/backend-api/codex/responses");
+  assert.equal([...scheduler.timers.values()][0].ms, 300000);
+  scheduler.fire();
+  await assert.rejects(pending, { code: "oauth_responses_timeout" });
+  assert.throws(
+    () => createBoundedAllowlistedFetch({ responsesTimeoutMs: 600001 }),
+    /timeout/,
+  );
+});
 for (const [url, milliseconds, code] of operations) {
   test(`${code} bounds headers even when fetch ignores abort`, async () => {
     const scheduler = clock();

@@ -123,6 +123,21 @@ export function createCandidateReviewStore(filename) {
   };
 }
 
+export function retryCandidateTranscript(prior, videoId) {
+  if (
+    !prior ||
+    prior.state !== "unknown" ||
+    prior.step !== "drafting" ||
+    prior.diagnosticCode !== "oauth_responses_timeout" ||
+    prior.source?.videoId !== videoId ||
+    !Array.isArray(prior.transcript?.cues) ||
+    !prior.transcript.cues.length ||
+    sha256Canonical(prior.transcript) !== prior.sourceRevision
+  )
+    throw Error("Saved review is not eligible for this retry");
+  return prior.transcript;
+}
+
 export async function prepareCandidateReview({
   store,
   url,
@@ -130,8 +145,16 @@ export async function prepareCandidateReview({
   draft,
   jevClient,
   reviewId = randomUUID(),
+  retryFrom,
 }) {
   const source = parseYouTubeVideoUrl(url);
+  let savedTranscript;
+  if (retryFrom !== undefined) {
+    savedTranscript = retryCandidateTranscript(
+      store.get(retryFrom),
+      source.videoId,
+    );
+  }
 
   let record = {
     reviewId,
@@ -141,17 +164,20 @@ export async function prepareCandidateReview({
     selection: null,
     createdAt: new Date().toISOString(),
     ownerPid: process.pid,
+    ...(retryFrom ? { retryOf: retryFrom } : {}),
   };
   const reservation = store.reserve(record);
   if (reservation.record.source.videoId !== source.videoId)
     throw Error("Request ID belongs to another source");
+  if (reservation.record.retryOf !== retryFrom)
+    throw Error("Request ID belongs to another attempt");
   store.claim(reviewId);
   record = { ...record, step: "transcript" };
   let paid = false;
   try {
-    const transcript = await fetchTranscript(
-      source.url ?? source.canonicalUrl ?? url,
-    );
+    const transcript =
+      savedTranscript ??
+      (await fetchTranscript(source.url ?? source.canonicalUrl ?? url));
     const sourceRevision = sha256Canonical(transcript);
     record = { ...record, transcript, sourceRevision, step: "drafting" };
     store.save(record);
@@ -297,6 +323,8 @@ export function publicCandidateReview(record) {
     review,
     error,
     diagnosticCategory,
+    diagnosticCode,
+    retryOf,
   } = record;
   return Object.fromEntries(
     Object.entries({
@@ -310,6 +338,11 @@ export function publicCandidateReview(record) {
       review,
       error,
       diagnosticCategory,
+      diagnosticCode:
+        diagnosticCode === "oauth_responses_timeout"
+          ? diagnosticCode
+          : undefined,
+      retryOf,
     }).filter(([, value]) => value !== undefined),
   );
 }

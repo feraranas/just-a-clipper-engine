@@ -8,6 +8,12 @@ export function registerCandidateReviewTools(server, runner) {
       (args) => runner.prepare(args),
     ],
     [
+      "retry_candidate_review",
+      "Only after explicit user approval, retry a timed-out candidate drafting attempt using its saved transcript and a new request ID. This may incur costs. Get the original review first.",
+      { reviewId: z.string().uuid(), requestId: z.string().uuid() },
+      (args) => runner.retry(args),
+    ],
+    [
       "get_candidate_review",
       "Read saved topic candidates, evidence, question definitions, raw Jev answers, and progress. Does not repeat processing.",
       { reviewId: z.string().uuid() },

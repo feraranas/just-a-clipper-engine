@@ -22,7 +22,19 @@ const OAUTH_PROVIDER_ID = "chatgpt-oauth";
 const OFFICIAL_BASE_URL = "https://api.openai.com/v1";
 const OAUTH_BASE_URL = "https://chatgpt.com/backend-api/codex";
 const OFFICIAL_TIMEOUT_MS = 120_000;
-const OAUTH_SDK_TIMEOUT_MS = 125_000;
+const oauthTimeout = (environment) => {
+  const raw = environment.AUDIOGRAM_OAUTH_RESPONSES_TIMEOUT_MS ?? "120000";
+  if (
+    typeof raw !== "string" ||
+    !/^\d+$/.test(raw) ||
+    Number(raw) < 120000 ||
+    Number(raw) > 600000
+  )
+    throw new Error(
+      "AUDIOGRAM_OAUTH_RESPONSES_TIMEOUT_MS must be an integer from 120000 to 600000",
+    );
+  return Number(raw);
+};
 const FORMAT_NAME = "transcript_clip_selection";
 const generateKeys = new Set(["instructions", "input", "jsonSchema", "signal"]);
 const dependencyKeys = new Set([
@@ -266,7 +278,11 @@ const createProvider = (config, dependencies = {}, task = null) => {
         }
       } else {
         let boundedError;
+        const responseTimeoutMs = oauthTimeout(
+          dependencies.environment ?? process.env,
+        );
         const boundedFetch = createBoundedAllowlistedFetch({
+          responsesTimeoutMs: responseTimeoutMs,
           fetch: dependencies.fetch,
           scheduler,
           signal: request.signal,
@@ -303,7 +319,7 @@ const createProvider = (config, dependencies = {}, task = null) => {
           baseURL: transport.baseURL,
           fetch: transport.fetch,
           maxRetries: 0,
-          timeout: OAUTH_SDK_TIMEOUT_MS,
+          timeout: responseTimeoutMs + 5000,
           logLevel: "off",
           logger: silentSdkLogger,
         });
@@ -311,7 +327,7 @@ const createProvider = (config, dependencies = {}, task = null) => {
           response = await client.responses.create(body, {
             signal: request.signal,
             maxRetries: 0,
-            timeout: OAUTH_SDK_TIMEOUT_MS,
+            timeout: responseTimeoutMs + 5000,
           });
           if (boundedError) throw boundedError;
         } catch (error) {

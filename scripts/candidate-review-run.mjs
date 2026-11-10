@@ -68,21 +68,42 @@ export async function runCandidateCommand(args, environment = process.env) {
       hash: { type: "string" },
       db: { type: "string" },
       "review-id": { type: "string" },
+      "retry-review": { type: "string" },
     },
   });
   if (values.url && (values.review || values.select || values.hash))
     throw Error("Choose preparation or review, not both");
-  const deps = values.url ? candidateDependencies(environment) : null;
   const store = createCandidateReviewStore(
     values.db ?? reviewDatabase(environment),
   );
   try {
+    if (values["retry-review"]) {
+      if (
+        !values["review-id"] ||
+        values.url ||
+        values.review ||
+        values.select ||
+        values.hash
+      )
+        throw Error(
+          "Retry requires a new review ID and the original review ID",
+        );
+      const prior = store.get(values["retry-review"]);
+      if (!prior?.source?.videoId) throw Error("Review not found");
+      return await prepareCandidateReview({
+        store,
+        url: `https://www.youtube.com/watch?v=${prior.source.videoId}`,
+        reviewId: values["review-id"],
+        retryFrom: values["retry-review"],
+        ...candidateDependencies(environment),
+      });
+    }
     if (values.url)
       return await prepareCandidateReview({
         store,
         url: values.url,
         reviewId: values["review-id"],
-        ...deps,
+        ...candidateDependencies(environment),
       });
     if (!values.review) throw Error("Supply --url or --review");
     if (values.select) {

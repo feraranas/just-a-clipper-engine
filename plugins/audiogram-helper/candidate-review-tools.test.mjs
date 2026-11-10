@@ -28,22 +28,18 @@ test("review tools pass exact selection and status arguments without triggering 
       },
     },
   );
-  assert.equal(registered.size, 3);
+  assert.equal(registered.size, 4);
   assert.throws(() =>
-    registered
-      .get("prepare_candidate_review")
-      .options.inputSchema.parse({
-        url: "https://youtube.com",
-        requestId: "bad",
-      }),
+    registered.get("prepare_candidate_review").options.inputSchema.parse({
+      url: "https://youtube.com",
+      requestId: "bad",
+    }),
   );
-  const result = await registered
-    .get("select_candidate_review")
-    .handler({
-      reviewId: "123",
-      reviewHash: "hash",
-      candidateId: "candidate-2",
-    });
+  const result = await registered.get("select_candidate_review").handler({
+    reviewId: "123",
+    reviewHash: "hash",
+    candidateId: "candidate-2",
+  });
   assert.equal(result.structuredContent.selection, "candidate-2");
   assert.equal(prepares, 0);
 });
