@@ -63,3 +63,32 @@ test("explicit task contract uses the existing provider transport and validates 
     }),
   );
 });
+
+test("draft schema constrains source IDs to the saved research", async () => {
+  const { scriptSchemaForResearch } =
+    await import("./explainer/generation.mjs");
+  const schema = scriptSchemaForResearch({
+    sources: [{ id: "anthropic-context" }, { id: "anthropic-evals" }],
+  });
+  const draft = {
+    title: "Test",
+    segments: [
+      {
+        id: "s1",
+        text: "Test.",
+        kind: "factual",
+        sourceIds: ["anthropic-context"],
+      },
+    ],
+  };
+  assert.equal(schema.safeParse(draft).success, true);
+  assert.equal(
+    schema.safeParse({
+      ...draft,
+      segments: [{ ...draft.segments[0], sourceIds: ["video"] }],
+    }).success,
+    false,
+  );
+  assert.match(JSON.stringify(z.toJSONSchema(schema)), /anthropic-context/);
+  assert.throws(() => scriptSchemaForResearch({ sources: [] }));
+});

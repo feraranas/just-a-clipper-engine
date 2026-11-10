@@ -197,3 +197,26 @@ test("tampered accepted audio prevents the renderer from being invoked", async (
   );
   assert.equal(called, false);
 });
+
+test("explicit draft recovery keeps sources and never starts a second request", async (t) => {
+  const c = await setup(t);
+  await c.action("research", research);
+  await assert.rejects(
+    c.action("draft", async () => {
+      throw Error("invalid source");
+    }),
+  );
+  const before = c.w.get("review-1");
+  await assert.rejects(c.w.recoverDraft("review-1", before.revision, "wrong"));
+  await c.action("recoverDraft", before.pending.token);
+  const recovered = c.w.get("review-1");
+  assert.equal(recovered.state, "research_saved");
+  assert.equal(recovered.pending, null);
+  assert.equal(recovered.research.hash, before.research.hash);
+  assert.ok(
+    recovered.history.some((p) => p.pending?.token === before.pending.token),
+  );
+  assert.equal(recovered.scriptApproval, undefined);
+  await c.action("script", script);
+  assert.equal(c.w.get("review-1").state, "awaiting_script_approval");
+});

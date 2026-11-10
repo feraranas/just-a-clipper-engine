@@ -70,6 +70,7 @@ export async function runExplainerRequest(input, environment = process.env) {
           }),
         ),
       recover_render: () => workflow.recover(reviewId, revision, hash),
+      recover_draft: () => workflow.recoverDraft(reviewId, revision, hash),
     };
     if (!Object.hasOwn(operations, action))
       throw Error("Unknown explainer action");
