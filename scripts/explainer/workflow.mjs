@@ -348,6 +348,31 @@ export function createExplainerWorkflow({ store, root }) {
         })),
       );
     },
+    async recoverDraft(id, revision, token) {
+      const r = selected(id),
+        p = r.production;
+      if (p?.revision !== revision || p.pending?.token !== token)
+        throw Error("Recovery attempt is stale");
+      if (
+        p.pending.stage !== "drafting_script" ||
+        p.pending.state !== "unconfirmed"
+      )
+        throw Error("Only an unconfirmed script draft can be recovered");
+      await load(p.research);
+      return productionView(
+        store.update(id, sha256Canonical(r), (c) => ({
+          ...c,
+          production: {
+            ...p,
+            history: historyOf(p),
+            pending: null,
+            state: p.history?.at(-1)?.state ?? "research_saved",
+            lastError: null,
+            revision: revision + 1,
+          },
+        })),
+      );
+    },
   };
 }
 export async function importNarration(directory, script) {
