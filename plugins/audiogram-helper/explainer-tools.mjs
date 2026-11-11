@@ -5,6 +5,7 @@ import {
 } from "../../scripts/explainer/contracts.mjs";
 import { scenePlanSchema } from "../../src/Explainer/catalog.mjs";
 import { listSceneBlocks } from "../../src/Explainer/catalog.mjs";
+import { ScriptApprovalRequiredError } from "./explainer-runner.mjs";
 export function registerExplainerTools(server, runner) {
   server.registerTool(
     "list_scene_blocks",
@@ -54,13 +55,16 @@ export function registerExplainerTools(server, runner) {
           content: [{ type: "text", text: JSON.stringify(result) }],
           structuredContent: { contractVersion: 1, ...result },
         };
-      } catch {
+      } catch (error) {
         return {
           isError: true,
           content: [
             {
               type: "text",
-              text: "The explainer step could not start. Check the current revision, required approvals, and local configuration.",
+              text:
+                error instanceof ScriptApprovalRequiredError
+                  ? "Approve the exact current script before starting narration."
+                  : "The explainer step could not start. Check the current revision, required approvals, and local configuration.",
             },
           ],
         };
