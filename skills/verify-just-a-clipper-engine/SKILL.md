@@ -13,8 +13,8 @@ Surfaces (from README, `package.json` scripts and `scripts/`):
 - Instagram publishing: `npm run publishing:run -- --item ID --live`. This is a real external post; never drive it for verification.
 - Instagram scheduled dispatcher: `npm run publishing:dispatch -- --live` polls for due approved items and posts for real; never drive it live.
 - Instagram upload recovery: `node scripts/publishing-recover.mjs --item ID [--apply ...]`. Inspection calls Meta GETs; drive only its offline guards.
-- MCP helper: `npm run audiogram:mcp` on `http://127.0.0.1:7331/mcp` (modern protocol `2026-07-28` and legacy clients), including the candidate-review and explainer tools.
-- Explanation-video workflow (experimental): `npm run candidates:review`, `npm run explainer`, and the `AnimatedExplainer`/presenter Remotion compositions.
+- MCP helper: `npm run audiogram:mcp` on `http://127.0.0.1:7331/mcp` (modern protocol `2026-07-28` and legacy clients), including the candidate-review and explainer tools (`tools/list` is ten tools; `list_video_templates` includes Animated Explainer).
+- Explanation-video workflow (experimental): `npm run candidates:review` (plus `--retry-review`), `npm run explainer` (plus `recover_draft` and `queue_render`), and the `AnimatedExplainer`/presenter Remotion compositions. A verified render may enqueue locally; it never approves or publishes.
 - Template samples: `npm run samples:render` (macOS `say`) and `npm run samples:serve` on `http://127.0.0.1:8790/`.
 
 The render also works on Node 20; everything else imports `node:sqlite` and needs Node >= 22.13.

@@ -1,6 +1,6 @@
 # Local approval UI
 
-`node scripts/publishing-server.mjs` serves `public/publishing/` on `http://127.0.0.1:8787/` (`PORT`): the queue of rendered clips with preview, caption edit, approve/schedule, reject, retry, per-item attempt history, and a `Debug jobs ↗` link to the [job debug console](./job-debug-console.md). The old on-page "System logs" activity panel was removed. Approval is local; nothing is posted until `publishing:run --live`.
+`node scripts/publishing-server.mjs` serves `public/publishing/` on `http://127.0.0.1:8787/` (`PORT`): the queue of rendered clips with preview, caption edit, approve/schedule, reject, retry, per-item attempt history, and a `Debug jobs ↗` link to the [job debug console](./job-debug-console.md). The old on-page "System logs" activity panel was removed. A verified [explainer](./explainer-workflow.md) render can also appear here after `queue_render` (or automatic registration after render), with an empty caption; queue insertion does not approve or publish it. Approval is local; nothing is posted until `publishing:run --live`.
 
 ## Sub-features
 
@@ -31,7 +31,7 @@ Preconditions:
 ## Gotchas
 
 - `AUDIOGRAM_DATA_ROOT` must be an existing directory: with a missing one the server crashes at startup with `unable to open database file`. `mkdir -p` it first.
-- Seeding the queue through ledger internals is not a user path; seed it with `audiogram:url`.
+- Seeding the queue through ledger internals is not a user path; seed it with `audiogram:url`. A completed explainer render can also enqueue through `queue_render`; that path is not driven here because it needs a verified local render.
 - Without `AUDIOGRAM_DATA_ROOT` the server opens the user's real ledger under `~/Library/Application Support/Audiogram Inbox/`.
 - `audiogram:url` does not write `pipeline.jsonl`; only `youtube:inbox` does.
 - Plain `chrome --headless --screenshot` never finishes on this page (it polls `/api/logs` every 2 s, so virtual time never settles). Use `ui-shot.mjs`, which waits a fixed time.
