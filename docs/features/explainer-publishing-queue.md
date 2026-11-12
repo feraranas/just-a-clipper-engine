@@ -49,7 +49,8 @@ ledger mutation and Meta publication are not part of automated verification.
 ## Failure and retry paths
 
 Rendering success must survive ledger failure; surface registration failure in
-the render result and permit explicit reconciliation without re-rendering. A
+the render result and the background operation outcome; permit explicit
+reconciliation without re-rendering. A
 crash before returning the result leaves no durable failure marker, so inspect
 the saved render and explicitly reconcile it. Dedupe by the
 existing durable artifact identity and hash. Handle a crash between rendering,
@@ -75,6 +76,6 @@ Separate stores cannot share a transaction, so an interrupted registration
 requires explicit reconciliation. Queue registration does not approve or publish.
 
 Focused tests cover repeated registration, unchanged approval, stale revisions,
-changed bytes and account mismatch. The review retains source provenance; the
+changed bytes, account mismatch, and background registration failure reporting. The review retains source provenance; the
 publishing ledger records the artifact hash and explainer treatment, but does
 not currently link directly back to the review ID.

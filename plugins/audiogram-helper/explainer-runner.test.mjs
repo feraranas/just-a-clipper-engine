@@ -56,3 +56,46 @@ test("background startup failure is visible and scoped to its review", async (t)
     /Invalid operation/,
   );
 });
+
+test("render polling exposes queue registration failure without losing the render", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "explainer-runner-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const child = new EventEmitter();
+  child.stdout = new EventEmitter();
+  child.stderr = new EventEmitter();
+  const runner = createExplainerRunner({
+    projectRoot: root,
+    environment: { AUDIOGRAM_DATA_ROOT: root },
+    launch: () => child,
+    requestRunner: async (args) => ({
+      reviewId: args.reviewId,
+      revision: 4,
+      state: "rendered",
+    }),
+  });
+  const started = await runner.run({
+    reviewId: "review-a",
+    action: "render",
+    revision: 4,
+  });
+  child.stdout.emit(
+    "data",
+    Buffer.from(
+      JSON.stringify({ publishingQueue: { state: "registration_failed" } }),
+    ),
+  );
+  child.emit("close", 0);
+  let result;
+  for (let i = 0; i < 50; i++) {
+    result = await runner.run({
+      reviewId: "review-a",
+      action: "get",
+      operationId: started.operationId,
+    });
+    if (result.operation.state !== "unconfirmed") break;
+    await new Promise((r) => setTimeout(r, 10));
+  }
+  assert.equal(result.operation.state, "queue_registration_failed");
+  assert.match(result.operation.message, /queue_render/);
+  assert.equal(result.state, "rendered");
+});
