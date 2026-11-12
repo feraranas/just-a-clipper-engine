@@ -11,6 +11,7 @@ import {
 } from "./workflow.mjs";
 import { explainerGenerator } from "./generation.mjs";
 import { renderExplainer } from "./render.mjs";
+import { queueExplainer } from "./publishing.mjs";
 import { prepareNarration } from "./narration.mjs";
 const projectRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 export async function runExplainerRequest(input, environment = process.env) {
@@ -69,12 +70,42 @@ export async function runExplainerRequest(input, environment = process.env) {
             browser: environment.CHROME_PATH,
           }),
         ),
+      queue_render: () =>
+        queueExplainer({
+          workflow,
+          reviewId,
+          revision,
+          projectRoot,
+          environment,
+        }),
       recover_render: () => workflow.recover(reviewId, revision, hash),
       recover_draft: () => workflow.recoverDraft(reviewId, revision, hash),
     };
     if (!Object.hasOwn(operations, action))
       throw Error("Unknown explainer action");
-    return await operations[action]();
+    const result = await operations[action]();
+    if (action !== "render") return result;
+    try {
+      return {
+        ...result,
+        publishingQueue: await queueExplainer({
+          workflow,
+          reviewId,
+          revision: result.revision,
+          projectRoot,
+          environment,
+        }),
+      };
+    } catch {
+      return {
+        ...result,
+        publishingQueue: {
+          state: "registration_failed",
+          message:
+            "Render saved; use queue_render to retry local queue registration.",
+        },
+      };
+    }
   } finally {
     store.close();
   }

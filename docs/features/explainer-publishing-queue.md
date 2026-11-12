@@ -1,8 +1,8 @@
 ---
 feature: explainer-publishing-queue
-status: DESIGN
-design-reviewed: false
-implementation-reconciled: false
+status: COMPLETE
+design-reviewed: true
+implementation-reconciled: true
 ---
 
 # Explainer publishing queue
@@ -48,8 +48,10 @@ ledger mutation and Meta publication are not part of automated verification.
 
 ## Failure and retry paths
 
-Rendering success must survive ledger failure; record and surface registration
-failure and permit explicit reconciliation without re-rendering. Dedupe by the
+Rendering success must survive ledger failure; surface registration failure in
+the render result and permit explicit reconciliation without re-rendering. A
+crash before returning the result leaves no durable failure marker, so inspect
+the saved render and explicitly reconcile it. Dedupe by the
 existing durable artifact identity and hash. Handle a crash between rendering,
 artifact registration and queue insertion without duplicate queue entries.
 Do not overwrite an existing approval or silently change its caption or account.
@@ -59,11 +61,20 @@ Do not overwrite an existing approval or silently change its caption or account.
 Only a complete, current, verified render can be queued. Fingerprint the actual
 MP4 and bind it to the exact explainer revision. Use the durable artifact store
 so the existing preview and publisher can resolve it independently of a
-worktree. Preserve the selected candidate provenance. Do not broaden artifact
+worktree. Keep the explainer review and provenance in the candidate review store. Do not broaden artifact
 path access or silently substitute credentials, accounts, or approvals.
 
 ## Implementation reconciliation and deviations
 
-Pending implementation and verification. Review must decide the durable
-manifest, exact account and caption selection, recovery UX, and how completion
-and enqueue failures are surfaced across the separate stores.
+Reviewed against existing artifact and ledger behavior: render completion calls
+the existing content-addressed artifact store and queue helper after the render
+revision is persisted. `queue_render` reconciles the current revision without
+re-rendering. The existing account resolver supplies the account; caption starts
+empty. Queue failures are returned without invalidating a successful render.
+Separate stores cannot share a transaction, so an interrupted registration
+requires explicit reconciliation. Queue registration does not approve or publish.
+
+Focused tests cover repeated registration, unchanged approval, stale revisions,
+changed bytes and account mismatch. The review retains source provenance; the
+publishing ledger records the artifact hash and explainer treatment, but does
+not currently link directly back to the review ID.

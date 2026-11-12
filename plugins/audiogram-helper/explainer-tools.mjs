@@ -22,7 +22,7 @@ export function registerExplainerTools(server, runner) {
     "continue_explainer",
     {
       description:
-        "Continue an explicitly selected candidate. First get saved progress. Submit researched source passages from web search with research, then draft or submit a script. If a draft is unconfirmed, inspect its outcome first; recover_draft clears only that attempt using its current revision and pending token in hash, without making a new model call. Start another draft only when explicitly requested. Show the exact script to the user before approve_script. Generate narration only after that approval. For audio review, get returns documents.audio.path and documents.audio.sha256: tell the user to open the path on the machine running the service and listen, then use the hash in accept_audio only after explicit acceptance. After rendering, get returns documents.render.path, a local file path, not a hosted link; tell the user how to open it on that machine. If the user cannot access that machine, playback is unavailable. Every mutation requires the current revision. Render never publishes. Long steps run once in the existing local worker pattern; poll get with the returned operationId. Artwork and Rhubarb must be configured locally.",
+        "Continue an explicitly selected candidate. First get saved progress. Submit researched source passages from web search with research, then draft or submit a script. If a draft is unconfirmed, inspect its outcome first; recover_draft clears only that attempt using its current revision and pending token in hash, without making a new model call. Start another draft only when explicitly requested. Show the exact script to the user before approve_script. Generate narration only after that approval. For audio review, get returns documents.audio.path and documents.audio.sha256: tell the user to open the path on the machine running the service and listen, then use the hash in accept_audio only after explicit acceptance. After rendering, get returns documents.render.path, a local file path, not a hosted link; tell the user how to open it on that machine. If the user cannot access that machine, playback is unavailable. Every mutation requires the current revision. Render queues locally but never approves or publishes. If queue registration failed, use queue_render with the current revision to retry. Long steps run once in the existing local worker pattern; poll get with the returned operationId. Artwork and Rhubarb must be configured locally.",
       inputSchema: z.strictObject({
         reviewId: z.string().uuid(),
         action: z.enum([
@@ -36,6 +36,7 @@ export function registerExplainerTools(server, runner) {
           "scenes",
           "plan",
           "render",
+          "queue_render",
           "recover_render",
           "recover_draft",
         ]),
