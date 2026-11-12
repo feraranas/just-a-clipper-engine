@@ -9,10 +9,12 @@ Surfaces (from README, `package.json` scripts and `scripts/`):
 
 - **Primary:** the audiogram renderer, the Remotion composition `AudiogramBasic` (`src/`), invoked by every pipeline and directly through `remotion render`. Driven here.
 - Pipelines: `npm run audiogram:url -- --url <youtube-url>` and `npm run youtube:inbox`. They need yt-dlp/YouTube, and, for the default `transcript-llm` selector, an LLM provider (OpenAI API key or ChatGPT OAuth).
-- Local approval UI: `node scripts/publishing-server.mjs` on `http://127.0.0.1:8787/` (`PORT`), backed by the SQLite ledger.
+- Local approval UI: `node scripts/publishing-server.mjs` on `http://127.0.0.1:8787/` (`PORT`), backed by the SQLite ledger. The same server hosts the read-only job debug console at `/debug/jobs` (`npm run debug:serve`).
 - Instagram publishing: `npm run publishing:run -- --item ID --live`. This is a real external post; never drive it for verification.
+- Instagram scheduled dispatcher: `npm run publishing:dispatch -- --live` polls for due approved items and posts for real; never drive it live.
 - Instagram upload recovery: `node scripts/publishing-recover.mjs --item ID [--apply ...]`. Inspection calls Meta GETs; drive only its offline guards.
-- MCP helper: `npm run audiogram:mcp` on `http://127.0.0.1:7331/mcp` (modern protocol `2026-07-28` and legacy clients).
+- MCP helper: `npm run audiogram:mcp` on `http://127.0.0.1:7331/mcp` (modern protocol `2026-07-28` and legacy clients), including the candidate-review and explainer tools (`tools/list` is ten tools; `list_video_templates` includes Animated Explainer).
+- Explanation-video workflow (experimental): `npm run candidates:review` (plus `--retry-review`), `npm run explainer` (plus `recover_draft` and `queue_render`), and the `AnimatedExplainer`/presenter Remotion compositions. A verified render may enqueue locally; it never approves or publishes.
 - Template samples: `npm run samples:render` (macOS `say`) and `npm run samples:serve` on `http://127.0.0.1:8790/`.
 
 The render also works on Node 20; everything else imports `node:sqlite` and needs Node >= 22.13.
@@ -65,7 +67,7 @@ Removes only `public/generated/verify-$RUN_ID` and `/tmp/verify-clipper-$RUN_ID`
 ## Helpers
 
 - `scripts/clipctl launch | doctor | journey render-classic-fixture | cleanup` (env `RUN_ID`, `CHROME_PATH`, optional `CLIP_VERIFY_STATE`, `CLIP_VERIFY_EVIDENCE`).
-- `scripts/ui-shot.mjs URL OUT.png [WAIT_MS]`: screenshots a local page plus its text with headless Chrome (`CHROME_PATH` or system Chrome). Used for the [approval UI](features/approval-ui.md).
+- `scripts/ui-shot.mjs URL OUT.png [WAIT_MS]`: screenshots a local page plus its text with headless Chrome (`CHROME_PATH` or system Chrome). Used for the [approval UI](features/approval-ui.md) and the [job debug console](features/job-debug-console.md).
 - `scripts/mcp-modern.mjs URL [TOOL [JSON_ARGS]]`: calls a running MCP helper with the pinned modern-protocol client. Used for the [MCP helper](features/mcp-helper.md). Both need Node 22 and the checkout's `node_modules`.
 
 ## Maintenance
