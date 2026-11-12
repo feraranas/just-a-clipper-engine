@@ -87,9 +87,14 @@ export function createExplainerRunner({
         {
           cwd: projectRoot,
           env: environment,
-          stdio: ["ignore", "ignore", "pipe"],
+          stdio: ["ignore", "pipe", "pipe"],
         },
       );
+      let outputText = "";
+      child.stdout?.on("data", (chunk) => {
+        if (outputText.length <= 8 * 1024 * 1024)
+          outputText += chunk.toString();
+      });
       let errorText = "";
       child.stderr?.on("data", (chunk) => {
         if (errorText.length < 4096)
@@ -102,16 +107,44 @@ export function createExplainerRunner({
       child.once("error", () =>
         save({ state: "failed", message: "Worker failed to start" }),
       );
-      child.once("close", (code) =>
+      child.once("close", (code) => {
+        let queueState;
+        if (code === 0 && args.action === "render") {
+          try {
+            queueState = JSON.parse(outputText).publishingQueue?.state;
+          } catch {
+            /* report uncertain */
+          }
+        }
+        const queueFailure =
+          code === 0 &&
+          args.action === "render" &&
+          ![
+            "queued",
+            "approved",
+            "uploading",
+            "container_created",
+            "processing",
+            "published",
+            "failed",
+            "unknown",
+          ].includes(queueState);
         save({
-          state: code === 0 ? "complete" : "failed",
+          state:
+            code !== 0
+              ? "failed"
+              : queueFailure
+                ? "queue_registration_failed"
+                : "complete",
           message:
-            code === 0
-              ? "Read saved progress"
-              : "Inspect saved progress and local worker diagnostics",
+            code !== 0
+              ? "Inspect saved progress and local worker diagnostics"
+              : queueFailure
+                ? "Render saved; inspect progress and use queue_render to reconcile its local approval queue entry."
+                : "Read saved progress",
           diagnostic: errorText,
-        }),
-      );
+        });
+      });
       return {
         reviewId: args.reviewId,
         operationId,
