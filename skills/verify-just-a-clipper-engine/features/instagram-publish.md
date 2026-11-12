@@ -6,7 +6,8 @@
 
 - `publish-live` posts the item. This is a real external side effect.
 - `publish-check` account check (calls the Instagram Graph API with the configured token).
-- `publish-guard` bad arguments or missing `INSTAGRAM_*` config stop before any network call.
+- `publish-guard` bad arguments or missing `INSTAGRAM_*` config stop before any network call. `INSTAGRAM_USERNAME` (no `@`) is now required config; it is no longer hard-coded, and the worker verifies it against Meta before publishing.
+- The scheduled-posting loop is a separate command: [instagram-dispatcher](./instagram-dispatcher.md).
 
 ## How to get to it (user POV)
 
