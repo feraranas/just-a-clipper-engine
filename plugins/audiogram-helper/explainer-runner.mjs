@@ -4,6 +4,11 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { runExplainerRequest } from "../../scripts/explainer/run.mjs";
 import { resolveStorageConfig } from "../../scripts/storage-config.mjs";
+export class ScriptApprovalRequiredError extends Error {
+  constructor() {
+    super("Approve the exact current script before starting narration.");
+  }
+}
 export function createExplainerRunner({
   projectRoot,
   environment = process.env,
@@ -59,6 +64,11 @@ export function createExplainerRunner({
       );
       if (before.revision !== args.revision || before.pending)
         throw Error("Refresh saved progress before starting");
+      if (
+        args.action === "narrate" &&
+        (!before.script?.hash || before.scriptApproval !== before.script.hash)
+      )
+        throw new ScriptApprovalRequiredError();
       const folder = join(
         resolveStorageConfig(environment).dataRoot,
         "explainer-requests",

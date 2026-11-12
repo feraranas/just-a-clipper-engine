@@ -18,6 +18,10 @@ test("background startup failure is visible and scoped to its review", async (t)
       reviewId: args.reviewId,
       revision: 4,
       state: "script_approved",
+      script: { hash: "current" },
+      scriptApproval: "current",
+      script: { hash: "approved" },
+      scriptApproval: "approved",
     }),
   });
   const started = await runner.run({
@@ -98,4 +102,31 @@ test("render polling exposes queue registration failure without losing the rende
   assert.equal(result.operation.state, "queue_registration_failed");
   assert.match(result.operation.message, /queue_render/);
   assert.equal(result.state, "rendered");
+});
+
+test("narration without exact script approval rejects before creating a request or launching", async (t) => {
+  const root = await mkdtemp(join(tmpdir(), "explainer-approval-"));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  let launches = 0;
+  for (const approval of [undefined, "old"]) {
+    const runner = createExplainerRunner({
+      projectRoot: root,
+      environment: { AUDIOGRAM_DATA_ROOT: root },
+      launch: () => {
+        launches++;
+      },
+      requestRunner: async () => ({
+        revision: 4,
+        script: { hash: "current" },
+        scriptApproval: approval,
+      }),
+    });
+    await assert.rejects(
+      runner.run({ reviewId: "review-a", action: "narrate", revision: 4 }),
+      /Approve the exact current script/,
+    );
+  }
+  assert.equal(launches, 0);
+  const { readdir } = await import("node:fs/promises");
+  assert.deepEqual(await readdir(root), []);
 });

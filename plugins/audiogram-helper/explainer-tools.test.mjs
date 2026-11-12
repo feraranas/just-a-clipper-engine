@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { startMcpServer } from "./server.mjs";
+import { createExplainerRunner } from "./explainer-runner.mjs";
 test("actual MCP discovery exposes scene blocks and forwards exact approval identity", async () => {
   let received;
   const server = await startMcpServer({
@@ -57,6 +58,47 @@ test("actual MCP discovery exposes scene blocks and forwards exact approval iden
     });
     assert.deepEqual(received, args);
     assert.equal(result.structuredContent.revision, 3);
+  } finally {
+    await client.close();
+    await server.close();
+  }
+});
+
+test("MCP reports missing script approval without starting narration", async () => {
+  let launched = false;
+  const explainerRunner = createExplainerRunner({
+    projectRoot: process.cwd(),
+    requestRunner: async () => ({
+      revision: 3,
+      script: { hash: "current" },
+      scriptApproval: null,
+    }),
+    launch: () => {
+      launched = true;
+    },
+  });
+  const server = await startMcpServer({
+    projectRoot: process.cwd(),
+    port: 0,
+    runner: {},
+    explainerRunner,
+  });
+  const client = new Client({ name: "approval-test", version: "1" });
+  try {
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL(server.url)),
+    );
+    const result = await client.callTool({
+      name: "continue_explainer",
+      arguments: {
+        reviewId: "51f94a9c-c63e-4d11-8a73-03a3bfe7afdc",
+        action: "narrate",
+        revision: 3,
+      },
+    });
+    assert.equal(result.isError, true);
+    assert.match(result.content[0].text, /Approve the exact current script/);
+    assert.equal(launched, false);
   } finally {
     await client.close();
     await server.close();
